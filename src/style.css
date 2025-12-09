@@ -1,0 +1,53 @@
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+:root {
+    --text-color: #202122;
+    --title-color: #101418;
+    --border-color: #c8ccd1;
+    --link-color: #36c;
+    --link-hover-color: #3056a9;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: sans-serif;
+    color: var(--text-color);
+    height: 100dvh;
+    width: 100dvw;
+    display: flex;
+    flex-direction: column;
+}
+
+#app {
+    display: contents;
+}
+
+button,
+input {
+    font-size: inherit;
+    font-family: inherit;
+}
+
+a,
+button {
+    color: var(--link-color);
+    cursor: pointer;
+    text-decoration: none;
+    border: none;
+    background: none;
+}
+
+:is(a, button):hover {
+    color: var(--link-hover-color);
+    text-decoration: underline 2px;
+}
+
+h1 {
+    font-family: "Linux Libertine", "Georgia", "Times", "Source Serif 4", serif;
+    color: var(--title-color);
+}

@@ -1,0 +1,421 @@
+<template>
+    <Header>
+        <ul>
+            <li>
+                <RouterLink to="/">Cancel</RouterLink>
+            </li>
+            <li>
+                <button @click="publish">Publish</button>
+            </li>
+        </ul>
+    </Header>
+
+    <main>
+        <TwoPaneLayout left-title="Editor" right-title="Preview">
+            <template #left-controls>
+                <nav>
+                    <ul>
+                        <li>
+                            <button
+                                :class="{ selected: showDiff }"
+                                @click="showDiff = !showDiff"
+                            >
+                                {{ showDiff ? "Hide changes" : "Show changes" }}
+                            </button>
+                        </li>
+                        <li>
+                            <button
+                                :class="{ selected: showSettings }"
+                                @click="showSettings = !showSettings"
+                            >
+                                ⚙️▼
+                            </button>
+                        </li>
+                    </ul>
+                </nav>
+            </template>
+
+            <template #right-controls>
+                <nav>
+                    <ul>
+                        <li>
+                            <button
+                                title="Refresh the preview"
+                                @click="refreshPreview"
+                            >
+                                {{ debouncing ? "Refreshing…" : "Refresh" }}
+                            </button>
+                        </li>
+                        <li>
+                            <button
+                                @click="showPreviewMenu = !showPreviewMenu"
+                                title="Preview options"
+                            >
+                                ⚙️▼
+                            </button>
+                            <ul v-if="showPreviewMenu">
+                                <li>
+                                    <label class="checkbox-inline">
+                                        <input
+                                            type="checkbox"
+                                            v-model="livePreview"
+                                        />
+                                        Auto-refresh
+                                    </label>
+                                </li>
+                            </ul>
+                        </li>
+                    </ul>
+                </nav>
+            </template>
+
+            <!-- Left pane body (Editor) -->
+            <template #left-pane>
+                <div class="editor-pane">
+                    <section
+                        v-if="showSettings"
+                        class="settings-panel settings-panel--in-pane"
+                        v-click-away="() => (showSettings = false)"
+                    >
+                        <div class="settings-group">
+                            <h2 class="settings-title">Appearance</h2>
+                            <label>
+                                Theme
+                                <select v-model="editorTheme">
+                                    <option value="vs-dark">Dark</option>
+                                    <option value="vs">Light</option>
+                                    <option value="hc-black">
+                                        High contrast
+                                    </option>
+                                </select>
+                            </label>
+                            <label>
+                                Font size
+                                <input
+                                    type="number"
+                                    min="10"
+                                    max="24"
+                                    v-model.number="fontSize"
+                                />
+                            </label>
+                            <label>
+                                Line height
+                                <input
+                                    type="number"
+                                    min="1"
+                                    max="5"
+                                    step="0.1"
+                                    v-model.number="lineHeight"
+                                />
+                            </label>
+                        </div>
+
+                        <div class="settings-group">
+                            <h2 class="settings-title">Editor UI</h2>
+                            <label class="checkbox-inline">
+                                <input type="checkbox" v-model="wordWrap" />
+                                Word wrap
+                            </label>
+                            <label class="checkbox-inline">
+                                <input
+                                    type="checkbox"
+                                    v-model="minimapEnabled"
+                                />
+                                Show minimap
+                            </label>
+                            <label class="checkbox-inline">
+                                <input
+                                    type="checkbox"
+                                    v-model="renderWhitespace"
+                                />
+                                Show whitespace
+                            </label>
+                        </div>
+                    </section>
+
+                    <CodeEditor
+                        v-if="!showDiff"
+                        v-model:value="editorHtml"
+                        language="html"
+                        :theme="editorTheme"
+                        :options="monacoOptions"
+                        class="code-editor"
+                    />
+
+                    <DiffEditor
+                        v-else
+                        :value="diffHtml"
+                        :original="existingHtml"
+                        language="html"
+                        :theme="editorTheme"
+                        :options="diffOptions"
+                        class="code-editor"
+                        @change="onDiffChange"
+                        @editorDidMount="onDiffDidMount"
+                    />
+                </div>
+            </template>
+
+            <!-- Right pane body (Preview) -->
+            <template #right-pane>
+                <DisplayPage :html="previewHtml" ref="previewRef" />
+            </template>
+        </TwoPaneLayout>
+    </main>
+</template>
+
+<script setup lang="ts">
+import { ref, watch, computed, onBeforeUnmount, toRefs } from "vue";
+import * as monaco from "monaco-editor";
+import { CodeEditor, DiffEditor } from "monaco-editor-vue3";
+import Header from "./Header.vue";
+import TwoPaneLayout from "./TwoPaneLayout.vue";
+import DisplayPage from "./DisplayPage.vue";
+import { useRoute, useRouter } from "vue-router";
+
+const router = useRouter();
+
+const route = useRoute();
+const existingHtmlBase = route.query.existingHtml;
+if (typeof existingHtmlBase !== "string") {
+    throw new Error("Invalid HTML");
+}
+const existingHtml = existingHtmlBase;
+
+// Initialize the editor, diff and preview with the existing HTML
+const editorHtml = ref(existingHtml);
+const previewHtml = ref(existingHtml);
+const diffHtml = ref(existingHtml);
+
+// --- Editor Settings ------------------------------------
+const showSettings = ref(false);
+
+type MonacoTheme = "vs-dark" | "vs" | "hc-black";
+const editorTheme = ref<MonacoTheme>("vs-dark");
+
+const wordWrap = ref(true);
+const minimapEnabled = ref(true);
+const renderWhitespace = ref(false);
+const fontSize = ref(14);
+const lineHeight = ref(1.5);
+
+// Apply Monaco theme globally when selection changes
+watch(editorTheme, (theme) => monaco.editor.setTheme(theme), {
+    immediate: true,
+});
+
+const monacoOptions = computed(() => ({
+    lineNumbers: "on",
+    automaticLayout: true,
+    wordWrap: wordWrap.value ? "on" : "off",
+    minimap: { enabled: minimapEnabled.value },
+    fontSize: fontSize.value,
+    lineHeight: lineHeight.value,
+    renderWhitespace: renderWhitespace.value ? "all" : "none",
+    smoothScrolling: true,
+    scrollBeyondLastLine: true,
+    mouseWheelZoom: true,
+    quickSuggestions: true,
+    suggestOnTriggerCharacters: true,
+    tabCompletion: "on",
+    parameterHints: { enabled: true },
+}));
+
+// --- Diff settings ------------------------------------
+
+// Keep the editor and diff HTML in sync (v-model does not work)
+const showDiff = ref(false);
+watch(showDiff, (enabled) => {
+    if (enabled) {
+        diffHtml.value = editorHtml.value;
+    }
+});
+const onDiffChange = (value: string) => {
+    editorHtml.value = value;
+};
+
+// Keep diff editor options in sync reactively
+const diffOptions = computed(() => ({
+    ...monacoOptions.value,
+    renderSideBySide: false,
+}));
+const diffEditorInstance = ref<monaco.editor.IStandaloneDiffEditor | null>(
+    null,
+);
+const onDiffDidMount = (editor: monaco.editor.IStandaloneDiffEditor) => {
+    diffEditorInstance.value = editor;
+};
+watch(
+    monacoOptions,
+    (opts) => {
+        if (!diffEditorInstance.value) return;
+        const modified = diffEditorInstance.value.getModifiedEditor();
+        const original = diffEditorInstance.value.getOriginalEditor();
+
+        // @ts-ignore
+        modified.updateOptions(opts);
+        // @ts-ignore
+        original.updateOptions(opts);
+    },
+    { deep: true },
+);
+
+// --- Preview updates -----------------------------
+
+// Manually refresh the preview
+const previewRef = ref<InstanceType<typeof DisplayPage> | null>(null);
+function refreshPreview() {
+    previewRef.value?.refresh();
+}
+
+// Preview menu state and option
+const showPreviewMenu = ref(false);
+const livePreview = ref(true);
+
+// Auto-refresh the preview
+const DEBOUNCE_DELAY = 500;
+let timeout: number | null = null;
+onBeforeUnmount(() => {
+    if (timeout !== null) clearTimeout(timeout);
+});
+const debouncing = ref(false);
+const schedulePreviewUpdate = (newHtml: string) => {
+    debouncing.value = true;
+    if (timeout !== null) clearTimeout(timeout);
+    timeout = window.setTimeout(() => {
+        previewHtml.value = newHtml;
+        debouncing.value = false;
+        timeout = null;
+    }, DEBOUNCE_DELAY);
+};
+watch(editorHtml, (newHtml) => {
+    if (!livePreview.value) return;
+    schedulePreviewUpdate(newHtml);
+});
+
+// When auto-refresh is turned on, refresh once immediately
+watch(livePreview, (enabled, oldVal) => {
+    if (enabled && !oldVal) refreshPreview();
+});
+
+// --- Publishing ----------------------------------------------
+function publish() {
+    prompt("Edit summary (Briefly describe your changes)");
+    router.push({ name: "view" });
+}
+</script>
+
+<style scoped>
+/* Editor / preview pane contents */
+.editor-pane {
+    width: 100%;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Preview actions (Refresh + menu) */
+.preview-actions {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.preview-refresh-group {
+    display: inline-flex;
+    border-radius: 999px;
+    overflow: hidden;
+    border: 1px solid #333;
+}
+
+.preview-refresh-main {
+    border-radius: 999px 0 0 999px;
+    border-right: 1px solid #333;
+}
+
+.preview-refresh-caret {
+    border-radius: 0 999px 999px 0;
+    padding-inline: 0.4rem;
+}
+
+.preview-menu {
+    position: absolute;
+    right: 0;
+    top: 120%;
+    z-index: 10;
+    min-width: 150px;
+    padding: 0.4rem 0.6rem;
+    border-radius: 8px;
+    border: 1px solid #333;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    font-size: 0.78rem;
+}
+
+/* Editor & preview */
+.code-editor {
+    flex: 1;
+    min-height: 0;
+}
+
+.preview-frame {
+    flex: 1;
+    width: 100%;
+    border: none;
+    background: #ffffff;
+}
+
+/* Settings panel (in editor pane) */
+.settings-panel {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.75rem 1.25rem;
+    padding: 0.6rem 0.9rem 0.8rem;
+    border-top: 1px solid var(--border-color);
+    font-size: 0.83rem;
+}
+
+.settings-panel--in-pane {
+    border-bottom: 1px solid var(--border-color);
+}
+
+.settings-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.settings-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0.8;
+}
+
+/* Default label layout is vertical */
+.settings-group label {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 0.2rem;
+}
+
+/* Checkbox labels inline (fix alignment) */
+.settings-group label.checkbox-inline,
+.preview-menu label.checkbox-inline {
+    flex-direction: row;
+    align-items: center;
+    gap: 0.35rem;
+    cursor: pointer; /* pointer over auto-refresh row */
+}
+
+/* Inputs/selects */
+.settings-group input[type="number"],
+.settings-group select {
+    border-radius: 6px;
+    border: 1px solid #333;
+    padding: 0.2rem 0.4rem;
+    color: inherit;
+    font-size: inherit;
+}
+</style>
