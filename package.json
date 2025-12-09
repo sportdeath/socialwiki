@@ -3,7 +3,8 @@
   "description": "Collaborative social spaces",
   "scripts": {
     "dev": "vite",
-    "build": "vite build"
+    "build": "vite build",
+    "preview": "vite preview"
   },
   "author": "Theia Henderson",
   "dependencies": {

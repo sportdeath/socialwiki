@@ -6,7 +6,7 @@ import Edit from "./components/Edit.vue";
 import "./style.css";
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHistory("/socialwiki/"),
   routes: [
     {
       path: "/",
