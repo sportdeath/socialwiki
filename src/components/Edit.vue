@@ -27,6 +27,7 @@
                             <button
                                 :class="{ selected: showSettings }"
                                 @click="showSettings = !showSettings"
+                                title="Editor settings"
                             >
                                 ⚙️▼
                             </button>
@@ -49,21 +50,11 @@
                         <li>
                             <button
                                 @click="showPreviewMenu = !showPreviewMenu"
-                                title="Preview options"
+                                :class="{ selected: showPreviewMenu }"
+                                title="Preview settings"
                             >
                                 ⚙️▼
                             </button>
-                            <ul v-if="showPreviewMenu">
-                                <li>
-                                    <label class="checkbox-inline">
-                                        <input
-                                            type="checkbox"
-                                            v-model="livePreview"
-                                        />
-                                        Auto-refresh
-                                    </label>
-                                </li>
-                            </ul>
                         </li>
                     </ul>
                 </nav>
@@ -71,14 +62,14 @@
 
             <!-- Left pane body (Editor) -->
             <template #left-pane>
-                <div class="editor-pane">
+                <div class="pane">
                     <section
                         v-if="showSettings"
-                        class="settings-panel settings-panel--in-pane"
+                        class="settings-panel"
                         v-click-away="() => (showSettings = false)"
                     >
                         <div class="settings-group">
-                            <h2 class="settings-title">Appearance</h2>
+                            <h3>Appearance</h3>
                             <label>
                                 Theme
                                 <select v-model="editorTheme">
@@ -111,7 +102,7 @@
                         </div>
 
                         <div class="settings-group">
-                            <h2 class="settings-title">Editor UI</h2>
+                            <h3>Editor UI</h3>
                             <label class="checkbox-inline">
                                 <input type="checkbox" v-model="wordWrap" />
                                 Word wrap
@@ -149,16 +140,28 @@
                         language="html"
                         :theme="editorTheme"
                         :options="diffOptions"
-                        class="code-editor"
                         @change="onDiffChange"
                         @editorDidMount="onDiffDidMount"
+                        class="code-editor"
                     />
                 </div>
             </template>
 
             <!-- Right pane body (Preview) -->
             <template #right-pane>
-                <DisplayPage :html="previewHtml" ref="previewRef" />
+                <div class="pane">
+                    <section
+                        v-if="showPreviewMenu"
+                        class="settings-panel"
+                        v-click-away="() => (showPreviewMenu = false)"
+                    >
+                        <label class="checkbox-inline">
+                            <input type="checkbox" v-model="livePreview" />
+                            Auto-Refresh
+                        </label>
+                    </section>
+                    <DisplayPage :html="previewHtml" ref="previewRef" />
+                </div>
             </template>
         </TwoPaneLayout>
     </main>
@@ -265,6 +268,7 @@ watch(
 // Manually refresh the preview
 const previewRef = ref<InstanceType<typeof DisplayPage> | null>(null);
 function refreshPreview() {
+    previewHtml.value = editorHtml.value;
     previewRef.value?.refresh();
 }
 
@@ -306,63 +310,15 @@ function publish() {
 </script>
 
 <style scoped>
-/* Editor / preview pane contents */
-.editor-pane {
+.pane {
     width: 100%;
-    flex: 1;
-    min-height: 0;
     display: flex;
     flex-direction: column;
 }
 
-/* Preview actions (Refresh + menu) */
-.preview-actions {
-    position: relative;
-    display: flex;
-    align-items: center;
-}
-
-.preview-refresh-group {
-    display: inline-flex;
-    border-radius: 999px;
-    overflow: hidden;
-    border: 1px solid #333;
-}
-
-.preview-refresh-main {
-    border-radius: 999px 0 0 999px;
-    border-right: 1px solid #333;
-}
-
-.preview-refresh-caret {
-    border-radius: 0 999px 999px 0;
-    padding-inline: 0.4rem;
-}
-
-.preview-menu {
-    position: absolute;
-    right: 0;
-    top: 120%;
-    z-index: 10;
-    min-width: 150px;
-    padding: 0.4rem 0.6rem;
-    border-radius: 8px;
-    border: 1px solid #333;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
-    font-size: 0.78rem;
-}
-
-/* Editor & preview */
 .code-editor {
     flex: 1;
     min-height: 0;
-}
-
-.preview-frame {
-    flex: 1;
-    width: 100%;
-    border: none;
-    background: #ffffff;
 }
 
 /* Settings panel (in editor pane) */
@@ -373,49 +329,42 @@ function publish() {
     padding: 0.6rem 0.9rem 0.8rem;
     border-top: 1px solid var(--border-color);
     font-size: 0.83rem;
-}
-
-.settings-panel--in-pane {
     border-bottom: 1px solid var(--border-color);
-}
 
-.settings-group {
-    display: flex;
-    flex-direction: column;
-    gap: 0.35rem;
-}
+    h3 {
+        font-size: 0.8rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        opacity: 0.8;
+    }
 
-.settings-title {
-    font-size: 0.8rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    opacity: 0.8;
-}
+    label {
+        display: inline-flex;
+        flex-direction: column;
+        gap: 0.2rem;
+    }
 
-/* Default label layout is vertical */
-.settings-group label {
-    display: inline-flex;
-    flex-direction: column;
-    gap: 0.2rem;
-}
+    label.checkbox-inline {
+        flex-direction: row;
+        align-items: center;
+        gap: 0.35rem;
+        cursor: pointer;
+    }
 
-/* Checkbox labels inline (fix alignment) */
-.settings-group label.checkbox-inline,
-.preview-menu label.checkbox-inline {
-    flex-direction: row;
-    align-items: center;
-    gap: 0.35rem;
-    cursor: pointer; /* pointer over auto-refresh row */
-}
+    input[type="number"],
+    select {
+        border-radius: 6px;
+        border: 1px solid #333;
+        padding: 0.2rem 0.4rem;
+        color: inherit;
+        font-size: inherit;
+    }
 
-/* Inputs/selects */
-.settings-group input[type="number"],
-.settings-group select {
-    border-radius: 6px;
-    border: 1px solid #333;
-    padding: 0.2rem 0.4rem;
-    color: inherit;
-    font-size: inherit;
+    .settings-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+    }
 }
 </style>

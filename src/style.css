@@ -12,6 +12,7 @@
     --link-hover-color: #3056a9;
 }
 
+/* Body is exactly screen view */
 body {
     margin: 0;
     padding: 0;
@@ -25,6 +26,18 @@ body {
 
 #app {
     display: contents;
+}
+
+/* Do not stretch header */
+header {
+    flex: 0 0 auto;
+}
+
+/* Stretch main to fill body */
+main {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    min-height: 0;
 }
 
 button,
