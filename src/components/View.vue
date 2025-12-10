@@ -1,13 +1,32 @@
 <template>
     <Header>
-        <p v-if="$graffitiSession.value === undefined">Loading...</p>
-        <button
-            v-else-if="$graffitiSession.value === null"
-            :class="{ selected: loggingIn }"
-            @click="login"
-        >
-            {{ loggingIn ? "Logging in..." : "Log In" }}
-        </button>
+        <ul v-if="$graffitiSession.value === undefined">
+            <li>Loading...</li>
+        </ul>
+        <ul v-else-if="$graffitiSession.value === null">
+            <li>
+                <a
+                    @click="historyOpen = false"
+                    :class="{ selected: !historyOpen }"
+                >
+                    View
+                </a>
+            </li>
+            <li>
+                <button
+                    @click="historyOpen = true"
+                    title="Past revisions of this page"
+                    :class="{ selected: historyOpen }"
+                >
+                    History
+                </button>
+            </li>
+            <li>
+                <button :class="{ selected: loggingIn }" @click="login">
+                    {{ loggingIn ? "Logging in..." : "Log In" }}
+                </button>
+            </li>
+        </ul>
         <ul v-else>
             <li>
                 <a

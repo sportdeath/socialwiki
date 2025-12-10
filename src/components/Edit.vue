@@ -1,6 +1,9 @@
 <template>
     <Header>
-        <ul>
+        <ul v-if="!$graffitiSession.value">
+            <li>Loading...</li>
+        </ul>
+        <ul v-else>
             <li>
                 <RouterLink :to="{ name: 'view' }" class="warning"
                     >Cancel</RouterLink
@@ -177,13 +180,25 @@ import Header from "./Header.vue";
 import TwoPaneLayout from "./TwoPaneLayout.vue";
 import DisplayPage from "./DisplayPage.vue";
 import { useRoute, useRouter, onBeforeRouteLeave } from "vue-router";
+import { useGraffitiSession } from "@graffiti-garden/wrapper-vue";
+
+const router = useRouter();
+const session = useGraffitiSession();
+watch(
+    session,
+    () => {
+        // If logged out, redirect to the view
+        if (session.value === null) {
+            router.push({ name: "view" });
+        }
+    },
+    { immediate: true },
+);
 
 const props = defineProps<{
     channel: string;
 }>();
 const channel = toRef(props, "channel");
-
-const router = useRouter();
 
 const route = useRoute();
 const existingHtmlBase = route.query.existingHtml;
