@@ -10,13 +10,23 @@ const router = createRouter({
   routes: [
     {
       path: "/",
-      name: "view",
-      component: View,
+      name: "home",
+      redirect: {
+        name: "view",
+        params: { channel: "socialwiki" },
+      },
     },
     {
-      path: "/edit",
+      path: "/v/:channel",
+      name: "view",
+      component: View,
+      props: true,
+    },
+    {
+      path: "/e/:channel",
       name: "edit",
       component: Edit,
+      props: true,
     },
   ],
 });

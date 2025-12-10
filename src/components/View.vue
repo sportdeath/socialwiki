@@ -84,11 +84,17 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { ref, toRef } from "vue";
 import Header from "./Header.vue";
 import DisplayPage from "./DisplayPage.vue";
 import TwoPaneLayout from "./TwoPaneLayout.vue";
 import html from "./starter.html?raw";
+
+const props = defineProps<{
+    channel: string;
+}>();
+const channel = toRef(props, "channel");
+
 const personalMenuOpen = ref(false);
 const historyOpen = ref(false);
 </script>

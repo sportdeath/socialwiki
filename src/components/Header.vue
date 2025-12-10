@@ -1,8 +1,8 @@
 <template>
     <header>
-        <a>
+        <RouterLink :to="{ name: 'home' }">
             <h1>SocialWiki</h1>
-        </a>
+        </RouterLink>
 
         <nav>
             <slot></slot>

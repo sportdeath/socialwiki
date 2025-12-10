@@ -2,7 +2,9 @@
     <Header>
         <ul>
             <li>
-                <RouterLink to="/" class="warning">Cancel</RouterLink>
+                <RouterLink :to="{ name: 'view' }" class="warning"
+                    >Cancel</RouterLink
+                >
             </li>
             <li>
                 <button @click="publish">Publish</button>
@@ -168,13 +170,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed, onBeforeUnmount, toRefs, onMounted } from "vue";
+import { ref, toRef, watch, computed, onBeforeUnmount, onMounted } from "vue";
 import * as monaco from "monaco-editor";
 import { CodeEditor, DiffEditor } from "monaco-editor-vue3";
 import Header from "./Header.vue";
 import TwoPaneLayout from "./TwoPaneLayout.vue";
 import DisplayPage from "./DisplayPage.vue";
 import { useRoute, useRouter, onBeforeRouteLeave } from "vue-router";
+
+const props = defineProps<{
+    channel: string;
+}>();
+const channel = toRef(props, "channel");
 
 const router = useRouter();
 
