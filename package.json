@@ -8,6 +8,9 @@
   },
   "author": "Theia Henderson",
   "dependencies": {
+    "@graffiti-garden/api": "^0.6.4",
+    "@graffiti-garden/implementation-local": "^0.6.4",
+    "@graffiti-garden/wrapper-vue": "^0.7.2",
     "monaco-editor": "^0.55.1",
     "monaco-editor-vue3": "^1.0.5",
     "monaco-vim": "^0.4.4",

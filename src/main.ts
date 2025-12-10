@@ -2,6 +2,8 @@ import { createApp } from "vue";
 import VueClickAway from "vue3-click-away";
 import { createRouter, createWebHistory, RouterView } from "vue-router";
 import "./style.css";
+import { GraffitiPlugin } from "@graffiti-garden/wrapper-vue";
+import { GraffitiLocal } from "@graffiti-garden/implementation-local";
 
 const router = createRouter({
   history: createWebHistory("/socialwiki/"),
@@ -29,4 +31,10 @@ const router = createRouter({
   ],
 });
 
-createApp(RouterView).use(VueClickAway).use(router).mount("#app");
+createApp(RouterView)
+  .use(VueClickAway)
+  .use(GraffitiPlugin, {
+    graffiti: new GraffitiLocal(),
+  })
+  .use(router)
+  .mount("#app");

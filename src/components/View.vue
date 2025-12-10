@@ -1,6 +1,14 @@
 <template>
     <Header>
-        <ul>
+        <p v-if="$graffitiSession.value === undefined">Loading...</p>
+        <button
+            v-else-if="$graffitiSession.value === null"
+            :class="{ selected: loggingIn }"
+            @click="login"
+        >
+            {{ loggingIn ? "Logging in..." : "Log In" }}
+        </button>
+        <ul v-else>
             <li>
                 <a
                     @click="historyOpen = false"
@@ -45,6 +53,9 @@
                     v-click-away="() => (personalMenuOpen = false)"
                 >
                     <li>
+                        {{ $graffitiSession.value.actor }}
+                    </li>
+                    <li>
                         <a>My page</a>
                     </li>
                     <!-- Watchlist and contributions are uneditable pages -->
@@ -55,7 +66,12 @@
                         <a>Watchlist</a>
                     </li>
                     <li>
-                        <button>Log out</button>
+                        <button
+                            :class="{ selected: loggingOut }"
+                            @click="logout($graffitiSession.value)"
+                        >
+                            {{ loggingOut ? "Logging out..." : "Logout" }}
+                        </button>
                     </li>
                 </ul>
             </li>
@@ -89,6 +105,8 @@ import Header from "./Header.vue";
 import DisplayPage from "./DisplayPage.vue";
 import TwoPaneLayout from "./TwoPaneLayout.vue";
 import html from "./starter.html?raw";
+import { useGraffiti } from "@graffiti-garden/wrapper-vue";
+import type { GraffitiSession } from "@graffiti-garden/api";
 
 const props = defineProps<{
     channel: string;
@@ -97,6 +115,23 @@ const channel = toRef(props, "channel");
 
 const personalMenuOpen = ref(false);
 const historyOpen = ref(false);
+const loggingIn = ref(false);
+const loggingOut = ref(false);
+
+const graffiti = useGraffiti();
+function login() {
+    loggingIn.value = true;
+    graffiti.login().finally(() => {
+        loggingIn.value = false;
+    });
+}
+function logout(session: GraffitiSession) {
+    loggingOut.value = true;
+    graffiti.logout(session).finally(() => {
+        loggingOut.value = false;
+        personalMenuOpen.value = false;
+    });
+}
 </script>
 
 <style>
