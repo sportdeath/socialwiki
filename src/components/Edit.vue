@@ -2,7 +2,7 @@
     <Header>
         <ul>
             <li>
-                <RouterLink to="/">Cancel</RouterLink>
+                <RouterLink to="/" class="warning">Cancel</RouterLink>
             </li>
             <li>
                 <button @click="publish">Publish</button>
@@ -168,13 +168,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed, onBeforeUnmount, toRefs } from "vue";
+import { ref, watch, computed, onBeforeUnmount, toRefs, onMounted } from "vue";
 import * as monaco from "monaco-editor";
 import { CodeEditor, DiffEditor } from "monaco-editor-vue3";
 import Header from "./Header.vue";
 import TwoPaneLayout from "./TwoPaneLayout.vue";
 import DisplayPage from "./DisplayPage.vue";
-import { useRoute, useRouter } from "vue-router";
+import { useRoute, useRouter, onBeforeRouteLeave } from "vue-router";
 
 const router = useRouter();
 
@@ -222,6 +222,7 @@ const monacoOptions = computed(() => ({
     suggestOnTriggerCharacters: true,
     tabCompletion: "on",
     parameterHints: { enabled: true },
+    lineNumbersMinChars: 3,
 }));
 
 // --- Diff settings ------------------------------------
@@ -303,6 +304,27 @@ watch(livePreview, (enabled, oldVal) => {
 });
 
 // --- Publishing ----------------------------------------------
+onBeforeRouteLeave((to, from, next) => {
+    if (editorHtml.value === existingHtml) return next();
+
+    const leave = confirm(
+        "You have unsaved changes, are you sure you want to cancel?",
+    );
+    leave ? next() : next(false);
+});
+const beforeUnload = (event: BeforeUnloadEvent) => {
+    if (editorHtml.value === existingHtml) return;
+
+    event.preventDefault();
+    event.returnValue = "";
+};
+onMounted(() => {
+    window.addEventListener("beforeunload", beforeUnload);
+});
+onBeforeUnmount(() => {
+    window.removeEventListener("beforeunload", beforeUnload);
+});
+
 function publish() {
     prompt("Edit summary (Briefly describe your changes)");
     router.push({ name: "view" });

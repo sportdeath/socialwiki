@@ -7,9 +7,12 @@
 :root {
     --text-color: #202122;
     --title-color: #101418;
+
     --border-color: #c8ccd1;
     --link-color: #36c;
     --link-hover-color: #3056a9;
+    --warning-color: #bf3c2c;
+    --warning-hover-color: #9f3526;
 }
 
 /* Body is exactly screen view */
@@ -58,6 +61,14 @@ button {
 :is(a, button):hover {
     color: var(--link-hover-color);
     text-decoration: underline 2px;
+}
+
+:is(a, button).warning {
+    color: var(--warning-color);
+}
+
+:is(a, button).warning:hover {
+    color: var(--warning-hover-color);
 }
 
 h1 {
