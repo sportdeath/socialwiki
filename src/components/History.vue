@@ -2,28 +2,22 @@
     <ol>
         <li v-for="(version, index) in pageVersions" :key="version.url">
             <article :id="version.url">
-                <header>
-                    <button
-                        :class="{
-                            selected: selectedPageVersion?.url === version.url,
-                        }"
-                        @click="selectedPageVersion = version"
-                    >
-                        <h3>
-                            {{
-                                new Date(
-                                    version.value.published,
-                                ).toLocaleString()
-                            }}
-                        </h3>
-                    </button>
-                    <p>
-                        Edited by
-                        <strong>{{ version.actor }}</strong>
-                    </p>
-                </header>
+                <button
+                    :class="{
+                        selected: selectedPageVersion?.url === version.url,
+                    }"
+                    @click="selectedPageVersion = version"
+                >
+                    <h3>
+                        {{ version.value.summary }}
+                    </h3>
+                </button>
 
-                <p>{{ version.value.summary }}</p>
+                <p>
+                    {{ version.actor }}
+                    edited on
+                    {{ new Date(version.value.published).toLocaleString() }}
+                </p>
 
                 <footer>
                     <ul v-if="selectedPageVersion?.url === version.url">

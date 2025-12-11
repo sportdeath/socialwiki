@@ -1,5 +1,12 @@
 <template>
-    <Header>
+    <Header
+        :channel="channel"
+        @update:channel="($event) => (channelInput = $event)"
+        @update:submit-channel="
+            ($event) =>
+                $router.push({ name: 'view', params: { channel: $event } })
+        "
+    >
         <ul v-if="$graffitiSession.value === undefined">
             <li>Loading...</li>
         </ul>
@@ -45,9 +52,6 @@
                 </RouterLink>
             </li>
             <li>
-                <button title="Create a copy of this page">Duplicate</button>
-            </li>
-            <li>
                 <button
                     @click="historyOpen = true"
                     title="Past revisions of this page"
@@ -75,7 +79,17 @@
                         {{ $graffitiSession.value.actor }}
                     </li>
                     <li>
-                        <a>My page</a>
+                        <RouterLink
+                            :to="{
+                                name: 'view',
+                                params: {
+                                    channel: $graffitiSession.value.actor,
+                                },
+                            }"
+                            @click="personalMenuOpen = false"
+                        >
+                            My page
+                        </RouterLink>
                     </li>
                     <!-- Watchlist and contributions are uneditable pages -->
                     <li>
@@ -96,7 +110,7 @@
             </li>
         </ul>
     </Header>
-    <main>
+    <main :class="{ stale: channelInput !== channel }">
         <DisplayPage v-if="!historyOpen" :html="html" />
         <TwoPaneLayout rightTitle="Preview" leftTitle="History" v-else>
             <template #left-pane>
@@ -118,7 +132,6 @@ import Header from "./Header.vue";
 import DisplayPage from "./DisplayPage.vue";
 import TwoPaneLayout from "./TwoPaneLayout.vue";
 import History from "./History.vue";
-import starterHtml from "./starter.html?raw";
 import { useGraffiti } from "@graffiti-garden/wrapper-vue";
 import type { GraffitiSession } from "@graffiti-garden/api";
 import {
@@ -131,11 +144,15 @@ const props = defineProps<{
     channel: string;
 }>();
 const channel = toRef(props, "channel");
+const channelInput = ref(channel.value);
 
 const { pageVersions, isInitialPageVersionPolling } =
     getPageVersionsRef(channel);
 
 const selectedPageVersion = ref<PageVersionObject | null>(null);
+watch(channel, () => {
+    selectedPageVersion.value = null;
+});
 // If we do not have a page version, use the latest one
 watch(
     isInitialPageVersionPolling,
@@ -144,7 +161,7 @@ watch(
         // Fix the wrapper-vue plugin!!
         await new Promise((resolve) => setTimeout(resolve, 200));
 
-        if (!isInitialPageVersionPolling.value && !selectedPageVersion.value) {
+        if (!selectedPageVersion.value) {
             selectedPageVersion.value = pageVersions.value[0] || null;
         }
     },
@@ -203,5 +220,19 @@ function logout(session: GraffitiSession) {
 }
 .selected:hover {
     color: var(--text-color);
+}
+
+/* put a grey overlay over all the content */
+.stale {
+    position: relative;
+    overflow: hidden;
+}
+
+.stale::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    pointer-events: none;
 }
 </style>

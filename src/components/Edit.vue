@@ -1,5 +1,5 @@
 <template>
-    <Header>
+    <Header :channel="channel" :disabled="true">
         <ul v-if="!$graffitiSession.value">
             <li>Loading...</li>
         </ul>

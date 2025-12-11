@@ -5,7 +5,6 @@
             :srcdoc="html"
             title="SocialWiki Page"
             loading="lazy"
-            sandbox="allow-scripts"
             frameborder="0"
         ></iframe>
     </div>
