@@ -66,7 +66,7 @@ export async function createPageVersion(
   content: string,
   precededBy: string[],
   summary: string,
-) {
+): Promise<PageVersionObject> {
   if (!session.value) throw new Error("Not logged in");
 
   // First store the content
@@ -78,22 +78,27 @@ export async function createPageVersion(
     session.value,
   );
 
+  const newObject = {
+    channels: [pageChannel],
+    value: {
+      pageChannel,
+      summary,
+      precededBy,
+      contentUrl,
+      published: Date.now(),
+    },
+  };
+
   // Now store the version metadata
   const result = await graffiti.put<PageVersionSchema>(
-    {
-      channels: [pageChannel],
-      value: {
-        pageChannel,
-        summary,
-        precededBy,
-        contentUrl,
-        published: Date.now(),
-      },
-    },
+    newObject,
     session.value,
   );
 
-  return result.url;
+  return {
+    ...result,
+    ...newObject,
+  };
 }
 
 export async function deletePageVersion(object: PageVersionObject) {
@@ -102,7 +107,7 @@ export async function deletePageVersion(object: PageVersionObject) {
   await graffiti.delete(object, session.value);
 }
 
-export function getPageVersions(pageChannel: MaybeRefOrGetter<string>) {
+export function getPageVersionsRef(pageChannel: MaybeRefOrGetter<string>) {
   const results = useGraffitiDiscover(
     () => [toValue(pageChannel)],
     () => pageVersionSchema(toValue(pageChannel)),
@@ -124,18 +129,27 @@ export function getPageVersions(pageChannel: MaybeRefOrGetter<string>) {
   };
 }
 
-export function getPageVersionContent(
-  pageVersionUrl: MaybeRefOrGetter<string | null | undefined>,
+export async function getPageContent(contentUrl: string) {
+  const result = await graffiti.get(
+    contentUrl,
+    pageVersionContentSchema,
+    session.value,
+  );
+  return result.value.content;
+}
+
+export function getPageContentRef(
+  contentUrl: MaybeRefOrGetter<string | null | undefined>,
 ) {
   const result = useGraffitiGet(
-    () => toValue(pageVersionUrl) ?? "",
+    () => toValue(contentUrl) ?? "",
     pageVersionContentSchema,
   );
 
-  const content = computed(() => result.object.value?.value.content ?? "");
+  const pageContent = computed(() => result.object.value?.value.content ?? "");
   return {
-    content,
-    poll: result.poll,
-    isInitialPolling: result.isInitialPolling,
+    pageContent,
+    pollPageContent: result.poll,
+    isInitialPageContentPolling: result.isInitialPolling,
   };
 }

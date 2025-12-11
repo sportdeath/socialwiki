@@ -1,9 +1,22 @@
 <template>
     <ol>
-        <li v-for="version in pageVersions" :key="version.url">
+        <li v-for="(version, index) in pageVersions" :key="version.url">
             <article :id="version.url">
                 <header>
-                    <h2>{{ version.url }}</h2>
+                    <button
+                        :class="{
+                            selected: selectedPageVersion?.url === version.url,
+                        }"
+                        @click="selectedPageVersion = version"
+                    >
+                        <h3>
+                            {{
+                                new Date(
+                                    version.value.published,
+                                ).toLocaleString()
+                            }}
+                        </h3>
+                    </button>
                     <p>
                         Edited by
                         <strong>{{ version.actor }}</strong>
@@ -12,95 +25,56 @@
 
                 <p>{{ version.value.summary }}</p>
 
-                <button @click="selectedPageVersion = version">Restore</button>
+                <footer>
+                    <ul v-if="selectedPageVersion?.url === version.url">
+                        <li v-if="$graffitiSession.value && index !== 0">
+                            <button @click="restorePageVersion(version)">
+                                Restore
+                            </button>
+                        </li>
+                        <li
+                            v-if="
+                                $graffitiSession.value?.actor === version.actor
+                            "
+                        >
+                            <button @click="deletePageVersion(version)">
+                                Delete
+                            </button>
+                        </li>
+                    </ul>
+                </footer>
             </article>
         </li>
     </ol>
     <!-- <ul>
         <li>TODO!!</li>
-        <li>Show the history of the page</li>
-        <li>Restore old histories</li>
         <li>Filter by authorship (makes it "look" owned)</li>
-        <li>Filter by a specific revision</li>
-        <li>Filters go into the URL so they can be shared</li>
-        <li>Visually show a "restored from" link</li>
-        <li>Link to "duplicated from"</li>
+        <li>Filters (by author or previous) go into the URL so they can be shared</li>
     </ul> -->
 </template>
 
 <script lang="ts" setup>
-import type { PageVersionObject } from "../graffiti/page-versions";
+import {
+    createPageVersion,
+    deletePageVersion,
+    getPageContent,
+    type PageVersionObject,
+} from "../graffiti/page-versions";
 
-defineProps<{
+const props = defineProps<{
     pageVersions: PageVersionObject[];
 }>();
 const selectedPageVersion = defineModel<PageVersionObject | null>(
     "selectedPageVersion",
 );
+
+async function restorePageVersion(version: PageVersionObject) {
+    const content = await getPageContent(version.value.contentUrl);
+    selectedPageVersion.value = await createPageVersion(
+        version.value.pageChannel,
+        content,
+        props.pageVersions.map((v) => v.url),
+        `Restored from ${version.url}`,
+    );
+}
 </script>
-
-<style scoped>
-main {
-    max-width: 48rem;
-    margin: 0 auto;
-    padding: 1.5rem;
-    font-family:
-        system-ui,
-        -apple-system,
-        BlinkMacSystemFont,
-        "Segoe UI",
-        sans-serif;
-}
-
-header h1 {
-    margin: 0 0 0.25rem;
-    font-size: 1.5rem;
-}
-
-header p {
-    margin: 0 0 1.5rem;
-    font-size: 0.95rem;
-}
-
-section[aria-label="Version history"] {
-    margin-top: 1rem;
-}
-
-ol {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-}
-
-li + li {
-    margin-top: 1rem;
-}
-
-article {
-    border-left: 2px solid #ccc;
-    padding-left: 1rem;
-}
-
-article header h2 {
-    margin: 0;
-    font-size: 1rem;
-    word-break: break-all;
-}
-
-article header p {
-    margin: 0.25rem 0 0.5rem;
-    font-size: 0.9rem;
-}
-
-article p {
-    margin: 0 0 0.5rem;
-}
-
-article small {
-    font-size: 0.85rem;
-}
-
-article a {
-    text-decoration: underline;
-}
-</style>

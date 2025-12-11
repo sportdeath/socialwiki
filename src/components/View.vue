@@ -122,8 +122,8 @@ import starterHtml from "./starter.html?raw";
 import { useGraffiti } from "@graffiti-garden/wrapper-vue";
 import type { GraffitiSession } from "@graffiti-garden/api";
 import {
-    getPageVersionContent,
-    getPageVersions,
+    getPageContentRef,
+    getPageVersionsRef,
     type PageVersionObject,
 } from "../graffiti/page-versions";
 
@@ -132,7 +132,8 @@ const props = defineProps<{
 }>();
 const channel = toRef(props, "channel");
 
-const { pageVersions, isInitialPageVersionPolling } = getPageVersions(channel);
+const { pageVersions, isInitialPageVersionPolling } =
+    getPageVersionsRef(channel);
 
 const selectedPageVersion = ref<PageVersionObject | null>(null);
 // If we do not have a page version, use the latest one
@@ -150,7 +151,7 @@ watch(
     { immediate: true },
 );
 
-const { content: html } = getPageVersionContent(
+const { pageContent: html } = getPageContentRef(
     () => selectedPageVersion.value?.value.contentUrl,
 );
 
