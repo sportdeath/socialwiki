@@ -10,7 +10,9 @@
                 >
             </li>
             <li>
-                <button @click="publish">Publish</button>
+                <button @click="publish" :class="{ selected: publishing }">
+                    {{ publishing ? "Publishing..." : "Publish" }}
+                </button>
             </li>
         </ul>
     </Header>
@@ -181,6 +183,7 @@ import TwoPaneLayout from "./TwoPaneLayout.vue";
 import DisplayPage from "./DisplayPage.vue";
 import { useRoute, useRouter, onBeforeRouteLeave } from "vue-router";
 import { useGraffitiSession } from "@graffiti-garden/wrapper-vue";
+import { createPageVersion } from "../graffiti/page-versions";
 
 const router = useRouter();
 const session = useGraffitiSession();
@@ -202,10 +205,7 @@ const channel = toRef(props, "channel");
 
 const route = useRoute();
 const existingHtmlBase = route.query.existingHtml;
-if (typeof existingHtmlBase !== "string") {
-    throw new Error("Invalid HTML");
-}
-const existingHtml = existingHtmlBase;
+let existingHtml = typeof existingHtmlBase === "string" ? existingHtmlBase : "";
 
 // Initialize the editor, diff and preview with the existing HTML
 const editorHtml = ref(existingHtml);
@@ -347,9 +347,20 @@ onBeforeUnmount(() => {
     window.removeEventListener("beforeunload", beforeUnload);
 });
 
-function publish() {
-    prompt("Edit summary (Briefly describe your changes)");
+const publishing = ref(false);
+async function publish() {
+    publishing.value = true;
+    const summary = prompt("Edit summary (Briefly describe your changes)");
+    if (summary === null) {
+        publishing.value = false;
+        return;
+    }
+    const publishedHtml = editorHtml.value;
+    await createPageVersion(channel.value, publishedHtml, [], summary);
+
+    existingHtml = publishedHtml;
     router.push({ name: "view" });
+    publishing.value = false;
 }
 </script>
 

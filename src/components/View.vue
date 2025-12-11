@@ -100,16 +100,10 @@
         <DisplayPage v-if="!historyOpen" :html="html" />
         <TwoPaneLayout rightTitle="Preview" leftTitle="History" v-else>
             <template #left-pane>
-                <ul>
-                    <li>TODO!!</li>
-                    <li>Show the history of the page</li>
-                    <li>Restore old histories</li>
-                    <li>Filter by authorship (makes it "look" owned)</li>
-                    <li>Filter by a specific revision</li>
-                    <li>Filters go into the URL so they can be shared</li>
-                    <li>Visually show a "restored from" link</li>
-                    <li>Link to "duplicated from"</li>
-                </ul>
+                <History
+                    :pageVersions="pageVersions"
+                    v-model:selectedPageVersion="selectedPageVersion"
+                />
             </template>
             <template #right-pane>
                 <DisplayPage :html="html" />
@@ -119,18 +113,46 @@
 </template>
 
 <script setup lang="ts">
-import { ref, toRef } from "vue";
+import { ref, toRef, watch } from "vue";
 import Header from "./Header.vue";
 import DisplayPage from "./DisplayPage.vue";
 import TwoPaneLayout from "./TwoPaneLayout.vue";
-import html from "./starter.html?raw";
+import History from "./History.vue";
+import starterHtml from "./starter.html?raw";
 import { useGraffiti } from "@graffiti-garden/wrapper-vue";
 import type { GraffitiSession } from "@graffiti-garden/api";
+import {
+    getPageVersionContent,
+    getPageVersions,
+    type PageVersionObject,
+} from "../graffiti/page-versions";
 
 const props = defineProps<{
     channel: string;
 }>();
 const channel = toRef(props, "channel");
+
+const { pageVersions, isInitialPageVersionPolling } = getPageVersions(channel);
+
+const selectedPageVersion = ref<PageVersionObject | null>(null);
+// If we do not have a page version, use the latest one
+watch(
+    isInitialPageVersionPolling,
+    async () => {
+        // TODO: this is a horrible hack
+        // Fix the wrapper-vue plugin!!
+        await new Promise((resolve) => setTimeout(resolve, 200));
+
+        if (!isInitialPageVersionPolling.value && !selectedPageVersion.value) {
+            selectedPageVersion.value = pageVersions.value[0] || null;
+        }
+    },
+    { immediate: true },
+);
+
+const { content: html } = getPageVersionContent(
+    () => selectedPageVersion.value?.value.contentUrl,
+);
 
 const personalMenuOpen = ref(false);
 const historyOpen = ref(false);
