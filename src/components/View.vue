@@ -83,7 +83,7 @@
                             :to="{
                                 name: 'view',
                                 params: {
-                                    channel: $graffitiSession.value.actor,
+                                    channel: `${$graffitiSession.value.actor}?actors=${$graffitiSession.value.actor}`,
                                 },
                             }"
                             @click="personalMenuOpen = false"
