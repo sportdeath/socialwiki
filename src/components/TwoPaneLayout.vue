@@ -99,6 +99,7 @@ onBeforeUnmount(() => {
     flex: 1;
     min-height: 0;
     display: flex;
+    overflow: hidden;
 }
 
 .two-panes.resizing,
@@ -160,6 +161,7 @@ onBeforeUnmount(() => {
     flex: 1;
     min-height: 0;
     display: flex;
+    overflow-y: auto;
 }
 
 .divider {
