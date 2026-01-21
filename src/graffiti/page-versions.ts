@@ -4,55 +4,49 @@ import type {
   GraffitiSession,
   JSONSchema,
 } from "@graffiti-garden/api";
-import {
-  useGraffiti,
-  useGraffitiSession,
-  useGraffitiDiscover,
-  useGraffitiGet,
-} from "@graffiti-garden/wrapper-vue";
+import { useGraffiti, useGraffitiDiscover } from "@graffiti-garden/wrapper-vue";
 import type { MaybeRefOrGetter } from "vue";
 import { computed, toValue } from "vue";
 
 const graffiti = useGraffiti();
-const session = useGraffitiSession();
-
-export const pageVersionContentSchema = {
-  properties: {
-    value: {
-      properties: {
-        content: { type: "string" },
-      },
-      required: ["content"],
-    },
-  },
-} as const satisfies JSONSchema;
-export type PageVersionContentSchema = typeof pageVersionContentSchema;
 
 export function pageVersionSchema(pageChannel: string) {
   return {
     properties: {
       value: {
         properties: {
-          pageChannel: {
+          // https://www.w3.org/TR/activitystreams-vocabulary/#dfn-update
+          activity: { const: "Update" },
+          // https://www.w3.org/TR/activitystreams-vocabulary/#dfn-object-term
+          object: {
             type: "string",
             const: pageChannel,
           },
+          // https://www.w3.org/TR/activitystreams-vocabulary/#dfn-published
+          published: { type: "number" },
+          // https://www.w3.org/TR/activitystreams-vocabulary/#dfn-summary
           summary: { type: "string" },
+          result: {
+            type: "object",
+            properties: {
+              media: { type: "string" },
+            },
+            required: ["media"],
+          },
           precededBy: {
             type: "array",
             items: {
               type: "string",
             },
           },
-          contentUrl: { type: "string" },
-          published: { type: "number" },
         },
         required: [
-          "pageChannel",
-          "summary",
-          "precededBy",
-          "contentUrl",
+          "activity",
+          "object",
           "published",
+          "summary",
+          "result",
+          "precededBy",
         ],
       },
     },
@@ -66,48 +60,41 @@ export async function createPageVersion(
   content: string,
   precededBy: string[],
   summary: string,
+  session: GraffitiSession,
 ): Promise<PageVersionObject> {
-  if (!session.value) throw new Error("Not logged in");
-
   // First store the content
-  const { url: contentUrl } = await graffiti.put<PageVersionContentSchema>(
-    {
-      channels: [],
-      value: { content },
-    },
-    session.value,
-  );
-
-  const newObject = {
-    channels: [pageChannel],
-    value: {
-      pageChannel,
-      summary,
-      precededBy,
-      contentUrl,
-      published: Date.now(),
-    },
-  };
+  const data = new Blob([content], { type: "text/html" });
+  const media = await graffiti.postMedia({ data }, session);
 
   // Now store the version metadata
-  const result = await graffiti.put<PageVersionSchema>(
-    newObject,
-    session.value,
+  return await graffiti.post<PageVersionSchema>(
+    {
+      channels: [pageChannel],
+      value: {
+        activity: "Update",
+        object: pageChannel,
+        published: Date.now(),
+        summary,
+        result: { media },
+        precededBy,
+      },
+    },
+    session,
   );
-
-  return {
-    ...result,
-    ...newObject,
-  };
 }
 
-export async function deletePageVersion(object: PageVersionObject) {
-  if (!session.value) throw new Error("Not logged in");
-  await graffiti.delete(object.value.contentUrl, session.value);
-  await graffiti.delete(object, session.value);
+export async function deletePageVersion(
+  object: PageVersionObject,
+  session: GraffitiSession,
+) {
+  await graffiti.deleteMedia(object.value.result.media, session);
+  await graffiti.delete(object, session);
 }
 
-export function getPageVersionsRef(pageChannel: MaybeRefOrGetter<string>) {
+export function getPageVersionsRef(
+  pageChannel: MaybeRefOrGetter<string>,
+  session?: GraffitiSession | null,
+) {
   const results = useGraffitiDiscover(
     () => [toValue(pageChannel)],
     () => pageVersionSchema(toValue(pageChannel)),
@@ -125,31 +112,6 @@ export function getPageVersionsRef(pageChannel: MaybeRefOrGetter<string>) {
   return {
     pageVersions,
     pollPageVersions: results.poll,
-    isInitialPageVersionPolling: results.isInitialPolling,
-  };
-}
-
-export async function getPageContent(contentUrl: string) {
-  const result = await graffiti.get(
-    contentUrl,
-    pageVersionContentSchema,
-    session.value,
-  );
-  return result.value.content;
-}
-
-export function getPageContentRef(
-  contentUrl: MaybeRefOrGetter<string | null | undefined>,
-) {
-  const result = useGraffitiGet(
-    () => toValue(contentUrl) ?? "",
-    pageVersionContentSchema,
-  );
-
-  const pageContent = computed(() => result.object.value?.value.content ?? "");
-  return {
-    pageContent,
-    pollPageContent: result.poll,
-    isInitialPageContentPolling: result.isInitialPolling,
+    isFirstPageVersionPoll: results.isFirstPoll,
   };
 }

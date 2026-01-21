@@ -4,23 +4,18 @@
             <h1>SocialWiki</h1>
         </RouterLink>
 
-        <!-- <button v-if="!disabled" @click="randomChannel">🎲</button> -->
         <form @submit.prevent="submitForm">
-            <button
-                v-if="!disabled"
-                type="button"
-                :disabled="channelInput === channel"
-                @click="channelInput = channel"
-            >
-                🔄
-            </button>
+            <!-- <button @click="refresh">Refresh</button> -->
             <input
                 type="text"
                 v-model="channelInput"
                 placeholder="Location"
                 :disabled="disabled"
-                @focus="$event.target?.select()"
+                @focus="(event) => (event.target as HTMLInputElement).select()"
             />
+            <a @click="channelInput = channel" v-if="channelInput !== channel">
+                Current channel: "{{ channel }}"
+            </a>
             <button v-if="!disabled" :disabled="channelInput === channel">
                 ➡️
             </button>
@@ -48,10 +43,9 @@ const disabled = toRef(props, "disabled");
 
 const emit = defineEmits(["update:channel", "update:submit-channel"]);
 
-function changeChannel(channel: string) {}
 function submitForm() {
     emit("update:submit-channel", channelInput.value);
-    document.activeElement?.blur();
+    (document.activeElement as HTMLElement | null)?.blur();
 }
 
 // Partially couple the input channel to the external channel
@@ -59,11 +53,6 @@ function submitForm() {
 const channelInput = ref(channel.value);
 watch(channel, (newVal) => (channelInput.value = newVal), { immediate: true });
 watch(channelInput, (newVal) => emit("update:channel", newVal));
-
-function randomChannel() {
-    channelInput.value = crypto.randomUUID();
-    emit("update:submit-channel", channelInput.value);
-}
 </script>
 
 <style>

@@ -2,7 +2,11 @@
     <div class="iframe-wrapper">
         <iframe
             :key="key"
-            :srcdoc="html"
+            :srcdoc="
+                html === undefined
+                    ? 'Loading...'
+                    : (html ?? 'No page here yet - create one!')
+            "
             title="SocialWiki Page"
             loading="lazy"
             frameborder="0"
@@ -14,7 +18,7 @@
 import { ref } from "vue";
 
 defineProps<{
-    html: string;
+    html: string | null | undefined;
 }>();
 
 const key = ref(0);

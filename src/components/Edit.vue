@@ -1,7 +1,14 @@
 <template>
     <Header :channel="channel" :disabled="true">
-        <ul v-if="!$graffitiSession.value">
+        <ul v-if="$graffitiSession.value === undefined">
             <li>Loading...</li>
+        </ul>
+        <ul v-else-if="$graffitiSession.value === null">
+            <li>
+                <button :class="{ selected: loggingIn }" @click="login">
+                    {{ loggingIn ? "Logging in..." : "Log In" }}
+                </button>
+            </li>
         </ul>
         <ul v-else>
             <li>
@@ -10,7 +17,10 @@
                 >
             </li>
             <li>
-                <button @click="publish" :class="{ selected: publishing }">
+                <button
+                    @click="publish($graffitiSession.value)"
+                    :class="{ selected: publishing }"
+                >
                     {{ publishing ? "Publishing..." : "Publish" }}
                 </button>
             </li>
@@ -143,7 +153,7 @@
                     <DiffEditor
                         v-else
                         :value="diffHtml"
-                        :original="existingHtml"
+                        :original="draftHtml"
                         language="html"
                         :theme="editorTheme"
                         :options="diffOptions"
@@ -181,9 +191,10 @@ import { CodeEditor, DiffEditor } from "monaco-editor-vue3";
 import Header from "./Header.vue";
 import TwoPaneLayout from "./TwoPaneLayout.vue";
 import DisplayPage from "./DisplayPage.vue";
-import { useRoute, useRouter, onBeforeRouteLeave } from "vue-router";
-import { useGraffitiSession } from "@graffiti-garden/wrapper-vue";
+import { useRouter, onBeforeRouteLeave } from "vue-router";
+import { useGraffiti, useGraffitiSession } from "@graffiti-garden/wrapper-vue";
 import { createPageVersion } from "../graffiti/page-versions";
+import type { GraffitiSession } from "@graffiti-garden/api";
 
 const router = useRouter();
 const session = useGraffitiSession();
@@ -203,14 +214,13 @@ const props = defineProps<{
 }>();
 const channel = toRef(props, "channel");
 
-const route = useRoute();
-const existingHtmlBase = route.query.existingHtml;
-let existingHtml = typeof existingHtmlBase === "string" ? existingHtmlBase : "";
+let draftHtml =
+    localStorage.getItem(`draft:${encodeURIComponent(channel.value)}`) ?? "";
 
 // Initialize the editor, diff and preview with the existing HTML
-const editorHtml = ref(existingHtml);
-const previewHtml = ref(existingHtml);
-const diffHtml = ref(existingHtml);
+const editorHtml = ref(draftHtml);
+const previewHtml = ref(draftHtml);
+const diffHtml = ref(draftHtml);
 
 // --- Editor Settings ------------------------------------
 const showSettings = ref(false);
@@ -327,7 +337,7 @@ watch(livePreview, (enabled, oldVal) => {
 
 // --- Publishing ----------------------------------------------
 onBeforeRouteLeave((to, from, next) => {
-    if (editorHtml.value === existingHtml) return next();
+    if (editorHtml.value === draftHtml) return next();
 
     const leave = confirm(
         "You have unsaved changes, are you sure you want to cancel?",
@@ -335,7 +345,7 @@ onBeforeRouteLeave((to, from, next) => {
     leave ? next() : next(false);
 });
 const beforeUnload = (event: BeforeUnloadEvent) => {
-    if (editorHtml.value === existingHtml) return;
+    if (editorHtml.value === draftHtml) return;
 
     event.preventDefault();
     event.returnValue = "";
@@ -348,7 +358,7 @@ onBeforeUnmount(() => {
 });
 
 const publishing = ref(false);
-async function publish() {
+async function publish(session: GraffitiSession) {
     publishing.value = true;
     const summary = prompt("Edit summary (Briefly describe your changes)");
     if (summary === null) {
@@ -356,11 +366,20 @@ async function publish() {
         return;
     }
     const publishedHtml = editorHtml.value;
-    await createPageVersion(channel.value, publishedHtml, [], summary);
+    await createPageVersion(channel.value, publishedHtml, [], summary, session);
 
-    existingHtml = publishedHtml;
+    draftHtml = publishedHtml;
     router.push({ name: "view" });
     publishing.value = false;
+}
+
+const loggingIn = ref(false);
+const graffiti = useGraffiti();
+function login() {
+    loggingIn.value = true;
+    graffiti.login().finally(() => {
+        loggingIn.value = false;
+    });
 }
 </script>
 

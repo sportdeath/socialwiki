@@ -44,12 +44,12 @@
                 </a>
             </li>
             <li>
-                <RouterLink
-                    :to="{ name: 'edit', query: { existingHtml: html } }"
+                <button
+                    @click="editPage"
                     title="Edit the source code of this page"
                 >
                     Edit
-                </RouterLink>
+                </button>
             </li>
             <li>
                 <button
@@ -76,7 +76,9 @@
                     v-click-away="() => (personalMenuOpen = false)"
                 >
                     <li>
-                        {{ $graffitiSession.value.actor }}
+                        <GraffitiActorToHandle
+                            :actor="$graffitiSession.value.actor"
+                        />
                     </li>
                     <li>
                         <RouterLink
@@ -111,16 +113,20 @@
         </ul>
     </Header>
     <main :class="{ stale: channelInput !== channel }">
-        <DisplayPage v-if="!historyOpen" :html="html" />
+        <DisplayPage
+            v-if="!historyOpen || !$graffitiSession.value"
+            :html="selectedPageHtml"
+        />
         <TwoPaneLayout rightTitle="Preview" leftTitle="History" v-else>
             <template #left-pane>
                 <History
                     :pageVersions="pageVersions"
                     v-model:selectedPageVersion="selectedPageVersion"
+                    :session="$graffitiSession.value"
                 />
             </template>
             <template #right-pane>
-                <DisplayPage :html="html" />
+                <DisplayPage :html="selectedPageHtml" />
             </template>
         </TwoPaneLayout>
     </main>
@@ -132,13 +138,16 @@ import Header from "./Header.vue";
 import DisplayPage from "./DisplayPage.vue";
 import TwoPaneLayout from "./TwoPaneLayout.vue";
 import History from "./History.vue";
-import { useGraffiti } from "@graffiti-garden/wrapper-vue";
+import {
+    useGraffiti,
+    GraffitiActorToHandle,
+} from "@graffiti-garden/wrapper-vue";
 import type { GraffitiSession } from "@graffiti-garden/api";
 import {
-    getPageContentRef,
     getPageVersionsRef,
     type PageVersionObject,
 } from "../graffiti/page-versions";
+import { useRouter } from "vue-router";
 
 const props = defineProps<{
     channel: string;
@@ -146,31 +155,54 @@ const props = defineProps<{
 const channel = toRef(props, "channel");
 const channelInput = ref(channel.value);
 
-const { pageVersions, isInitialPageVersionPolling } =
-    getPageVersionsRef(channel);
+const { pageVersions, isFirstPageVersionPoll } = getPageVersionsRef(channel);
 
-const selectedPageVersion = ref<PageVersionObject | null>(null);
+const selectedPageVersion = ref<PageVersionObject | null | undefined>(
+    undefined,
+);
+const selectedPageHtml = ref<string | null | undefined>(undefined);
 watch(channel, () => {
-    selectedPageVersion.value = null;
+    selectedPageVersion.value = undefined;
+    selectedPageHtml.value = undefined;
 });
 // If we do not have a page version, use the latest one
-watch(
-    isInitialPageVersionPolling,
-    async () => {
-        // TODO: this is a horrible hack
-        // Fix the wrapper-vue plugin!!
-        await new Promise((resolve) => setTimeout(resolve, 200));
+watch(isFirstPageVersionPoll, async (isPolling) => {
+    if (isPolling) return;
 
-        if (!selectedPageVersion.value) {
-            selectedPageVersion.value = pageVersions.value[0] || null;
-        }
-    },
-    { immediate: true },
-);
+    // Whenever we are done polling
+    const selected = pageVersions.value.at(0) || null;
+    selectedPageVersion.value = selected;
+});
 
-const { pageContent: html } = getPageContentRef(
-    () => selectedPageVersion.value?.value.contentUrl,
-);
+watch(selectedPageVersion, async (selected) => {
+    selectedPageHtml.value = undefined;
+    if (!selected) {
+        selectedPageHtml.value = null;
+        return;
+    }
+
+    // Fetch the HTML content of the selected page version
+    const media = await graffiti.getMedia(selected.value.result.media, {
+        types: ["text/html"],
+    });
+    const html = await media.data.text();
+
+    // Double check that the selected page version is still the same
+    if (selected.url !== selectedPageVersion.value?.url) return;
+    // If so, assign the html
+    selectedPageHtml.value = html;
+});
+
+const router = useRouter();
+function editPage() {
+    if (selectedPageHtml.value) {
+        window.localStorage.setItem(
+            `draft:${encodeURIComponent(channel.value)}`,
+            selectedPageHtml.value,
+        );
+    }
+    router.push({ name: "edit" });
+}
 
 const personalMenuOpen = ref(false);
 const historyOpen = ref(false);

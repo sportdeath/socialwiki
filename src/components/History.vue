@@ -14,7 +14,7 @@
                 </button>
 
                 <p>
-                    {{ version.actor }}
+                    <GraffitiActorToHandle :actor="version.actor" />
                     edited on
                     {{ new Date(version.value.published).toLocaleString() }}
                 </p>
@@ -31,7 +31,9 @@
                                 $graffitiSession.value?.actor === version.actor
                             "
                         >
-                            <button @click="deletePageVersion(version)">
+                            <button
+                                @click="deletePageVersion(version, session)"
+                            >
                                 Delete
                             </button>
                         </li>
@@ -48,27 +50,38 @@
 </template>
 
 <script lang="ts" setup>
+import type { GraffitiSession } from "@graffiti-garden/api";
 import {
     createPageVersion,
     deletePageVersion,
-    getPageContent,
     type PageVersionObject,
 } from "../graffiti/page-versions";
+import {
+    useGraffiti,
+    GraffitiActorToHandle,
+} from "@graffiti-garden/wrapper-vue";
 
 const props = defineProps<{
     pageVersions: PageVersionObject[];
+    session: GraffitiSession;
 }>();
 const selectedPageVersion = defineModel<PageVersionObject | null>(
     "selectedPageVersion",
 );
 
+const graffiti = useGraffiti();
+
 async function restorePageVersion(version: PageVersionObject) {
-    const content = await getPageContent(version.value.contentUrl);
+    const media = await graffiti.getMedia(version.value.result.media, {
+        types: ["text/html"],
+    });
+    const html = await media.data.text();
     selectedPageVersion.value = await createPageVersion(
-        version.value.pageChannel,
-        content,
+        version.value.object,
+        html,
         props.pageVersions.map((v) => v.url),
         `Restored from ${version.url}`,
+        props.session,
     );
 }
 </script>
