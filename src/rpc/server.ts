@@ -77,6 +77,17 @@ export async function serveGraffiti(iframe: HTMLIFrameElement) {
           if (result.done) break;
         }
       },
+      initialize() {
+        for (const actor of loggedInActors) {
+          const loginEvent: GraffitiLoginEvent = new CustomEvent("login", {
+            detail: { session: { actor } },
+          });
+          forward(loginEvent);
+        }
+        const initializedEvent: GraffitiSessionInitializedEvent =
+          new CustomEvent("initialized");
+        forward(initializedEvent);
+      },
     },
   });
 
@@ -90,22 +101,6 @@ export async function serveGraffiti(iframe: HTMLIFrameElement) {
   for (const type of sessionEventTypes) {
     graffiti.sessionEvents.addEventListener(type, forward);
   }
-  // Forward initial session events
-  setTimeout(() => {
-    console.log("forwarding initial session events");
-    for (const actor of loggedInActors) {
-      console.log(actor);
-      const loginEvent: GraffitiLoginEvent = new CustomEvent("login", {
-        detail: { session: { actor } },
-      });
-      forward(loginEvent);
-    }
-    const initializedEvent: GraffitiSessionInitializedEvent = new CustomEvent(
-      "initialized",
-    );
-    forward(initializedEvent);
-    console.log("done");
-  }, 0);
 
   return () => {
     for (const type of sessionEventTypes) {

@@ -28,6 +28,7 @@ type Methods = MethodsOf<Graffiti> & {
     id: string,
     ...args: Parameters<Graffiti["continueDiscover"]>
   ) => void;
+  initialize: () => void;
 };
 
 const sessionEvents = new EventTarget();
@@ -79,6 +80,7 @@ class GraffitiRpc {
         return r[m](...args);
       };
     }
+    setTimeout(async () => (await remote).initialize(), 0);
   }
 
   // @ts-ignore
