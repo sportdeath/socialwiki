@@ -113,10 +113,7 @@
         </ul>
     </Header>
     <main :class="{ stale: channelInput !== channel }">
-        <DisplayPage
-            v-if="!historyOpen || !$graffitiSession.value"
-            :html="selectedPageHtml"
-        />
+        <DisplayPage v-if="!historyOpen" :html="selectedPageHtml" />
         <TwoPaneLayout rightTitle="Preview" leftTitle="History" v-else>
             <template #left-pane>
                 <History

@@ -19,10 +19,12 @@
                     {{ new Date(version.value.published).toLocaleString() }}
                 </p>
 
-                <footer>
+                <footer v-if="session">
                     <ul v-if="selectedPageVersion?.url === version.url">
                         <li v-if="$graffitiSession.value && index !== 0">
-                            <button @click="restorePageVersion(version)">
+                            <button
+                                @click="restorePageVersion(version, session)"
+                            >
                                 Restore
                             </button>
                         </li>
@@ -63,7 +65,7 @@ import {
 
 const props = defineProps<{
     pageVersions: PageVersionObject[];
-    session: GraffitiSession;
+    session?: GraffitiSession | null;
 }>();
 const selectedPageVersion = defineModel<PageVersionObject | null>(
     "selectedPageVersion",
@@ -71,7 +73,10 @@ const selectedPageVersion = defineModel<PageVersionObject | null>(
 
 const graffiti = useGraffiti();
 
-async function restorePageVersion(version: PageVersionObject) {
+async function restorePageVersion(
+    version: PageVersionObject,
+    session: GraffitiSession,
+) {
     const media = await graffiti.getMedia(version.value.result.media, {
         types: ["text/html"],
     });
@@ -81,7 +86,7 @@ async function restorePageVersion(version: PageVersionObject) {
         html,
         props.pageVersions.map((v) => v.url),
         `Restored from ${version.url}`,
-        props.session,
+        session,
     );
 }
 </script>
