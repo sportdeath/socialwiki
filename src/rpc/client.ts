@@ -134,4 +134,10 @@ class GraffitiSocialWiki {
   readonly sessionEvents = sessionEvents;
 }
 
-export { GraffitiSocialWiki as Graffiti };
+declare global {
+  interface Window {
+    graffiti: GraffitiSocialWiki;
+  }
+}
+
+window.graffiti = new GraffitiSocialWiki();
