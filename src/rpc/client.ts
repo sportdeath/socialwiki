@@ -136,8 +136,8 @@ class GraffitiSocialWiki {
 
 declare global {
   interface Window {
-    graffiti: GraffitiSocialWiki;
+    graffiti: typeof GraffitiSocialWiki;
   }
 }
 
-window.graffiti = new GraffitiSocialWiki();
+window.graffiti = GraffitiSocialWiki;
