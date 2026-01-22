@@ -3,7 +3,7 @@ import VueClickAway from "vue3-click-away";
 import { createRouter, createWebHistory, RouterView } from "vue-router";
 import "./style.css";
 import { GraffitiPlugin } from "@graffiti-garden/wrapper-vue";
-import { GraffitiDecentralized } from "@graffiti-garden/implementation-decentralized";
+import { graffiti } from "./rpc/server";
 
 const router = createRouter({
   history: createWebHistory(),
@@ -17,7 +17,7 @@ const router = createRouter({
       },
     },
     {
-      path: "/v/:channel",
+      path: "/w/:channel",
       name: "view",
       component: () => import("./components/View.vue"),
       props: true,
@@ -33,8 +33,6 @@ const router = createRouter({
 
 createApp(RouterView)
   .use(VueClickAway)
-  .use(GraffitiPlugin, {
-    graffiti: new GraffitiDecentralized(),
-  })
+  .use(GraffitiPlugin, { graffiti })
   .use(router)
   .mount("#app");
