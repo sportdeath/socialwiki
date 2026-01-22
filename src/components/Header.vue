@@ -1,7 +1,7 @@
 <template>
     <header>
         <RouterLink :to="{ name: 'home' }">
-            <h1>SocialWiki</h1>
+            <h1>Social.Wiki</h1>
         </RouterLink>
 
         <form @submit.prevent="submitForm">

@@ -6,14 +6,14 @@ import { GraffitiPlugin } from "@graffiti-garden/wrapper-vue";
 import { GraffitiDecentralized } from "@graffiti-garden/implementation-decentralized";
 
 const router = createRouter({
-  history: createWebHistory("/socialwiki/"),
+  history: createWebHistory(),
   routes: [
     {
       path: "/",
       name: "home",
       redirect: {
         name: "view",
-        params: { channel: "socialwiki" },
+        params: { channel: "Social.Wiki" },
       },
     },
     {
