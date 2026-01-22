@@ -1,12 +1,12 @@
 import {
   Graffiti,
-  type GraffitiObject,
   type GraffitiObjectStreamEntry,
   type GraffitiObjectStreamError,
   type GraffitiObjectStreamReturn,
   type GraffitiObjectStreamTombstone,
+  type GraffitiSession,
 } from "@graffiti-garden/api";
-import { connect, WindowMessenger, type RemoteProxy } from "penpal";
+import { connect, WindowMessenger } from "penpal";
 
 const messenger = new WindowMessenger({
   remoteWindow: window.parent,
@@ -71,7 +71,7 @@ const methods = [
   "handleToActor",
 ] as const;
 
-class GraffitiRpc {
+class GraffitiSocialWiki {
   constructor() {
     for (const m of methods) {
       (this as any)[m] = async (...args: any[]) => {
@@ -87,6 +87,7 @@ class GraffitiRpc {
   discover: Graffiti["discover"] = (...args) => {
     args = JSON.parse(JSON.stringify(args));
     const id = crypto.randomUUID();
+    const this_ = this;
     return (async function* () {
       const r = await remote;
       r.discover(id, ...args);
@@ -94,7 +95,14 @@ class GraffitiRpc {
         const result = await new Promise<DiscoverResult>((resolve) => {
           streams.set(id, resolve);
         });
-        if (result.done) return result.value;
+        if (result.done) {
+          const cursor = result.value.cursor;
+          return {
+            cursor,
+            continue: (session?: GraffitiSession | null) =>
+              this_.continueDiscover(cursor, session),
+          };
+        }
         yield result.value;
       }
     })();
@@ -102,6 +110,7 @@ class GraffitiRpc {
   continueDiscover: Graffiti["continueDiscover"] = (...args) => {
     args = JSON.parse(JSON.stringify(args));
     const id = crypto.randomUUID();
+    const this_ = this;
     return (async function* () {
       const r = await remote;
       r.continueDiscover(id, ...args);
@@ -109,7 +118,14 @@ class GraffitiRpc {
         const result = await new Promise<DiscoverResult>((resolve) => {
           streams.set(id, resolve);
         });
-        if (result.done) return result.value;
+        if (result.done) {
+          const cursor = result.value.cursor;
+          return {
+            cursor,
+            continue: (session?: GraffitiSession | null) =>
+              this_.continueDiscover(cursor, session),
+          };
+        }
         yield result.value;
       }
     })();
@@ -118,9 +134,4 @@ class GraffitiRpc {
   readonly sessionEvents = sessionEvents;
 }
 
-declare global {
-  interface Window {
-    graffiti: GraffitiRpc; // change this
-  }
-}
-window.graffiti = new GraffitiRpc();
+export { GraffitiSocialWiki as Graffiti };

@@ -1,8 +1,9 @@
-import { connect, WindowMessenger } from "penpal";
+import { connect, WindowMessenger, type Connection } from "penpal";
 import type {
   Graffiti,
   GraffitiLoginEvent,
   GraffitiLogoutEvent,
+  GraffitiObjectStream,
   GraffitiSessionInitializedEvent,
 } from "@graffiti-garden/api";
 import { GraffitiDecentralized } from "@graffiti-garden/implementation-decentralized";
@@ -21,6 +22,30 @@ graffiti.sessionEvents.addEventListener("logout", (e) => {
   if (detail.error) return;
   loggedInActors.delete(detail.actor);
 });
+
+async function stream(
+  connection: Connection<{
+    streamReturn: (id: string, value: any) => Promise<void>;
+  }>,
+  id: string,
+  iterator: GraffitiObjectStream<{}>,
+) {
+  const remote = await connection.promise;
+  while (true) {
+    const result = await iterator.next();
+    if (result.done) {
+      // Only return the cursor, no continue
+      await remote.streamReturn(id, {
+        ...result,
+        value: {
+          cursor: result.value.cursor,
+        },
+      });
+      break;
+    }
+    await remote.streamReturn(id, result);
+  }
+}
 
 export async function serveGraffiti(iframe: HTMLIFrameElement) {
   if (!iframe.contentWindow) {
@@ -57,25 +82,15 @@ export async function serveGraffiti(iframe: HTMLIFrameElement) {
         ]),
       ),
       async discover(id: string, ...args: Parameters<Graffiti["discover"]>) {
-        const remote = await connection.promise;
-        const iterator = graffiti.discover(...args);
-        while (true) {
-          const result = await iterator.next();
-          await remote.streamReturn(id, result);
-          if (result.done) break;
-        }
+        const iterator = graffiti.discover<{}>(...args);
+        await stream(connection, id, iterator);
       },
       async continueDiscover(
         id: string,
         ...args: Parameters<Graffiti["continueDiscover"]>
       ) {
-        const remote = await connection.promise;
         const iterator = graffiti.continueDiscover(...args);
-        while (true) {
-          const result = await iterator.next();
-          await remote.streamReturn(id, result);
-          if (result.done) break;
-        }
+        await stream(connection, id, iterator);
       },
       initialize() {
         for (const actor of loggedInActors) {
