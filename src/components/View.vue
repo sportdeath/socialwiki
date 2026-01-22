@@ -146,7 +146,7 @@ import type { GraffitiSession } from "@graffiti-garden/api";
 import {
     getPageVersionsRef,
     type PageVersionObject,
-} from "../graffiti/page-versions";
+} from "../helpers/page-versions";
 import { useRouter } from "vue-router";
 
 const props = defineProps<{

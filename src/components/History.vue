@@ -55,7 +55,7 @@ import {
     createPageVersion,
     deletePageVersion,
     type PageVersionObject,
-} from "../graffiti/page-versions";
+} from "../helpers/page-versions";
 import {
     useGraffiti,
     GraffitiActorToHandle,

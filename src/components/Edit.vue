@@ -193,7 +193,7 @@ import TwoPaneLayout from "./TwoPaneLayout.vue";
 import DisplayPage from "./DisplayPage.vue";
 import { useRouter, onBeforeRouteLeave } from "vue-router";
 import { useGraffiti, useGraffitiSession } from "@graffiti-garden/wrapper-vue";
-import { createPageVersion } from "../graffiti/page-versions";
+import { createPageVersion } from "../helpers/page-versions";
 import type { GraffitiSession } from "@graffiti-garden/api";
 
 const router = useRouter();
