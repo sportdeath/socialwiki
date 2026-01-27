@@ -1,9 +1,10 @@
-import { connect, WindowMessenger, type Connection } from "penpal";
+import { connect, Reply, WindowMessenger, type Connection } from "penpal";
 import type {
   Graffiti,
   GraffitiLoginEvent,
   GraffitiLogoutEvent,
   GraffitiObjectStream,
+  GraffitiSession,
   GraffitiSessionInitializedEvent,
 } from "@graffiti-garden/api";
 import { GraffitiDecentralized } from "@graffiti-garden/implementation-decentralized";
@@ -51,8 +52,6 @@ export async function serveGraffiti(iframe: HTMLIFrameElement) {
     "post",
     "get",
     "delete",
-    "postMedia",
-    "getMedia",
     "deleteMedia",
     "login",
     "logout",
@@ -72,6 +71,29 @@ export async function serveGraffiti(iframe: HTMLIFrameElement) {
           graffiti[method].bind(graffiti),
         ]),
       ),
+      async postMedia(
+        media: {
+          data: { buffer: ArrayBuffer; type: string };
+          allowed?: string[] | null;
+        },
+        session: GraffitiSession,
+      ) {
+        const data = new Blob([media.data.buffer], { type: media.data.type });
+        return await graffiti.postMedia({ ...media, data }, session);
+      },
+      async getMedia(...args: Parameters<Graffiti["getMedia"]>) {
+        const result = await graffiti.getMedia(...args);
+        const buffer = await result.data.arrayBuffer();
+        const type = result.data.type;
+
+        return new Reply(
+          {
+            ...result,
+            data: { buffer, type },
+          },
+          { transferables: [buffer] },
+        );
+      },
       async discover(id: string, ...args: Parameters<Graffiti["discover"]>) {
         const iterator = graffiti.discover<{}>(...args);
         await stream(connection, id, iterator);
