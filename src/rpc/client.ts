@@ -1,23 +1,11 @@
-import {
-  Graffiti,
-  type GraffitiObjectStreamEntry,
-  type GraffitiObjectStreamError,
-  type GraffitiObjectStreamReturn,
-  type GraffitiObjectStreamTombstone,
-  type GraffitiSession,
-} from "@graffiti-garden/api";
+import { Graffiti, type GraffitiObjectStream } from "@graffiti-garden/api";
 import { connect, WindowMessenger } from "penpal";
 
 const messenger = new WindowMessenger({
   remoteWindow: window.parent,
 });
 
-type DiscoverResult = IteratorResult<
-  | GraffitiObjectStreamError
-  | GraffitiObjectStreamTombstone
-  | GraffitiObjectStreamEntry<{}>,
-  GraffitiObjectStreamReturn<{}>
->;
+type DiscoverResult = Awaited<ReturnType<GraffitiObjectStream<{}>["next"]>>;
 
 type MethodsOf<T> = {
   [K in keyof T as T[K] extends (...args: any[]) => any ? K : never]: T[K];
@@ -39,15 +27,7 @@ const connection = connect<Methods>({
     sessionEvent(type: string, detail: any) {
       sessionEvents.dispatchEvent(new CustomEvent(type, { detail }));
     },
-    async streamReturn(
-      id: string,
-      value: IteratorResult<
-        | GraffitiObjectStreamError
-        | GraffitiObjectStreamTombstone
-        | GraffitiObjectStreamEntry<{}>,
-        GraffitiObjectStreamReturn<{}>
-      >,
-    ) {
+    async streamReturn(id: string, value: DiscoverResult) {
       const stream = streams.get(id);
       if (!stream) return;
       stream(value);
@@ -87,7 +67,6 @@ class GraffitiSocialWiki {
   discover: Graffiti["discover"] = (...args) => {
     args = JSON.parse(JSON.stringify(args));
     const id = crypto.randomUUID();
-    const this_ = this;
     return (async function* () {
       const r = await remote;
       r.discover(id, ...args);
@@ -95,22 +74,15 @@ class GraffitiSocialWiki {
         const result = await new Promise<DiscoverResult>((resolve) => {
           streams.set(id, resolve);
         });
-        if (result.done) {
-          const cursor = result.value.cursor;
-          return {
-            cursor,
-            continue: (session?: GraffitiSession | null) =>
-              this_.continueDiscover(cursor, session),
-          };
-        }
+        if (result.done) return result.value;
         yield result.value;
       }
     })();
   };
+  // @ts-ignore
   continueDiscover: Graffiti["continueDiscover"] = (...args) => {
     args = JSON.parse(JSON.stringify(args));
     const id = crypto.randomUUID();
-    const this_ = this;
     return (async function* () {
       const r = await remote;
       r.continueDiscover(id, ...args);
@@ -118,14 +90,7 @@ class GraffitiSocialWiki {
         const result = await new Promise<DiscoverResult>((resolve) => {
           streams.set(id, resolve);
         });
-        if (result.done) {
-          const cursor = result.value.cursor;
-          return {
-            cursor,
-            continue: (session?: GraffitiSession | null) =>
-              this_.continueDiscover(cursor, session),
-          };
-        }
+        if (result.done) return result.value;
         yield result.value;
       }
     })();

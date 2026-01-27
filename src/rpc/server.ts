@@ -33,17 +33,8 @@ async function stream(
   const remote = await connection.promise;
   while (true) {
     const result = await iterator.next();
-    if (result.done) {
-      // Only return the cursor, no continue
-      await remote.streamReturn(id, {
-        ...result,
-        value: {
-          cursor: result.value.cursor,
-        },
-      });
-      break;
-    }
     await remote.streamReturn(id, result);
+    if (result.done) break;
   }
 }
 
@@ -89,7 +80,7 @@ export async function serveGraffiti(iframe: HTMLIFrameElement) {
         id: string,
         ...args: Parameters<Graffiti["continueDiscover"]>
       ) {
-        const iterator = graffiti.continueDiscover(...args);
+        const iterator = graffiti.continueDiscover<{}>(...args);
         await stream(connection, id, iterator);
       },
       initialize() {

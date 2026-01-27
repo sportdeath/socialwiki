@@ -8,9 +8,9 @@
   },
   "author": "Theia Henderson",
   "dependencies": {
-    "@graffiti-garden/api": "^1.1.1",
-    "@graffiti-garden/implementation-decentralized": "^0.0.3",
-    "@graffiti-garden/wrapper-vue": "^1.1.0",
+    "@graffiti-garden/api": "^1.2.0",
+    "@graffiti-garden/implementation-decentralized": "^0.0.4",
+    "@graffiti-garden/wrapper-vue": "^1.2.0",
     "monaco-editor": "^0.55.1",
     "monaco-editor-vue3": "^1.0.5",
     "monaco-vim": "^0.4.4",
@@ -21,7 +21,7 @@
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.3",
-    "@vue/typescript-plugin": "^3.2.2",
+    "@vue/typescript-plugin": "^3.2.4",
     "vite": "^7.3.1"
   }
 }
