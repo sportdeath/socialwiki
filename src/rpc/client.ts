@@ -5,14 +5,19 @@ import {
 } from "@graffiti-garden/api";
 import { CallOptions, connect, WindowMessenger } from "penpal";
 
+// Send messages to the top-most window if there are nested iframes
 const remoteWindow = window.top;
 if (!remoteWindow) {
   throw new Error("Unable to talk to social wiki");
 }
 
+// Only send messages to the origin hosting the script
+const allowedSrc = import.meta.url;
+const allowedOrigin = new URL(allowedSrc).origin;
+
 const messenger = new WindowMessenger({
   remoteWindow,
-  allowedOrigins: ["http://localhost:5173", "https://social.wiki"],
+  allowedOrigins: [allowedOrigin],
 });
 
 type DiscoverResult = Awaited<ReturnType<GraffitiObjectStream<{}>["next"]>>;
