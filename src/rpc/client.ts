@@ -3,25 +3,16 @@ import {
   type GraffitiObjectStream,
   type GraffitiSession,
 } from "@graffiti-garden/api";
-import { CallOptions, connect, WindowMessenger } from "penpal";
+import {
+  CallOptions,
+  connect,
+  WindowMessenger,
+  type RemoteProxy,
+} from "penpal";
 
-// Send messages to the top-most window if there are nested iframes
-const remoteWindow = window.top;
-if (!remoteWindow) {
-  throw new Error("Unable to talk to social wiki");
-}
-
-// Only send messages to the origin hosting the script
-const allowedSrc = import.meta.url;
-const allowedOrigin = new URL(allowedSrc).origin;
-
-const messenger = new WindowMessenger({
-  remoteWindow,
-  allowedOrigins: [allowedOrigin],
-});
-
-type DiscoverResult = Awaited<ReturnType<GraffitiObjectStream<{}>["next"]>>;
-
+// Expect the server to supply all the methods of Graffiti,
+// but postMedia, getMedia, discover, and continueDiscover
+// are slightly modified to be able to send Blobs and AsyncGenerator types
 type MethodsOf<T> = {
   [K in keyof T as T[K] extends (...args: any[]) => any ? K : never]: T[K];
 };
@@ -46,26 +37,9 @@ type Methods = MethodsOf<Graffiti> & {
   initialize: () => void;
 };
 
-const sessionEvents = new EventTarget();
-const streams = new Map<string, (result: DiscoverResult) => void>();
-const connection = connect<Methods>({
-  messenger,
-  methods: {
-    sessionEvent(type: string, detail: any) {
-      sessionEvents.dispatchEvent(new CustomEvent(type, { detail }));
-    },
-    async streamReturn(id: string, value: DiscoverResult) {
-      const stream = streams.get(id);
-      if (!stream) return;
-      stream(value);
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    },
-  },
-});
+type DiscoverResult = Awaited<ReturnType<GraffitiObjectStream<{}>["next"]>>;
 
-const remote = connection.promise;
-
-const methods = [
+const simpleMethods = [
   "post",
   "get",
   "delete",
@@ -76,21 +50,68 @@ const methods = [
   "handleToActor",
 ] as const;
 
-class GraffitiSocialWiki {
+export class GraffitiSocialWiki {
+  readonly sessionEvents = new EventTarget();
+
+  // Plumbing to route object stream results
+  // to the appropriate async generator
+  protected readonly streams = new Map<
+    string,
+    (result: DiscoverResult) => void
+  >();
+  protected readonly remote: Promise<RemoteProxy<Methods>>;
+
   constructor() {
-    for (const m of methods) {
+    // Send messages to the top-most window if there are nested iframes
+    const remoteWindow = window.top;
+    if (!remoteWindow) {
+      throw new Error("Unable to talk to social wiki");
+    }
+
+    // Only send messages to the origin hosting the script
+    const allowedSrc = import.meta.url;
+    const allowedOrigin = new URL(allowedSrc).origin;
+
+    // Establish a connection to the serving window
+    const messenger = new WindowMessenger({
+      remoteWindow,
+      allowedOrigins: [allowedOrigin],
+    });
+    const this_ = this;
+    const connection = connect<Methods>({
+      messenger,
+      // Establish callbacks for events and asynchronous yields
+      methods: {
+        sessionEvent(type: string, detail: any) {
+          this_.sessionEvents.dispatchEvent(new CustomEvent(type, { detail }));
+        },
+        async streamReturn(id: string, value: DiscoverResult) {
+          const stream = this_.streams.get(id);
+          if (!stream) return;
+          stream(value);
+          await new Promise((resolve) => setTimeout(resolve, 0));
+        },
+      },
+    });
+    this.remote = connection.promise;
+
+    // Bind all "simple" methods to their remote counterparts
+    for (const m of simpleMethods) {
       (this as any)[m] = async (...args: any[]) => {
         args = JSON.parse(JSON.stringify(args));
-        const r = await remote;
+        const r = await this.remote;
         return r[m](...args);
       };
     }
-    setTimeout(async () => (await remote).initialize(), 0);
+
+    // Wait for listeners to be added then initialize,
+    // which will trigger session events to be sent.
+    setTimeout(async () => (await this.remote).initialize(), 0);
   }
 
   getMedia: Graffiti["getMedia"] = async (...args) => {
     args = JSON.parse(JSON.stringify(args));
-    const r = await remote;
+    const r = await this.remote;
     const result = await r.getMedia(...args);
     return {
       ...result,
@@ -102,7 +123,7 @@ class GraffitiSocialWiki {
     const [media, session] = args;
     const buffer = await media.data.arrayBuffer();
     const type = media.data.type;
-    const r = await remote;
+    const r = await this.remote;
     return await r.postMedia(
       {
         ...JSON.parse(JSON.stringify(media)),
@@ -119,12 +140,13 @@ class GraffitiSocialWiki {
   discover: Graffiti["discover"] = (...args) => {
     args = JSON.parse(JSON.stringify(args));
     const id = crypto.randomUUID();
+    const this_ = this;
     return (async function* () {
-      const r = await remote;
+      const r = await this_.remote;
       r.discover(id, ...args);
       while (true) {
         const result = await new Promise<DiscoverResult>((resolve) => {
-          streams.set(id, resolve);
+          this_.streams.set(id, resolve);
         });
         if (result.done) return result.value;
         yield result.value;
@@ -135,20 +157,19 @@ class GraffitiSocialWiki {
   continueDiscover: Graffiti["continueDiscover"] = (...args) => {
     args = JSON.parse(JSON.stringify(args));
     const id = crypto.randomUUID();
+    const this_ = this;
     return (async function* () {
-      const r = await remote;
+      const r = await this_.remote;
       r.continueDiscover(id, ...args);
       while (true) {
         const result = await new Promise<DiscoverResult>((resolve) => {
-          streams.set(id, resolve);
+          this_.streams.set(id, resolve);
         });
         if (result.done) return result.value;
         yield result.value;
       }
     })();
   };
-
-  readonly sessionEvents = sessionEvents;
 }
 
 declare global {
