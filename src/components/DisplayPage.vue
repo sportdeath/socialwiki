@@ -18,7 +18,7 @@
 
 <script setup lang="ts">
 import { onBeforeUnmount, ref, useTemplateRef, watch } from "vue";
-import { serveGraffiti } from "../rpc/server";
+import { serveGraffiti } from "../page-init/rpc-server";
 
 defineProps<{
     html: string | null | undefined;

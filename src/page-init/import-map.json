@@ -1,0 +1,8 @@
+{
+  "imports": {
+    "vue": "https://cdn.jsdelivr.net/npm/vue@3.5/dist/vue.esm-browser.prod.js",
+    "@graffiti-garden/api": "https://cdn.jsdelivr.net/npm/@graffiti-garden/api@1.2.0/dist/browser/index.js",
+    "@graffiti-garden/wrapper-synchronize": "https://cdn.jsdelivr.net/npm/@graffiti-garden/wrapper-synchronize@1.2.0/dist/browser/index.js",
+    "@graffiti-garden/wrapper-vue": "https://cdn.jsdelivr.net/npm/@graffiti-garden/wrapper-vue@1.2.1/dist/browser/plugin.mjs"
+  }
+}

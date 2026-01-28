@@ -3,19 +3,19 @@ import vue from "@vitejs/plugin-vue";
 import { resolve } from "node:path";
 import { build } from "esbuild";
 
-function serveClientJs(): Plugin {
-  const entry = resolve(__dirname, "src/rpc/client.ts");
+const initEntry = resolve(__dirname, "src/page-init/init.ts");
 
+function serveInitJs(): Plugin {
   return {
-    name: "serve-client-js",
-    apply: "serve", // dev only
+    name: "serve-init-js",
+    apply: "serve",
     configureServer(server) {
-      server.middlewares.use("/client.js", async (_req, res, next) => {
+      server.middlewares.use("/init.js", async (_req, res, next) => {
         try {
           const result = await build({
-            entryPoints: [entry],
+            entryPoints: [initEntry],
             bundle: true,
-            format: "esm",
+            format: "iife",
             write: false,
             sourcemap: "inline",
             platform: "browser",
@@ -31,19 +31,24 @@ function serveClientJs(): Plugin {
     },
   };
 }
+function buildInitJs(): Plugin {
+  return {
+    name: "build-init-js",
+    apply: "build",
+    async writeBundle() {
+      await build({
+        entryPoints: [initEntry],
+        bundle: true,
+        format: "iife",
+        outfile: resolve(__dirname, "dist/init.js"),
+        platform: "browser",
+        sourcemap: false,
+        minify: true,
+      });
+    },
+  };
+}
 
 export default defineConfig({
-  plugins: [vue(), serveClientJs()],
-  build: {
-    rollupOptions: {
-      input: {
-        main: resolve(__dirname, "index.html"),
-        client: resolve(__dirname, "src/rpc/client.ts"),
-      },
-      output: {
-        entryFileNames: (chunk) =>
-          chunk.name === "client" ? "client.js" : "assets/[name]-[hash].js",
-      },
-    },
-  },
+  plugins: [vue(), serveInitJs(), buildInitJs()],
 });

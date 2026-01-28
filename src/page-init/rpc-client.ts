@@ -50,7 +50,8 @@ const simpleMethods = [
   "handleToActor",
 ] as const;
 
-export class GraffitiSocialWiki {
+// @ts-ignore
+export class GraffitiSocialWiki implements Graffiti {
   readonly sessionEvents = new EventTarget();
 
   // Plumbing to route object stream results
@@ -68,14 +69,10 @@ export class GraffitiSocialWiki {
       throw new Error("Unable to talk to social wiki");
     }
 
-    // Only send messages to the origin hosting the script
-    const allowedSrc = import.meta.url;
-    const allowedOrigin = new URL(allowedSrc).origin;
-
     // Establish a connection to the serving window
     const messenger = new WindowMessenger({
       remoteWindow,
-      allowedOrigins: [allowedOrigin],
+      allowedOrigins: ["*"],
     });
     const this_ = this;
     const connection = connect<Methods>({
@@ -171,11 +168,3 @@ export class GraffitiSocialWiki {
     })();
   };
 }
-
-declare global {
-  interface Window {
-    graffiti: typeof GraffitiSocialWiki;
-  }
-}
-
-window.graffiti = GraffitiSocialWiki;

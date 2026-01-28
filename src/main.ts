@@ -3,7 +3,7 @@ import VueClickAway from "vue3-click-away";
 import { createRouter, createWebHistory, RouterView } from "vue-router";
 import "./style.css";
 import { GraffitiPlugin } from "@graffiti-garden/wrapper-vue";
-import { graffiti } from "./rpc/server";
+import { graffiti } from "./page-init/rpc-server";
 
 const router = createRouter({
   history: createWebHistory(),
