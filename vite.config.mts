@@ -22,6 +22,7 @@ function serveClientJs(): Plugin {
           });
 
           res.setHeader("Content-Type", "application/javascript");
+          res.setHeader("Access-Control-Allow-Origin", "*");
           res.end(result.outputFiles[0].text);
         } catch (e) {
           next(e as any);

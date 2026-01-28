@@ -11,6 +11,7 @@
             title="SocialWiki Page"
             loading="lazy"
             frameborder="0"
+            sandbox="allow-scripts allow-forms allow-modals allow-pointer-lock"
         ></iframe>
     </div>
 </template>

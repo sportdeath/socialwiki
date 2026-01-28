@@ -5,8 +5,14 @@ import {
 } from "@graffiti-garden/api";
 import { CallOptions, connect, WindowMessenger } from "penpal";
 
+const remoteWindow = window.top;
+if (!remoteWindow) {
+  throw new Error("Unable to talk to social wiki");
+}
+
 const messenger = new WindowMessenger({
-  remoteWindow: window.parent,
+  remoteWindow,
+  allowedOrigins: ["http://localhost:5173", "https://social.wiki"],
 });
 
 type DiscoverResult = Awaited<ReturnType<GraffitiObjectStream<{}>["next"]>>;

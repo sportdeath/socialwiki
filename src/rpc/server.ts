@@ -46,6 +46,7 @@ export async function serveGraffiti(iframe: HTMLIFrameElement) {
 
   const messenger = new WindowMessenger({
     remoteWindow: iframe.contentWindow,
+    allowedOrigins: ["*"],
   });
 
   const simpleMethods = [
