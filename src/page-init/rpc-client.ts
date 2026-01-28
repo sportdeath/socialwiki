@@ -50,8 +50,7 @@ const simpleMethods = [
   "handleToActor",
 ] as const;
 
-// @ts-ignore
-export class GraffitiSocialWiki implements Graffiti {
+export class GraffitiRpcClient {
   readonly sessionEvents = new EventTarget();
 
   // Plumbing to route object stream results

@@ -33,6 +33,9 @@
                 <nav>
                     <ul>
                         <li>
+                            <button @click="download()">Download</button>
+                        </li>
+                        <li>
                             <button
                                 :class="{ selected: showDiff }"
                                 @click="showDiff = !showDiff"
@@ -221,6 +224,18 @@ let draftHtml =
 const editorHtml = ref(draftHtml);
 const previewHtml = ref(draftHtml);
 const diffHtml = ref(draftHtml);
+
+function download() {
+    const blob = new Blob([editorHtml.value], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${encodeURIComponent(channel.value)}.html`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
 
 // --- Editor Settings ------------------------------------
 const showSettings = ref(false);
