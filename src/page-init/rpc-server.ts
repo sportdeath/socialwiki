@@ -39,13 +39,10 @@ async function stream(
   }
 }
 
-export async function serveGraffiti(iframe: HTMLIFrameElement) {
-  if (!iframe.contentWindow) {
-    throw new Error("iframe.contentWindow is not available");
-  }
-
+const served = new Map<Window, () => void>();
+async function serveGraffiti(window: Window) {
   const messenger = new WindowMessenger({
-    remoteWindow: iframe.contentWindow,
+    remoteWindow: window,
     allowedOrigins: ["*"],
   });
 
@@ -131,10 +128,23 @@ export async function serveGraffiti(iframe: HTMLIFrameElement) {
     graffiti.sessionEvents.addEventListener(type, forward);
   }
 
-  return () => {
+  const destroy = () => {
     for (const type of sessionEventTypes) {
       graffiti.sessionEvents.removeEventListener(type, forward);
     }
     connection.destroy();
   };
+  served.set(window, destroy);
 }
+
+window.addEventListener("message", (event) => {
+  if (!event.source) return;
+  const window = event.source as Window;
+  const message = event.data;
+  if (message === "graffiti-init") {
+    serveGraffiti(window);
+  } else if (message === "graffiti-destroy") {
+    const existing = served.get(window);
+    existing?.();
+  }
+});

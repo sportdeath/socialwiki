@@ -18,7 +18,6 @@
 
 <script setup lang="ts">
 import { onBeforeUnmount, ref, useTemplateRef, watch } from "vue";
-import { serveGraffiti } from "../page-init/rpc-server";
 
 defineProps<{
     html: string | null | undefined;
@@ -31,17 +30,6 @@ function refresh() {
 
 defineExpose({
     refresh,
-});
-
-let destroy: () => void = () => {};
-const iframe = useTemplateRef("iframe");
-watch(iframe, async (newIframe) => {
-    destroy();
-    if (!newIframe) return;
-    destroy = await serveGraffiti(newIframe);
-});
-onBeforeUnmount(() => {
-    destroy();
 });
 </script>
 

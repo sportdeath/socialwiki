@@ -8,7 +8,14 @@ declare global {
 }
 
 if (window.top !== window) {
-  // If an iframe, inject the import map
+  // If an iframe, ask the "server" for a connection
+  window.top?.postMessage("graffiti-init", "*");
+  // Destroy that connection on close
+  addEventListener("beforeunload", () => {
+    window.top?.postMessage("graffiti-destroy", "*");
+  });
+
+  // Inject the import map
   const importScript = document.createElement("script");
   importScript.type = "importmap";
   importScript.textContent = JSON.stringify(importMap);
@@ -21,11 +28,24 @@ if (window.top !== window) {
   // and spin up the RPC "server".
   // This allows SocialWiki pages to work as standalone files.
   const currentScriptSrc = (document.currentScript as HTMLScriptElement).src;
-  window.addEventListener("DOMContentLoaded", () => {
+  window.addEventListener("DOMContentLoaded", async () => {
     // Serialize the entire document
     const html = document.documentElement.outerHTML;
 
-    // Create iframe
+    // Clear the current document
+    document.documentElement.innerHTML = "";
+
+    // Wait for the "server" to initialize
+    await new Promise<void>((resolve, reject) => {
+      const script = document.createElement("script");
+      const origin = new URL(currentScriptSrc).origin;
+      script.src = `${origin}/init-server.js`;
+      script.onload = () => resolve();
+      script.onerror = (e) => reject(e);
+      document.head.append(script);
+    });
+
+    // Put the document in an iframe "client"
     const iframe = document.createElement("iframe");
     iframe.style.position = "fixed";
     iframe.style.top = "0";
@@ -34,18 +54,11 @@ if (window.top !== window) {
     iframe.style.height = "100dvh";
     iframe.style.border = "none";
     iframe.srcdoc = html;
-
-    // Clear the current document
-    document.documentElement.innerHTML = "";
+    iframe.sandbox =
+      "allow-scripts allow-forms allow-modals allow-pointer-lock";
 
     // Insert iframe
     document.body.appendChild(iframe);
-
-    // Add the init server script
-    const script = document.createElement("script");
-    const origin = new URL(currentScriptSrc).origin;
-    script.src = `${origin}/init-server.js`;
-    document.head.append(script);
 
     // Other defaults
     const metaCharset = document.createElement("meta");

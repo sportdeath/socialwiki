@@ -1,6 +1,1 @@
-import { serveGraffiti } from "./rpc-server";
-
-const iframe = document.querySelector("iframe");
-if (iframe) {
-  serveGraffiti(iframe);
-}
+import * as _ from "./rpc-server";
