@@ -381,7 +381,14 @@ async function publish(session: GraffitiSession) {
         return;
     }
     const publishedHtml = editorHtml.value;
-    await createPageVersion(channel.value, publishedHtml, [], summary, session);
+    await createPageVersion(
+        graffiti,
+        channel.value,
+        publishedHtml,
+        [],
+        summary,
+        session,
+    );
 
     draftHtml = publishedHtml;
     router.push({ name: "view" });

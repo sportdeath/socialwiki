@@ -34,7 +34,13 @@
                             "
                         >
                             <button
-                                @click="deletePageVersion(version, session)"
+                                @click="
+                                    deletePageVersion(
+                                        graffiti,
+                                        version,
+                                        session,
+                                    )
+                                "
                             >
                                 Delete
                             </button>
@@ -82,6 +88,7 @@ async function restorePageVersion(
     });
     const html = await media.data.text();
     selectedPageVersion.value = await createPageVersion(
+        graffiti,
         version.value.object,
         html,
         props.pageVersions.map((v) => v.url),

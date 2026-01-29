@@ -41,7 +41,7 @@ export function serveGraffiti(): Graffiti {
   }
 
   const served = new Map<Window, () => void>();
-  async function serveGraffiti(window: Window) {
+  async function serveGraffitiToWindow(window: Window) {
     const messenger = new WindowMessenger({
       remoteWindow: window,
       allowedOrigins: ["*"],
@@ -143,7 +143,7 @@ export function serveGraffiti(): Graffiti {
     const window = event.source as Window;
     const message = event.data;
     if (message === "graffiti-init") {
-      serveGraffiti(window);
+      serveGraffitiToWindow(window);
     } else if (message === "graffiti-destroy") {
       const existing = served.get(window);
       existing?.();

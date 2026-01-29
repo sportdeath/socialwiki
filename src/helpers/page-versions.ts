@@ -4,11 +4,6 @@ import type {
   GraffitiSession,
   JSONSchema,
 } from "@graffiti-garden/api";
-import { useGraffiti, useGraffitiDiscover } from "@graffiti-garden/wrapper-vue";
-import type { MaybeRefOrGetter } from "vue";
-import { computed, toValue } from "vue";
-
-const graffiti = useGraffiti();
 
 export function pageVersionSchema(pageChannel: string) {
   return {
@@ -56,7 +51,8 @@ export type PageVersionSchema = ReturnType<typeof pageVersionSchema>;
 export type PageVersionObject = GraffitiObject<PageVersionSchema>;
 
 export async function createPageVersion(
-  pageChannel: string,
+  graffiti: Graffiti,
+  pageName: string,
   content: string,
   precededBy: string[],
   summary: string,
@@ -69,10 +65,10 @@ export async function createPageVersion(
   // Now store the version metadata
   return await graffiti.post<PageVersionSchema>(
     {
-      channels: [pageChannel],
+      channels: [pageName],
       value: {
         activity: "Update",
-        object: pageChannel,
+        object: pageName,
         published: Date.now(),
         summary,
         result: { media },
@@ -84,6 +80,7 @@ export async function createPageVersion(
 }
 
 export async function deletePageVersion(
+  graffiti: Graffiti,
   object: PageVersionObject,
   session: GraffitiSession,
 ) {
@@ -91,27 +88,27 @@ export async function deletePageVersion(
   await graffiti.delete(object, session);
 }
 
-export function getPageVersionsRef(
-  pageChannel: MaybeRefOrGetter<string>,
-  session?: GraffitiSession | null,
-) {
-  const results = useGraffitiDiscover(
-    () => [toValue(pageChannel)],
-    () => pageVersionSchema(toValue(pageChannel)),
+export async function getPageVersions(graffiti: Graffiti, pageName: string) {
+  const versions = new Map<string, PageVersionObject>();
+  for await (const result of graffiti.discover(
+    [pageName],
+    pageVersionSchema(pageName),
+  )) {
+    if (result.error) {
+      console.log(result.error);
+      continue;
+    }
+    if (result.tombstone) {
+      versions.delete(result.object.url);
+    } else {
+      versions.set(result.object.url, result.object);
+    }
+  }
+
+  // TODO: properly topological sort using published
+  // only to interleave disconnected components or to
+  // find the "beginning" of cycles.
+  return [...versions.values()].sort(
+    (a, b) => b.value.published - a.value.published,
   );
-
-  const pageVersions = computed(() => {
-    // TODO: properly topological sort using published
-    // only to interleave disconnected components or to
-    // find the "beginning" of cycles.
-    return results.objects.value.toSorted(
-      (a, b) => b.value.published - a.value.published,
-    );
-  });
-
-  return {
-    pageVersions,
-    pollPageVersions: results.poll,
-    isFirstPageVersionPoll: results.isFirstPoll,
-  };
 }

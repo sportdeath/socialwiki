@@ -141,10 +141,11 @@ import {
 } from "@graffiti-garden/wrapper-vue";
 import type { GraffitiSession } from "@graffiti-garden/api";
 import {
-    getPageVersionsRef,
+    getPageVersions,
     type PageVersionObject,
 } from "../helpers/page-versions";
 import { useRouter } from "vue-router";
+const graffiti = useGraffiti();
 
 const props = defineProps<{
     channel: string;
@@ -152,29 +153,31 @@ const props = defineProps<{
 const channel = toRef(props, "channel");
 const channelInput = ref(channel.value);
 
-const { pageVersions, isFirstPageVersionPoll } = getPageVersionsRef(channel);
+const pageVersions = ref<PageVersionObject[]>([]);
 
 const selectedPageVersion = ref<PageVersionObject | null | undefined>(
     undefined,
 );
 const selectedPageHtml = ref<string | null | undefined>(undefined);
-watch(channel, () => {
-    selectedPageVersion.value = undefined;
-    selectedPageHtml.value = undefined;
-});
-// If we do not have a page version, use the latest one
-watch(isFirstPageVersionPoll, async (isPolling) => {
-    if (isPolling) return;
+watch(
+    channel,
+    async (pageName) => {
+        // Clear versions
+        pageVersions.value = [];
+        selectedPageVersion.value = undefined;
+        selectedPageHtml.value = undefined;
 
-    // Whenever we are done polling
-    const selected = pageVersions.value.at(0) || null;
-    selectedPageVersion.value = selected;
-});
+        // Compute new page versions
+        pageVersions.value = await getPageVersions(graffiti, pageName);
+        selectedPageVersion.value = pageVersions.value.at(0) || null;
+    },
+    { immediate: true },
+);
 
 watch(selectedPageVersion, async (selected) => {
     selectedPageHtml.value = undefined;
     if (!selected) {
-        selectedPageHtml.value = null;
+        selectedPageHtml.value = selected;
         return;
     }
 
@@ -206,7 +209,6 @@ const historyOpen = ref(false);
 const loggingIn = ref(false);
 const loggingOut = ref(false);
 
-const graffiti = useGraffiti();
 function login() {
     loggingIn.value = true;
     graffiti.login().finally(() => {
