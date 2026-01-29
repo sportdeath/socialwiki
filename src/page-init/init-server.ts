@@ -1,1 +1,2 @@
-import * as _ from "./rpc-server";
+import { serveGraffiti } from "./rpc-server";
+serveGraffiti();

@@ -3,7 +3,7 @@ import VueClickAway from "vue3-click-away";
 import { createRouter, createWebHistory, RouterView } from "vue-router";
 import "./style.css";
 import { GraffitiPlugin } from "@graffiti-garden/wrapper-vue";
-import { graffiti } from "./page-init/rpc-server";
+import { serveGraffiti } from "./page-init/rpc-server";
 
 const router = createRouter({
   history: createWebHistory(),
@@ -30,6 +30,10 @@ const router = createRouter({
     },
   ],
 });
+
+// Set up a graffiti "server" that is served
+// to all the "client" pages
+const graffiti = serveGraffiti();
 
 createApp(RouterView)
   .use(VueClickAway)
