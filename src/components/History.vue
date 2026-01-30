@@ -55,6 +55,19 @@
         <li>Filter by authorship (makes it "look" owned)</li>
         <li>Filters (by author or previous) go into the URL so they can be shared</li>
     </ul> -->
+
+    <TwoPaneLayout rightTitle="Preview" leftTitle="History" v-else>
+        <template #left-pane>
+            <!-- <History
+                :pageVersions="pageVersions"
+                v-model:selectedPageVersion="selectedPageVersion"
+                :session="$graffitiSession.value"
+            /> -->
+        </template>
+        <template #right-pane>
+            <!-- <social-wiki-transclude :src="channel" ref="history></social-wiki-transclude> -->
+        </template>
+    </TwoPaneLayout>
 </template>
 
 <script lang="ts" setup>
@@ -96,4 +109,44 @@ async function restorePageVersion(
         session,
     );
 }
+
+const pageVersions = ref<PageVersionObject[]>([]);
+
+const selectedPageVersion = ref<PageVersionObject | null | undefined>(
+    undefined,
+);
+const selectedPageHtml = ref<string | null | undefined>(undefined);
+watch(
+    channel,
+    async (pageName) => {
+        // Clear versions
+        pageVersions.value = [];
+        selectedPageVersion.value = undefined;
+        selectedPageHtml.value = undefined;
+
+        // Compute new page versions
+        pageVersions.value = await getPageVersions(graffiti, pageName);
+        selectedPageVersion.value = pageVersions.value.at(0) || null;
+    },
+    { immediate: true },
+);
+
+watch(selectedPageVersion, async (selected) => {
+    selectedPageHtml.value = undefined;
+    if (!selected) {
+        selectedPageHtml.value = selected;
+        return;
+    }
+
+    // Fetch the HTML content of the selected page version
+    const media = await graffiti.getMedia(selected.value.result.media, {
+        types: ["text/html"],
+    });
+    const html = await media.data.text();
+
+    // Double check that the selected page version is still the same
+    if (selected.url !== selectedPageVersion.value?.url) return;
+    // If so, assign the html
+    selectedPageHtml.value = html;
+});
 </script>

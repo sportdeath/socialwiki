@@ -1,8 +1,7 @@
 <template>
     <Header
         :channel="channel"
-        @update:channel="($event) => (channelInput = $event)"
-        @update:submit-channel="
+        @update:channel="
             ($event) =>
                 $router.push({ name: 'view', params: { channel: $event } })
         "
@@ -60,9 +59,6 @@
                     History
                 </button>
             </li>
-            <li>
-                <button title="Add this page to your watchlist">⭐</button>
-            </li>
             <li class="personal-menu">
                 <button
                     :class="{ selected: personalMenuOpen }"
@@ -93,13 +89,10 @@
                             My page
                         </RouterLink>
                     </li>
-                    <!-- Watchlist and contributions are uneditable pages -->
-                    <li>
+                    <!-- TODO: add contributions -->
+                    <!-- <li>
                         <a>Contributions</a>
-                    </li>
-                    <li>
-                        <a>Watchlist</a>
-                    </li>
+                    </li> -->
                     <li>
                         <button
                             :class="{ selected: loggingOut }"
@@ -112,7 +105,7 @@
             </li>
         </ul>
     </Header>
-    <main :class="{ stale: channelInput !== channel }">
+    <main>
         <social-wiki-transclude
             :src="channel"
             ref="transclude"
@@ -137,7 +130,6 @@ const props = defineProps<{
     channel: string;
 }>();
 const channel = toRef(props, "channel");
-const channelInput = ref(channel.value);
 
 const router = useRouter();
 const transclude = useTemplateRef<HTMLElement>("transclude");
@@ -199,19 +191,5 @@ function logout(session: GraffitiSession) {
 }
 .selected:hover {
     color: var(--text-color);
-}
-
-/* put a grey overlay over all the content */
-.stale {
-    position: relative;
-    overflow: hidden;
-}
-
-.stale::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: rgba(0, 0, 0, 0.5);
-    pointer-events: none;
 }
 </style>

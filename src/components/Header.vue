@@ -1,5 +1,5 @@
 <template>
-    <header>
+    <header @focusout="onHeaderFocusOut">
         <RouterLink :to="{ name: 'home' }">
             <h1>
                 <span class="brand-full">Social.Wiki</span>
@@ -66,7 +66,7 @@ const disabled = toRef(props, "disabled");
 const emit = defineEmits(["update:channel", "update:submit-channel"]);
 
 function submitForm() {
-    emit("update:submit-channel", channelInput.value);
+    emit("update:channel", channelInput.value);
     (document.activeElement as HTMLElement | null)?.blur();
 }
 
@@ -74,7 +74,6 @@ function submitForm() {
 // When external changes, internal changes. When internal changes, alert external
 const channelInput = ref(channel.value);
 watch(channel, (newVal) => (channelInput.value = newVal), { immediate: true });
-watch(channelInput, (newVal) => emit("update:channel", newVal));
 
 const isDropdownOpen = ref(false);
 
@@ -83,7 +82,6 @@ const navOpen = ref(true);
 const mq = window.matchMedia("(min-width: 600px)");
 const syncNav = () => {
     navOpen.value = mq.matches;
-    console.log(navOpen.value);
 };
 // mount, or route change sync the nav state
 onMounted(() => {
@@ -95,6 +93,13 @@ onUnmounted(() => {
 });
 const router = useRouter();
 router.afterEach(syncNav);
+// Close menu when leaving the header too
+function onHeaderFocusOut(event: FocusEvent) {
+    const header = event.currentTarget as HTMLElement | null;
+    const next = event.relatedTarget as Node | null;
+    if (header && next && header.contains(next)) return;
+    syncNav();
+}
 
 let pageNameFocused = false;
 function selectPageName(event: MouseEvent) {
