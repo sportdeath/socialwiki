@@ -34,10 +34,10 @@ type Methods = MethodsOf<Graffiti> & {
     id: string,
     ...args: Parameters<Graffiti["continueDiscover"]>
   ) => void;
+  streamNext: (id: string) => ReturnType<GraffitiObjectStream<{}>["next"]>;
+  streamReturn: (id: string) => void;
   initialize: () => void;
 };
-
-type DiscoverResult = Awaited<ReturnType<GraffitiObjectStream<{}>["next"]>>;
 
 const simpleMethods = [
   "post",
@@ -55,10 +55,6 @@ export class GraffitiRpcClient {
 
   // Plumbing to route object stream results
   // to the appropriate async generator
-  protected readonly streams = new Map<
-    string,
-    (result: DiscoverResult) => void
-  >();
   protected readonly remote: Promise<RemoteProxy<Methods>>;
 
   constructor() {
@@ -76,16 +72,10 @@ export class GraffitiRpcClient {
     const this_ = this;
     const connection = connect<Methods>({
       messenger,
-      // Establish callbacks for events and asynchronous yields
+      // Establish callbacks for events
       methods: {
         sessionEvent(type: string, detail: any) {
           this_.sessionEvents.dispatchEvent(new CustomEvent(type, { detail }));
-        },
-        async streamReturn(id: string, value: DiscoverResult) {
-          const stream = this_.streams.get(id);
-          if (!stream) return;
-          stream(value);
-          await new Promise((resolve) => setTimeout(resolve, 0));
         },
       },
     });
@@ -139,13 +129,15 @@ export class GraffitiRpcClient {
     const this_ = this;
     return (async function* () {
       const r = await this_.remote;
-      r.discover(id, ...args);
-      while (true) {
-        const result = await new Promise<DiscoverResult>((resolve) => {
-          this_.streams.set(id, resolve);
-        });
-        if (result.done) return result.value;
-        yield result.value;
+      await r.discover(id, ...args);
+      try {
+        while (true) {
+          const result = await r.streamNext(id);
+          if (result.done) return result.value;
+          yield result.value;
+        }
+      } finally {
+        r.streamReturn(id);
       }
     })();
   };
@@ -156,13 +148,15 @@ export class GraffitiRpcClient {
     const this_ = this;
     return (async function* () {
       const r = await this_.remote;
-      r.continueDiscover(id, ...args);
-      while (true) {
-        const result = await new Promise<DiscoverResult>((resolve) => {
-          this_.streams.set(id, resolve);
-        });
-        if (result.done) return result.value;
-        yield result.value;
+      await r.continueDiscover(id, ...args);
+      try {
+        while (true) {
+          const result = await r.streamNext(id);
+          if (result.done) return result.value;
+          yield result.value;
+        }
+      } finally {
+        r.streamReturn(id);
       }
     })();
   };

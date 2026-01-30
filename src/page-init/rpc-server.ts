@@ -4,6 +4,7 @@ import type {
   GraffitiLoginEvent,
   GraffitiLogoutEvent,
   GraffitiObjectStream,
+  GraffitiObjectStreamReturn,
   GraffitiSession,
   GraffitiSessionInitializedEvent,
 } from "@graffiti-garden/api";
@@ -25,21 +26,6 @@ export function serveGraffiti(): Graffiti {
     loggedInActors.delete(detail.actor);
   });
 
-  async function stream(
-    connection: Connection<{
-      streamReturn: (id: string, value: any) => Promise<void>;
-    }>,
-    id: string,
-    iterator: GraffitiObjectStream<{}>,
-  ) {
-    const remote = await connection.promise;
-    while (true) {
-      const result = await iterator.next();
-      await remote.streamReturn(id, result);
-      if (result.done) break;
-    }
-  }
-
   const served = new Map<Window, () => void>();
   async function serveGraffitiToWindow(window: Window) {
     const messenger = new WindowMessenger({
@@ -57,6 +43,8 @@ export function serveGraffiti(): Graffiti {
       "actorToHandle",
       "handleToActor",
     ] as const;
+
+    const iterators = new Map<string, GraffitiObjectStream<{}>>();
 
     const connection = connect<{
       streamReturn: (id: string, value: any) => Promise<void>;
@@ -95,14 +83,25 @@ export function serveGraffiti(): Graffiti {
         },
         async discover(id: string, ...args: Parameters<Graffiti["discover"]>) {
           const iterator = graffiti.discover<{}>(...args);
-          await stream(connection, id, iterator);
+          iterators.set(id, iterator);
         },
         async continueDiscover(
           id: string,
           ...args: Parameters<Graffiti["continueDiscover"]>
         ) {
           const iterator = graffiti.continueDiscover<{}>(...args);
-          await stream(connection, id, iterator);
+          iterators.set(id, iterator);
+        },
+        async streamNext(id: string) {
+          const iterator = iterators.get(id);
+          if (!iterator) return;
+          return await iterator.next();
+        },
+        async streamReturn(id: string) {
+          const iterator = iterators.get(id);
+          if (!iterator) return;
+          iterator.return({ cursor: "" });
+          iterators.delete(id);
         },
         initialize() {
           for (const actor of loggedInActors) {
