@@ -40,7 +40,7 @@
         <details :open="navOpen">
             <summary @click.prevent="navOpen = !navOpen">Menu</summary>
 
-            <nav :class="{ open: navOpen }">
+            <nav>
                 <slot></slot>
             </nav>
         </details>
@@ -262,44 +262,51 @@ header {
             cursor: pointer;
         }
 
-        details > summary::marker {
-            content: "";
-        }
-
         details summary:hover {
             text-decoration: underline;
             color: var(--link-hover-color);
         }
 
-        nav {
+        details nav {
             font-size: inherit;
-            transition:
-                opacity 0.3s ease,
-                transform 0.3s ease,
-                filter 0.2s ease;
-            opacity: 0;
-            transform: translateY(-0.5rem) scaleY(0.95);
-            filter: blur(2px);
             grid-area: nav;
-            justify-content: flex-end;
-            margin-bottom: 1rem;
 
             ul {
+                margin-top: 0.5rem;
                 flex-direction: column;
-                align-items: flex-end;
-                gap: 0.5rem;
+                gap: 0rem;
+
+                li:first-child {
+                    border-top-left-radius: 0.5rem;
+                    border-top-right-radius: 0.5rem;
+                }
 
                 li {
-                    padding-top: 0;
-                    padding-bottom: 0;
+                    width: 100%;
+                    border: 1px solid var(--border-color);
+
+                    a,
+                    button {
+                        padding: 0.5rem;
+                        width: 100%;
+                        text-align: center;
+                        display: block;
+                    }
+
+                    :is(a, button):hover {
+                        background: var(--background-color-interactive);
+                    }
+                }
+
+                li + li {
+                    border-top: none;
+                }
+
+                li:last-child {
+                    border-bottom-left-radius: 0.5rem;
+                    border-bottom-right-radius: 0.5rem;
                 }
             }
-        }
-
-        nav.open {
-            opacity: 1;
-            transform: translateY(0) scaleY(1);
-            filter: blur(0);
         }
     }
 }
