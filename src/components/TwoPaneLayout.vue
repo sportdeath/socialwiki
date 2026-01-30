@@ -132,17 +132,17 @@ onBeforeUnmount(() => {
     justify-content: space-between;
     gap: 0.35rem;
     padding: 0.35rem 0.6rem;
-    border-bottom: 1px solid var(--pane-border-color, #c8ccd1);
+    border-bottom: 1px solid var(--border-color);
     font-size: 0.8rem;
     text-transform: uppercase;
     letter-spacing: 0.06em;
     cursor: pointer;
     overflow: hidden;
-    background: var(--pane-header-color, #eaecf0);
+    background: var(--background-color-interactive);
 }
 
 .pane > header:hover {
-    background: var(--pane-header-hover-color, #dadde3);
+    background: var(--background-color-interactive-hover);
 }
 
 .pane > header h2 {
@@ -167,12 +167,12 @@ onBeforeUnmount(() => {
 .divider {
     width: 4px;
     cursor: col-resize;
-    background: var(--pane-divider-color, #72777d);
+    background: var(--border-color);
 }
 
 .divider:hover,
 .resizing .divider {
-    background: var(--pane-divider-hover-color, #27292d);
+    background: var(--border-color-hover);
 }
 
 /* Responsive / mobile */
@@ -196,7 +196,7 @@ onBeforeUnmount(() => {
     }
 
     .pane:last-of-type:not(.active) {
-        border-top: 1px solid var(--pane-border-color, #c8ccd1);
+        border-top: 1px solid var(--border-color);
     }
 
     /** Inactive collapses to its header bar */

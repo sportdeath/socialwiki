@@ -122,14 +122,14 @@ header {
     }
 
     form:not(:has(input[type="text"]:disabled)):not(:has(.dropdown)):hover {
-        background: #dadde3;
+        background: var(--background-color-interactive-hover);
     }
 
     form {
         flex: 1;
         position: relative;
         border-radius: 0.5rem;
-        background: #eaecf0;
+        background: var(--background-color-interactive);
 
         input[type="text"] {
             background: transparent;
@@ -147,8 +147,7 @@ header {
             right: 0;
             margin: 0;
             list-style: none;
-            background: #eaecf0;
-            /*--background-color-interactive*/
+            background: var(--background-color-interactive);
             border-top: 1px solid var(--border-color);
             border-bottom-left-radius: 0.5rem;
             border-bottom-right-radius: 0.5rem;
@@ -167,7 +166,7 @@ header {
             }
 
             a:hover {
-                background: #dadde3;
+                background: var(--background-color-interactive-hover);
                 text-decoration: none;
             }
         }

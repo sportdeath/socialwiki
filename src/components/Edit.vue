@@ -451,7 +451,7 @@ function login() {
     input[type="number"],
     select {
         border-radius: 6px;
-        border: 1px solid #333;
+        border: 1px solid var(--border-color);
         padding: 0.2rem 0.4rem;
         color: inherit;
         font-size: inherit;
