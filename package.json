@@ -20,6 +20,7 @@
     "vue3-click-away": "^1.2.4"
   },
   "devDependencies": {
+    "@types/node": "^25.1.0",
     "@vitejs/plugin-vue": "^6.0.3",
     "@vue/typescript-plugin": "^3.2.4",
     "vite": "^7.3.1"

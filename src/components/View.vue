@@ -1,19 +1,21 @@
 <template>
     <Header
-        :channel="channel"
+        :channel="pageName"
         @update:channel="
             ($event) =>
-                $router.push({ name: 'view', params: { channel: $event } })
+                $router.push({ name: 'view', params: { pageName: $event } })
         "
     >
         <ul>
             <li>
-                <a
-                    @click="historyOpen = false"
-                    :class="{ selected: !historyOpen }"
+                <RouterLink
+                    :to="{
+                        name: 'view',
+                        params: { pageName },
+                    }"
                 >
                     View
-                </a>
+                </RouterLink>
             </li>
             <li v-if="$graffitiSession.value">
                 <button
@@ -24,13 +26,14 @@
                 </button>
             </li>
             <li>
-                <button
-                    @click="historyOpen = true"
-                    title="Past revisions of this page"
-                    :class="{ selected: historyOpen }"
+                <RouterLink
+                    :to="{
+                        name: 'history',
+                        params: { pageName },
+                    }"
                 >
                     History
-                </button>
+                </RouterLink>
             </li>
             <li v-if="$graffitiSession.value === undefined">Loading...</li>
             <li v-else-if="$graffitiSession.value === null">
@@ -86,17 +89,18 @@
     </Header>
     <main>
         <social-wiki-transclude
-            :src="channel"
+            v-if="!history"
+            :src="pageName"
             ref="transclude"
         ></social-wiki-transclude>
+        <History :pageName="pageName" ref="history" v-else></History>
     </main>
 </template>
 
 <script setup lang="ts">
-import { ref, toRef, useTemplateRef, watch } from "vue";
+import { computed, ref, useTemplateRef } from "vue";
 import Header from "./Header.vue";
-// import TwoPaneLayout from "./TwoPaneLayout.vue";
-// import History from "./History.vue";
+import History from "./History.vue";
 import {
     useGraffiti,
     GraffitiActorToHandle,
@@ -105,26 +109,37 @@ import type { GraffitiSession } from "@graffiti-garden/api";
 import { useRouter } from "vue-router";
 const graffiti = useGraffiti();
 
-const props = defineProps<{
-    channel: string;
-}>();
-const channel = toRef(props, "channel");
+const props = withDefaults(
+    defineProps<{
+        pageName: string;
+        history: boolean;
+    }>(),
+    {
+        history: false,
+    },
+);
 
 const router = useRouter();
-const transclude = useTemplateRef<HTMLElement>("transclude");
+const viewTransclude = useTemplateRef<HTMLElement>("transclude");
+const historyComponent =
+    useTemplateRef<InstanceType<typeof History>>("history");
+const transclude = computed<HTMLElement | null | undefined>(() => {
+    return props.history
+        ? historyComponent.value?.transclude
+        : viewTransclude.value;
+});
 function editPage() {
     const html = transclude.value?.getAttribute("srcdoc");
     if (html) {
         window.localStorage.setItem(
-            `draft:${encodeURIComponent(channel.value)}`,
+            `draft:${encodeURIComponent(props.pageName)}`,
             html,
         );
     }
-    router.push({ name: "edit" });
+    router.push({ name: "edit", params: { channel: props.pageName } });
 }
 
 const personalMenuOpen = ref(false);
-const historyOpen = ref(false);
 const loggingIn = ref(false);
 const loggingOut = ref(false);
 
@@ -164,11 +179,11 @@ function logout(session: GraffitiSession) {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
-.selected {
+.router-link-active {
     text-decoration: underline 2px;
     color: var(--text-color);
 }
-.selected:hover {
+.router-link-active:hover {
     color: var(--text-color);
 }
 </style>

@@ -1,93 +1,117 @@
 <template>
-    <ol>
-        <li v-for="(version, index) in pageVersions" :key="version.url">
-            <article :id="version.url">
-                <button
-                    :class="{
-                        selected: selectedPageVersion?.url === version.url,
-                    }"
-                    @click="selectedPageVersion = version"
-                >
-                    <h3>
-                        {{ version.value.summary }}
-                    </h3>
-                </button>
-
-                <p>
-                    <GraffitiActorToHandle :actor="version.actor" />
-                    edited on
-                    {{ new Date(version.value.published).toLocaleString() }}
-                </p>
-
-                <footer v-if="session">
-                    <ul v-if="selectedPageVersion?.url === version.url">
-                        <li v-if="$graffitiSession.value && index !== 0">
-                            <button
-                                @click="restorePageVersion(version, session)"
-                            >
-                                Restore
-                            </button>
-                        </li>
-                        <li
-                            v-if="
-                                $graffitiSession.value?.actor === version.actor
-                            "
+    <TwoPaneLayout leftTitle="History" rightTitle="Preview">
+        <template #left-pane>
+            <ol>
+                <li v-for="(version, index) in pageVersions" :key="version.url">
+                    <article :id="version.url">
+                        <button
+                            :class="{
+                                selected:
+                                    selectedPageVersion?.url === version.url,
+                            }"
+                            @click="selectedPageVersion = version"
                         >
-                            <button
-                                @click="
-                                    deletePageVersion(
-                                        graffiti,
-                                        version,
-                                        session,
-                                    )
-                                "
-                            >
-                                Delete
-                            </button>
-                        </li>
-                    </ul>
-                </footer>
-            </article>
-        </li>
-    </ol>
+                            <h3>
+                                {{ version.value.summary }}
+                            </h3>
+                        </button>
+
+                        <p>
+                            <GraffitiActorToHandle :actor="version.actor" />
+                            edited on
+                            {{
+                                new Date(
+                                    version.value.published,
+                                ).toLocaleString()
+                            }}
+                        </p>
+
+                        <footer v-if="$graffitiSession.value">
+                            <ul v-if="selectedPageVersion?.url === version.url">
+                                <li
+                                    v-if="$graffitiSession.value && index !== 0"
+                                >
+                                    <button
+                                        @click="
+                                            restorePageVersion(
+                                                version,
+                                                $graffitiSession.value,
+                                            )
+                                        "
+                                    >
+                                        Restore
+                                    </button>
+                                </li>
+                                <li
+                                    v-if="
+                                        $graffitiSession.value?.actor ===
+                                        version.actor
+                                    "
+                                >
+                                    <button
+                                        @click="
+                                            deletePageVersion(
+                                                graffiti,
+                                                version,
+                                                $graffitiSession.value,
+                                            )
+                                        "
+                                    >
+                                        Delete
+                                    </button>
+                                </li>
+                            </ul>
+                        </footer>
+                    </article>
+                </li>
+            </ol>
+        </template>
+        <template #right-pane>
+            <social-wiki-transclude
+                ref="transclude"
+                :srcdoc="selectedPageHtml"
+            ></social-wiki-transclude>
+        </template>
+    </TwoPaneLayout>
     <!-- <ul>
         <li>TODO!!</li>
         <li>Filter by authorship (makes it "look" owned)</li>
         <li>Filters (by author or previous) go into the URL so they can be shared</li>
     </ul> -->
-
-    <TwoPaneLayout rightTitle="Preview" leftTitle="History" v-else>
-        <template #left-pane>
-            <!-- <History
-                :pageVersions="pageVersions"
-                v-model:selectedPageVersion="selectedPageVersion"
-                :session="$graffitiSession.value"
-            /> -->
-        </template>
-        <template #right-pane>
-            <!-- <social-wiki-transclude :src="channel" ref="history></social-wiki-transclude> -->
-        </template>
-    </TwoPaneLayout>
 </template>
 
 <script lang="ts" setup>
+import TwoPaneLayout from "./TwoPaneLayout.vue";
 import type { GraffitiSession } from "@graffiti-garden/api";
 import {
     createPageVersion,
     deletePageVersion,
+    pageVersionSchema,
     type PageVersionObject,
 } from "../helpers/page-versions";
 import {
     useGraffiti,
     GraffitiActorToHandle,
+    useGraffitiDiscover,
 } from "@graffiti-garden/wrapper-vue";
+import { computed, ref, watch } from "vue";
+import { useTemplateRef } from "vue";
 
 const props = defineProps<{
-    pageVersions: PageVersionObject[];
-    session?: GraffitiSession | null;
+    pageName: string;
 }>();
-const selectedPageVersion = defineModel<PageVersionObject | null>(
-    "selectedPageVersion",
+
+const transclude = useTemplateRef<HTMLElement>("transclude");
+defineExpose({ transclude });
+
+const { objects: pageVersionsRaw } = useGraffitiDiscover(
+    () => [props.pageName],
+    () => pageVersionSchema(props.pageName),
+);
+const pageVersions = computed(() =>
+    pageVersionsRaw.value.toSorted(
+        (a, b) => b.value.published - a.value.published,
+    ),
 );
 
 const graffiti = useGraffiti();
@@ -104,33 +128,23 @@ async function restorePageVersion(
         graffiti,
         version.value.object,
         html,
-        props.pageVersions.map((v) => v.url),
+        pageVersions.value.map<string>((v) => v.url),
         `Restored from ${version.url}`,
         session,
     );
 }
-
-const pageVersions = ref<PageVersionObject[]>([]);
 
 const selectedPageVersion = ref<PageVersionObject | null | undefined>(
     undefined,
 );
 const selectedPageHtml = ref<string | null | undefined>(undefined);
 watch(
-    channel,
-    async (pageName) => {
-        // Clear versions
-        pageVersions.value = [];
-        selectedPageVersion.value = undefined;
-        selectedPageHtml.value = undefined;
-
-        // Compute new page versions
-        pageVersions.value = await getPageVersions(graffiti, pageName);
-        selectedPageVersion.value = pageVersions.value.at(0) || null;
+    pageVersions,
+    async (versions) => {
+        selectedPageVersion.value = versions.at(0) || null;
     },
     { immediate: true },
 );
-
 watch(selectedPageVersion, async (selected) => {
     selectedPageHtml.value = undefined;
     if (!selected) {

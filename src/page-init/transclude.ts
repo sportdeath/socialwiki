@@ -10,7 +10,7 @@ export function installTransclude(graffiti: Graffiti) {
       super();
 
       // Attach shadow DOM
-      const shadow = this.attachShadow({ mode: "open" });
+      const shadow = this.attachShadow({ mode: "closed" });
 
       // Create iframe
       this.iframe = document.createElement("iframe");

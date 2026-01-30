@@ -1,5 +1,5 @@
 <template>
-    <Header :channel="channel" :disabled="true">
+    <Header :channel="pageName" :disabled="true">
         <ul v-if="$graffitiSession.value === undefined">
             <li>Loading...</li>
         </ul>
@@ -214,12 +214,12 @@ watch(
 );
 
 const props = defineProps<{
-    channel: string;
+    pageName: string;
 }>();
-const channel = toRef(props, "channel");
+const pageName = toRef(props, "pageName");
 
 let draftHtml =
-    localStorage.getItem(`draft:${encodeURIComponent(channel.value)}`) ?? "";
+    localStorage.getItem(`draft:${encodeURIComponent(pageName.value)}`) ?? "";
 
 // Initialize the editor, diff and preview with the existing HTML
 const editorHtml = ref(draftHtml);
@@ -231,7 +231,7 @@ function download() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${encodeURIComponent(channel.value)}.html`;
+    a.download = `${encodeURIComponent(pageName.value)}.html`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -383,7 +383,7 @@ async function publish(session: GraffitiSession) {
     const publishedHtml = editorHtml.value;
     await createPageVersion(
         graffiti,
-        channel.value,
+        pageName.value,
         publishedHtml,
         [],
         summary,

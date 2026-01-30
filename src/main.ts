@@ -1,5 +1,4 @@
 import { createApp } from "vue";
-import VueClickAway from "vue3-click-away";
 import { createRouter, createWebHistory, RouterView } from "vue-router";
 import "./style.css";
 import { GraffitiPlugin } from "@graffiti-garden/wrapper-vue";
@@ -14,17 +13,23 @@ const router = createRouter({
       name: "home",
       redirect: {
         name: "view",
-        params: { channel: "Social.Wiki" },
+        params: { pageName: "Social.Wiki" },
       },
     },
     {
-      path: "/w/:channel",
+      path: "/w/:pageName",
       name: "view",
       component: () => import("./components/View.vue"),
       props: true,
     },
     {
-      path: "/e/:channel",
+      path: "/h/:pageName",
+      name: "history",
+      component: () => import("./components/View.vue"),
+      props: (route) => ({ history: true, pageName: route.params.pageName }),
+    },
+    {
+      path: "/e/:pageName",
       name: "edit",
       component: () => import("./components/Edit.vue"),
       props: true,
@@ -39,7 +44,6 @@ const graffiti = serveGraffiti();
 installTransclude(graffiti);
 
 createApp(RouterView)
-  .use(VueClickAway)
   .use(GraffitiPlugin, { graffiti })
   .use(router)
   .mount("#app");
