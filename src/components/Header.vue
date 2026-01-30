@@ -1,7 +1,10 @@
 <template>
     <header>
         <RouterLink :to="{ name: 'home' }">
-            <h1>Social.Wiki</h1>
+            <h1>
+                <span class="brand-full">Social.Wiki</span>
+                <span class="brand-short" aria-hidden="true">SW</span>
+            </h1>
         </RouterLink>
 
         <form
@@ -34,14 +37,20 @@
             </ul>
         </form>
 
-        <nav>
-            <slot></slot>
-        </nav>
+        <details :open="navOpen">
+            <summary @click.prevent="navOpen = !navOpen">Menu</summary>
+
+            <nav :class="{ open: navOpen }">
+                <slot></slot>
+            </nav>
+        </details>
     </header>
 </template>
 
 <script setup lang="ts">
+import { onMounted, onUnmounted } from "vue";
 import { ref, toRef, watch } from "vue";
+import { useRouter } from "vue-router";
 const props = withDefaults(
     defineProps<{
         channel: string;
@@ -68,6 +77,24 @@ watch(channel, (newVal) => (channelInput.value = newVal), { immediate: true });
 watch(channelInput, (newVal) => emit("update:channel", newVal));
 
 const isDropdownOpen = ref(false);
+
+// Logic for open and closing navigation
+const navOpen = ref(true);
+const mq = window.matchMedia("(min-width: 600px)");
+const syncNav = () => {
+    navOpen.value = mq.matches;
+    console.log(navOpen.value);
+};
+// mount, or route change sync the nav state
+onMounted(() => {
+    syncNav();
+    mq.addEventListener("change", syncNav);
+});
+onUnmounted(() => {
+    mq.removeEventListener("change", syncNav);
+});
+const router = useRouter();
+router.afterEach(syncNav);
 
 let pageNameFocused = false;
 function selectPageName(event: MouseEvent) {
@@ -109,7 +136,7 @@ header {
     align-items: center;
     padding: 0.5rem;
     border-bottom: 1px solid var(--border-color);
-    gap: 2rem;
+    gap: 1.5rem;
 
     h1 {
         font-size: 1.25rem;
@@ -181,6 +208,99 @@ header {
         align-items: center;
         gap: 0.7rem;
         list-style: none;
+    }
+
+    details {
+        display: contents;
+    }
+    details[open]::details-content {
+        display: contents;
+    }
+}
+
+.brand-short {
+    display: none;
+}
+
+@media (min-width: 600px) {
+    summary {
+        display: none;
+    }
+}
+
+@media (max-width: 599px) {
+    .brand-full {
+        display: none;
+    }
+
+    .brand-short {
+        display: inline;
+    }
+
+    header {
+        display: grid;
+        column-gap: 0.5rem;
+        row-gap: 0;
+        grid-template-columns: auto 1fr auto;
+        grid-template-areas:
+            "title address menu"
+            "nav nav nav";
+
+        h1 {
+            grid-area: title;
+        }
+
+        form {
+            grid-area: address;
+        }
+
+        details summary {
+            text-align: right;
+            user-select: none;
+            grid-area: menu;
+            color: var(--link-color);
+            cursor: pointer;
+        }
+
+        details > summary::marker {
+            content: "";
+        }
+
+        details summary:hover {
+            text-decoration: underline;
+            color: var(--link-hover-color);
+        }
+
+        nav {
+            font-size: inherit;
+            transition:
+                opacity 0.3s ease,
+                transform 0.3s ease,
+                filter 0.2s ease;
+            opacity: 0;
+            transform: translateY(-0.5rem) scaleY(0.95);
+            filter: blur(2px);
+            grid-area: nav;
+            justify-content: flex-end;
+            margin-bottom: 1rem;
+
+            ul {
+                flex-direction: column;
+                align-items: flex-end;
+                gap: 0.5rem;
+
+                li {
+                    padding-top: 0;
+                    padding-bottom: 0;
+                }
+            }
+        }
+
+        nav.open {
+            opacity: 1;
+            transform: translateY(0) scaleY(1);
+            filter: blur(0);
+        }
     }
 }
 </style>
