@@ -180,7 +180,9 @@
                             Auto-Refresh
                         </label>
                     </section>
-                    <DisplayPage :html="previewHtml" ref="previewRef" />
+                    <social-wiki-transclude
+                        :srcdoc="previewHtml"
+                    ></social-wiki-transclude>
                 </div>
             </template>
         </TwoPaneLayout>
@@ -193,7 +195,6 @@ import * as monaco from "monaco-editor";
 import { CodeEditor, DiffEditor } from "monaco-editor-vue3";
 import Header from "./Header.vue";
 import TwoPaneLayout from "./TwoPaneLayout.vue";
-import DisplayPage from "./DisplayPage.vue";
 import { useRouter, onBeforeRouteLeave } from "vue-router";
 import { useGraffiti, useGraffitiSession } from "@graffiti-garden/wrapper-vue";
 import { createPageVersion } from "../helpers/page-versions";
@@ -314,10 +315,9 @@ watch(
 // --- Preview updates -----------------------------
 
 // Manually refresh the preview
-const previewRef = ref<InstanceType<typeof DisplayPage> | null>(null);
 function refreshPreview() {
     previewHtml.value = editorHtml.value;
-    previewRef.value?.refresh();
+    // TODO: implement refresh
 }
 
 // Preview menu state and option

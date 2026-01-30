@@ -4,6 +4,7 @@ import { createRouter, createWebHistory, RouterView } from "vue-router";
 import "./style.css";
 import { GraffitiPlugin } from "@graffiti-garden/wrapper-vue";
 import { serveGraffiti } from "./page-init/rpc-server";
+import { installTransclude } from "./page-init/transclude";
 
 const router = createRouter({
   history: createWebHistory(),
@@ -34,6 +35,8 @@ const router = createRouter({
 // Set up a graffiti "server" that is served
 // to all the "client" pages
 const graffiti = serveGraffiti();
+// Add the web components
+installTransclude(graffiti);
 
 createApp(RouterView)
   .use(VueClickAway)

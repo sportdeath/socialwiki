@@ -63,5 +63,15 @@ function buildInitJs(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [vue(), serveInitJs(), buildInitJs()],
+  plugins: [
+    vue({
+      template: {
+        compilerOptions: {
+          isCustomElement: (tag) => ["social-wiki-transclude"].includes(tag),
+        },
+      },
+    }),
+    serveInitJs(),
+    buildInitJs(),
+  ],
 });

@@ -49,20 +49,15 @@ if (window.top !== window) {
       document.head.append(script);
     });
 
-    // Put the document in an iframe "client"
-    const iframe = document.createElement("iframe");
-    iframe.style.position = "fixed";
-    iframe.style.top = "0";
-    iframe.style.left = "0";
-    iframe.style.width = "100dvw";
-    iframe.style.height = "100dvh";
-    iframe.style.border = "none";
-    iframe.srcdoc = html;
-    iframe.sandbox =
-      "allow-scripts allow-forms allow-modals allow-pointer-lock";
-
-    // Insert iframe
-    document.body.appendChild(iframe);
+    // Transclude the document
+    const transclude = document.createElement("social-wiki-transclude");
+    transclude.style.position = "fixed";
+    transclude.style.top = "0";
+    transclude.style.left = "0";
+    transclude.style.width = "100dvw";
+    transclude.style.height = "100dvh";
+    transclude.setAttribute("srcdoc", html);
+    document.body.appendChild(transclude);
 
     // Other defaults
     const metaCharset = document.createElement("meta");

@@ -113,37 +113,23 @@
         </ul>
     </Header>
     <main :class="{ stale: channelInput !== channel }">
-        <DisplayPage v-if="!historyOpen" :html="selectedPageHtml" />
-        <TwoPaneLayout rightTitle="Preview" leftTitle="History" v-else>
-            <template #left-pane>
-                <History
-                    :pageVersions="pageVersions"
-                    v-model:selectedPageVersion="selectedPageVersion"
-                    :session="$graffitiSession.value"
-                />
-            </template>
-            <template #right-pane>
-                <DisplayPage :html="selectedPageHtml" />
-            </template>
-        </TwoPaneLayout>
+        <social-wiki-transclude
+            :src="channel"
+            ref="transclude"
+        ></social-wiki-transclude>
     </main>
 </template>
 
 <script setup lang="ts">
-import { ref, toRef, watch } from "vue";
+import { ref, toRef, useTemplateRef, watch } from "vue";
 import Header from "./Header.vue";
-import DisplayPage from "./DisplayPage.vue";
-import TwoPaneLayout from "./TwoPaneLayout.vue";
-import History from "./History.vue";
+// import TwoPaneLayout from "./TwoPaneLayout.vue";
+// import History from "./History.vue";
 import {
     useGraffiti,
     GraffitiActorToHandle,
 } from "@graffiti-garden/wrapper-vue";
 import type { GraffitiSession } from "@graffiti-garden/api";
-import {
-    getPageVersions,
-    type PageVersionObject,
-} from "../helpers/page-versions";
 import { useRouter } from "vue-router";
 const graffiti = useGraffiti();
 
@@ -153,52 +139,14 @@ const props = defineProps<{
 const channel = toRef(props, "channel");
 const channelInput = ref(channel.value);
 
-const pageVersions = ref<PageVersionObject[]>([]);
-
-const selectedPageVersion = ref<PageVersionObject | null | undefined>(
-    undefined,
-);
-const selectedPageHtml = ref<string | null | undefined>(undefined);
-watch(
-    channel,
-    async (pageName) => {
-        // Clear versions
-        pageVersions.value = [];
-        selectedPageVersion.value = undefined;
-        selectedPageHtml.value = undefined;
-
-        // Compute new page versions
-        pageVersions.value = await getPageVersions(graffiti, pageName);
-        selectedPageVersion.value = pageVersions.value.at(0) || null;
-    },
-    { immediate: true },
-);
-
-watch(selectedPageVersion, async (selected) => {
-    selectedPageHtml.value = undefined;
-    if (!selected) {
-        selectedPageHtml.value = selected;
-        return;
-    }
-
-    // Fetch the HTML content of the selected page version
-    const media = await graffiti.getMedia(selected.value.result.media, {
-        types: ["text/html"],
-    });
-    const html = await media.data.text();
-
-    // Double check that the selected page version is still the same
-    if (selected.url !== selectedPageVersion.value?.url) return;
-    // If so, assign the html
-    selectedPageHtml.value = html;
-});
-
 const router = useRouter();
+const transclude = useTemplateRef<HTMLElement>("transclude");
 function editPage() {
-    if (selectedPageHtml.value) {
+    const html = transclude.value?.getAttribute("srcdoc");
+    if (html) {
         window.localStorage.setItem(
             `draft:${encodeURIComponent(channel.value)}`,
-            selectedPageHtml.value,
+            html,
         );
     }
     router.push({ name: "edit" });

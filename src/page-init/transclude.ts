@@ -21,7 +21,6 @@ export function installTransclude(graffiti: Graffiti) {
         "allow-forms",
         "allow-modals",
         "allow-pointer-lock",
-        "allow-top-level-navigation",
       );
 
       // Add styling
@@ -36,22 +35,38 @@ export function installTransclude(graffiti: Graffiti) {
           display: block;
           width: 100%;
           height: 100%;
+          overflow: clip;
         }
       `;
 
       shadow.append(style, this.iframe);
-      this.renderPage();
     }
 
+    alive = true;
+    disconnectedCallback() {
+      this.alive = false;
+    }
+
+    currentSrc = "";
+    currentSrcDoc = "";
     async renderPage() {
+      if (!this.alive) return;
+
+      const src = this.getAttribute("src");
+      if (src === null) {
+        const srcdoc = this.getAttribute("srcdoc");
+        return srcdoc ? this.setSrcDoc(srcdoc) : this.pageNotFound();
+      }
+
+      if (this.currentSrc === src) return;
+      this.currentSrc = src;
+
       const token = ++this.renderVersion;
       this.pageLoading();
-      const src = this.getAttribute("src");
-      if (!src) return this.pageNotFound();
 
       try {
         const pageVersions = await getPageVersions(graffiti, src);
-        if (token !== this.renderVersion) return;
+        if (!this.alive || token !== this.renderVersion) return;
 
         // TODO: add more logic here
         const selectedPageVersion = pageVersions.at(0);
@@ -63,11 +78,12 @@ export function installTransclude(graffiti: Graffiti) {
             types: ["text/html"],
           },
         );
+        if (!this.alive || token !== this.renderVersion) return;
         const html = await media.data.text();
-        if (token !== this.renderVersion) return;
-        this.iframe.srcdoc = html;
+        if (!this.alive || token !== this.renderVersion) return;
+        this.setSrcDoc(html);
       } catch (e) {
-        if (token !== this.renderVersion) return;
+        if (!this.alive || token !== this.renderVersion) return;
         if (e instanceof Error && e.name === "GraffitiErrorNotFound") {
           return this.pageNotFound();
         }
@@ -75,32 +91,33 @@ export function installTransclude(graffiti: Graffiti) {
       }
     }
     pageLoading() {
-      this.iframe.srcdoc = "Loading...";
+      this.setSrcDoc("Loading...");
     }
     pageNotFound() {
-      this.iframe.srcdoc = "Page not found";
+      this.setSrcDoc("Page not found");
     }
     pageError() {
-      this.iframe.srcdoc = "Error!";
+      this.setSrcDoc("Error!");
+    }
+    setSrcDoc(srcdoc: string) {
+      if (this.currentSrcDoc === srcdoc) return;
+      this.currentSrcDoc = srcdoc;
+      this.iframe.srcdoc = srcdoc;
+      this.setAttribute("srcdoc", srcdoc);
     }
 
-    // When the component initializes, render the page
+    // Rerender on initialization or src/srcdoc changes
+    static get observedAttributes(): string[] {
+      return ["src", "srcdoc"];
+    }
     connectedCallback() {
       this.renderPage();
     }
-
-    // Whenever the src changes, render the page
-    static get observedAttributes(): string[] {
-      return ["src"];
+    attributeChangedCallback() {
+      this.renderPage();
     }
-    attributeChangedCallback(
-      name: string,
-      oldValue: string | null,
-      newValue: string | null,
-    ): void {
-      if (name === "src" && oldValue !== newValue) {
-        this.renderPage();
-      }
+    adoptedCallback() {
+      this.renderPage();
     }
   }
 

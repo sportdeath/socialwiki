@@ -1,2 +1,4 @@
 import { serveGraffiti } from "./rpc-server";
-serveGraffiti();
+import { installTransclude } from "./transclude";
+const graffiti = serveGraffiti();
+installTransclude(graffiti);
