@@ -95,7 +95,7 @@ export async function getPageVersions(graffiti: Graffiti, pageName: string) {
     pageVersionSchema(pageName),
   )) {
     if (result.error) {
-      console.log(result.error);
+      console.error(result.error);
       continue;
     }
     if (result.tombstone) {
