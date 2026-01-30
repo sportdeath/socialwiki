@@ -50,54 +50,56 @@ const simpleMethods = [
   "handleToActor",
 ] as const;
 
-export class GraffitiRpcClient {
-  readonly sessionEvents = new EventTarget();
+const sessionEvents = new EventTarget();
+let remote_: Promise<RemoteProxy<Methods>> | undefined;
+async function remote() {
+  if (remote_) return remote_;
 
-  // Plumbing to route object stream results
-  // to the appropriate async generator
-  protected readonly remote: Promise<RemoteProxy<Methods>>;
+  // Send messages to the top-most window if there are nested iframes
+  const remoteWindow = window.top;
+  if (!remoteWindow) {
+    throw new Error("Unable to talk to social wiki");
+  }
+
+  // Establish a connection to the serving window
+  const messenger = new WindowMessenger({
+    remoteWindow,
+    allowedOrigins: ["*"],
+  });
+  const connection = connect<Methods>({
+    messenger,
+    // Establish callbacks for events
+    methods: {
+      sessionEvent(type: string, detail: any) {
+        sessionEvents.dispatchEvent(new CustomEvent(type, { detail }));
+      },
+    },
+  });
+  remote_ = connection.promise;
+  return remote_;
+}
+
+export class GraffitiRpcClient {
+  readonly sessionEvents = sessionEvents;
 
   constructor() {
-    // Send messages to the top-most window if there are nested iframes
-    const remoteWindow = window.top;
-    if (!remoteWindow) {
-      throw new Error("Unable to talk to social wiki");
-    }
-
-    // Establish a connection to the serving window
-    const messenger = new WindowMessenger({
-      remoteWindow,
-      allowedOrigins: ["*"],
-    });
-    const this_ = this;
-    const connection = connect<Methods>({
-      messenger,
-      // Establish callbacks for events
-      methods: {
-        sessionEvent(type: string, detail: any) {
-          this_.sessionEvents.dispatchEvent(new CustomEvent(type, { detail }));
-        },
-      },
-    });
-    this.remote = connection.promise;
-
     // Bind all "simple" methods to their remote counterparts
     for (const m of simpleMethods) {
       (this as any)[m] = async (...args: any[]) => {
         args = JSON.parse(JSON.stringify(args));
-        const r = await this.remote;
+        const r = await remote();
         return r[m](...args);
       };
     }
 
     // Wait for listeners to be added then initialize,
     // which will trigger session events to be sent.
-    setTimeout(async () => (await this.remote).initialize(), 0);
+    setTimeout(async () => (await remote()).initialize(), 0);
   }
 
   getMedia: Graffiti["getMedia"] = async (...args) => {
     args = JSON.parse(JSON.stringify(args));
-    const r = await this.remote;
+    const r = await remote();
     const result = await r.getMedia(...args);
     return {
       ...result,
@@ -109,7 +111,7 @@ export class GraffitiRpcClient {
     const [media, session] = args;
     const buffer = await media.data.arrayBuffer();
     const type = media.data.type;
-    const r = await this.remote;
+    const r = await remote();
     return await r.postMedia(
       {
         ...JSON.parse(JSON.stringify(media)),
@@ -126,9 +128,8 @@ export class GraffitiRpcClient {
   discover: Graffiti["discover"] = (...args) => {
     args = JSON.parse(JSON.stringify(args));
     const id = crypto.randomUUID();
-    const this_ = this;
     return (async function* () {
-      const r = await this_.remote;
+      const r = await remote();
       await r.discover(id, ...args);
       try {
         while (true) {
@@ -145,9 +146,8 @@ export class GraffitiRpcClient {
   continueDiscover: Graffiti["continueDiscover"] = (...args) => {
     args = JSON.parse(JSON.stringify(args));
     const id = crypto.randomUUID();
-    const this_ = this;
     return (async function* () {
-      const r = await this_.remote;
+      const r = await remote();
       await r.continueDiscover(id, ...args);
       try {
         while (true) {
