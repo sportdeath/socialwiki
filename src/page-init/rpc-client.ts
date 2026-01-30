@@ -124,13 +124,13 @@ export class GraffitiRpcClient {
     );
   };
 
-  // @ts-ignore
-  discover: Graffiti["discover"] = (...args) => {
-    args = JSON.parse(JSON.stringify(args));
+  protected remoteStream(
+    startStream: (r: RemoteProxy<Methods>, id: string) => Promise<void>,
+  ): GraffitiObjectStream<{}> {
     const id = crypto.randomUUID();
     return (async function* () {
       const r = await remote();
-      await r.discover(id, ...args);
+      await startStream(r, id);
       try {
         while (true) {
           const result = await r.streamNext(id);
@@ -141,23 +141,16 @@ export class GraffitiRpcClient {
         r.streamReturn(id);
       }
     })();
+  }
+
+  // @ts-ignore
+  discover: Graffiti["discover"] = (...args) => {
+    args = JSON.parse(JSON.stringify(args));
+    return this.remoteStream((r, id) => r.discover(id, ...args));
   };
   // @ts-ignore
   continueDiscover: Graffiti["continueDiscover"] = (...args) => {
     args = JSON.parse(JSON.stringify(args));
-    const id = crypto.randomUUID();
-    return (async function* () {
-      const r = await remote();
-      await r.continueDiscover(id, ...args);
-      try {
-        while (true) {
-          const result = await r.streamNext(id);
-          if (result.done) return result.value;
-          yield result.value;
-        }
-      } finally {
-        r.streamReturn(id);
-      }
-    })();
+    return this.remoteStream((r, id) => r.continueDiscover(id, ...args));
   };
 }
