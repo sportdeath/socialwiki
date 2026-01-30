@@ -6,10 +6,7 @@
                 $router.push({ name: 'view', params: { channel: $event } })
         "
     >
-        <ul v-if="$graffitiSession.value === undefined">
-            <li>Loading...</li>
-        </ul>
-        <ul v-else-if="$graffitiSession.value === null">
+        <ul>
             <li>
                 <a
                     @click="historyOpen = false"
@@ -18,31 +15,7 @@
                     View
                 </a>
             </li>
-            <li>
-                <button
-                    @click="historyOpen = true"
-                    title="Past revisions of this page"
-                    :class="{ selected: historyOpen }"
-                >
-                    History
-                </button>
-            </li>
-            <li>
-                <button :class="{ selected: loggingIn }" @click="login">
-                    {{ loggingIn ? "Logging in..." : "Log In" }}
-                </button>
-            </li>
-        </ul>
-        <ul v-else>
-            <li>
-                <a
-                    @click="historyOpen = false"
-                    :class="{ selected: !historyOpen }"
-                >
-                    View
-                </a>
-            </li>
-            <li>
+            <li v-if="$graffitiSession.value">
                 <button
                     @click="editPage"
                     title="Edit the source code of this page"
@@ -59,7 +32,13 @@
                     History
                 </button>
             </li>
-            <li class="personal-menu">
+            <li v-if="$graffitiSession.value === undefined">Loading...</li>
+            <li v-else-if="$graffitiSession.value === null">
+                <button @click="login" :disabled="loggingIn">
+                    {{ loggingIn ? "Logging in..." : "Log In" }}
+                </button>
+            </li>
+            <li v-else class="personal-menu">
                 <button
                     :class="{ selected: personalMenuOpen }"
                     @click="personalMenuOpen = true"
