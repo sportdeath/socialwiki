@@ -95,7 +95,7 @@ function selectPageName(event: MouseEvent) {
         document.removeEventListener("mousemove", onMouseMove);
         document.removeEventListener("mouseup", onMouseUp);
         if (!moved) {
-            requestAnimationFrame(() => input.select());
+            input.select();
         }
     };
     document.addEventListener("mousemove", onMouseMove, { once: true });
@@ -119,6 +119,10 @@ header {
     form:has(.dropdown) {
         border-bottom-left-radius: 0;
         border-bottom-right-radius: 0;
+    }
+
+    form:not(:has(input[type="text"]:disabled)):not(:has(.dropdown)):hover {
+        background: #dadde3;
     }
 
     form {
