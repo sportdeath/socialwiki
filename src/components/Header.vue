@@ -1,5 +1,5 @@
 <template>
-    <header @focusout="onHeaderFocusOut">
+    <header>
         <RouterLink :to="{ name: 'home' }">
             <h1>
                 <span class="brand-full">Social.Wiki</span>
@@ -44,6 +44,11 @@
                 <slot></slot>
             </nav>
         </details>
+        <div
+            v-if="navOpen && isSmall"
+            class="backdrop"
+            @pointerdown.prevent="syncNav"
+        ></div>
     </header>
 </template>
 
@@ -81,8 +86,10 @@ const isDropdownOpen = ref(false);
 
 // Logic for open and closing navigation
 const navOpen = ref(true);
+const isSmall = ref(false);
 const mq = window.matchMedia("(min-width: 600px)");
 const syncNav = () => {
+    isSmall.value = !mq.matches;
     navOpen.value = mq.matches;
 };
 // mount, or route change sync the nav state
@@ -95,13 +102,6 @@ onUnmounted(() => {
 });
 const router = useRouter();
 router.afterEach(syncNav);
-// Close menu when leaving the header too
-function onHeaderFocusOut(event: FocusEvent) {
-    const header = event.currentTarget as HTMLElement | null;
-    const next = event.relatedTarget as Node | null;
-    if (header && next && header.contains(next)) return;
-    syncNav();
-}
 
 let pageNameFocused = false;
 function selectPageName(event: MouseEvent) {
@@ -144,6 +144,7 @@ header {
     padding: 0.5rem;
     border-bottom: 1px solid var(--border-color);
     gap: 1.5rem;
+    position: relative;
 
     h1 {
         font-size: 1.25rem;
@@ -227,6 +228,15 @@ header {
 
 .brand-short {
     display: none;
+}
+.backdrop {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 100%;
+    height: calc(100dvh - 100%);
+    background: #00000066;
+    z-index: 1;
 }
 
 @media (min-width: 600px) {
