@@ -129,16 +129,17 @@ export class GraffitiRpcClient {
   ): GraffitiObjectStream<{}> {
     const id = crypto.randomUUID();
     return (async function* () {
-      const r = await remote();
-      await startStream(r, id);
       try {
+        const r = await remote();
+        await startStream(r, id);
         while (true) {
           const result = await r.streamNext(id);
           if (result.done) return result.value;
           yield result.value;
         }
       } finally {
-        r.streamReturn(id);
+        const r = await remote();
+        await r.streamReturn(id);
       }
     })();
   }

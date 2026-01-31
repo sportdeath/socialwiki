@@ -100,7 +100,7 @@ export function serveGraffiti(): Graffiti {
         async streamReturn(id: string) {
           const iterator = iterators.get(id);
           if (!iterator) return;
-          iterator.return({ cursor: "" });
+          await iterator.return({ cursor: "" });
           iterators.delete(id);
         },
         initialize() {
