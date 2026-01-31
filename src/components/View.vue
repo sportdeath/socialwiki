@@ -13,6 +13,7 @@
                         name: 'view',
                         params: { pageName },
                     }"
+                    title="The current version of this page"
                 >
                     View
                 </RouterLink>
@@ -31,6 +32,7 @@
                         name: 'history',
                         params: { pageName },
                     }"
+                    title="Past revisions of this page"
                 >
                     History
                 </RouterLink>
@@ -41,49 +43,14 @@
                     {{ loggingIn ? "Logging in..." : "Log In" }}
                 </button>
             </li>
-            <li v-else class="personal-menu">
+            <li v-else>
                 <button
-                    :class="{ selected: personalMenuOpen }"
-                    @click="personalMenuOpen = true"
-                    title="Personal menu"
+                    :class="{ selected: loggingOut }"
+                    @click="logout($graffitiSession.value)"
+                    class="secondary"
                 >
-                    👤▼
+                    {{ loggingOut ? "Logging out..." : "Log Out" }}
                 </button>
-                <ul
-                    v-if="personalMenuOpen"
-                    v-click-away="() => (personalMenuOpen = false)"
-                >
-                    <li>
-                        <GraffitiActorToHandle
-                            :actor="$graffitiSession.value.actor"
-                        />
-                    </li>
-                    <li>
-                        <RouterLink
-                            :to="{
-                                name: 'view',
-                                params: {
-                                    pageName: `${$graffitiSession.value.actor}`,
-                                },
-                            }"
-                            @click="personalMenuOpen = false"
-                        >
-                            My page
-                        </RouterLink>
-                    </li>
-                    <!-- TODO: add contributions -->
-                    <!-- <li>
-                        <a>Contributions</a>
-                    </li> -->
-                    <li>
-                        <button
-                            :class="{ selected: loggingOut }"
-                            @click="logout($graffitiSession.value)"
-                        >
-                            {{ loggingOut ? "Logging out..." : "Logout" }}
-                        </button>
-                    </li>
-                </ul>
             </li>
         </ul>
     </Header>
@@ -112,7 +79,7 @@ const graffiti = useGraffiti();
 const props = withDefaults(
     defineProps<{
         pageName: string;
-        history: boolean;
+        history?: boolean;
     }>(),
     {
         history: false,
@@ -139,7 +106,6 @@ function editPage() {
     router.push({ name: "edit" });
 }
 
-const personalMenuOpen = ref(false);
 const loggingIn = ref(false);
 const loggingOut = ref(false);
 
@@ -153,32 +119,11 @@ function logout(session: GraffitiSession) {
     loggingOut.value = true;
     graffiti.logout(session).finally(() => {
         loggingOut.value = false;
-        personalMenuOpen.value = false;
     });
 }
 </script>
 
 <style>
-.personal-menu {
-    position: relative;
-}
-
-.personal-menu > ul {
-    position: absolute;
-    right: 0;
-    top: calc(100%);
-    text-align: right;
-    z-index: 10;
-    display: flex;
-    list-style: none;
-    flex-direction: column;
-    gap: 0.25rem;
-    padding: 0.5rem;
-    background: var(--background-color);
-    border: 1px solid var(--border-color);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-}
-
 .router-link-exact-active {
     text-decoration: underline 2px;
     color: var(--text-color);

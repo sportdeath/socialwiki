@@ -13,6 +13,8 @@
     --border-color-hover: #27292d;
     --link-color: #36c;
     --link-hover-color: #3056a9;
+    --secondary-color: #54595d;
+    --secondary-hover-color: #202122;
     --warning-color: #bf3c2c;
     --warning-hover-color: #9f3526;
     --background-color-interactive: #eaecf0;
@@ -29,6 +31,8 @@
         --border-color-hover: #a2a9b1;
         --link-color: #88a3e8;
         --link-hover-color: #a6bbf5;
+        --secondary-color: #a2a9b1;
+        --secondary-hover-color: #c8ccd1;
         --warning-color: #fd7865;
         --warning-hover-color: #fea898;
         --background-color-interactive: #27292d;
@@ -99,6 +103,14 @@ button {
 
 :is(a, button).warning:hover {
     color: var(--warning-hover-color);
+}
+
+:is(a, button).secondary {
+    color: var(--secondary-color);
+}
+
+:is(a, button).secondary:hover {
+    color: var(--secondary-hover-color);
 }
 
 h1 {
