@@ -69,7 +69,8 @@
         <template #right-pane>
             <social-wiki-transclude
                 ref="transclude"
-                :srcdoc="selectedPageHtml"
+                :src="pageName"
+                :version="selectedPageVersion?.url"
             ></social-wiki-transclude>
         </template>
     </TwoPaneLayout>
@@ -109,6 +110,8 @@ const { objects: pageVersionsRaw } = useGraffitiDiscover(
     () => pageVersionSchema(props.pageName),
 );
 const pageVersions = computed(() =>
+    // TODO: make a sort function that does the topological sort
+    // Also add filters...
     pageVersionsRaw.value.toSorted(
         (a, b) => b.value.published - a.value.published,
     ),
@@ -120,16 +123,17 @@ async function restorePageVersion(
     version: PageVersionObject,
     session: GraffitiSession,
 ) {
-    const media = await graffiti.getMedia(version.value.result.media, {
-        types: ["text/html"],
-    });
-    const html = await media.data.text();
+    const html = transclude.value?.getAttribute("srcdoc");
+    if (!html) {
+        console.error("no HTML to restore");
+        return;
+    }
     selectedPageVersion.value = await createPageVersion(
         graffiti,
         version.value.object,
         html,
         pageVersions.value.map<string>((v) => v.url),
-        `Restored from ${version.url}`,
+        `Restore: ${version.value.summary}`,
         session,
     );
 }
@@ -137,30 +141,7 @@ async function restorePageVersion(
 const selectedPageVersion = ref<PageVersionObject | null | undefined>(
     undefined,
 );
-const selectedPageHtml = ref<string | null | undefined>(undefined);
-watch(
-    pageVersions,
-    async (versions) => {
-        selectedPageVersion.value = versions.at(0) || null;
-    },
-    { immediate: true },
-);
-watch(selectedPageVersion, async (selected) => {
-    selectedPageHtml.value = undefined;
-    if (!selected) {
-        selectedPageHtml.value = selected;
-        return;
-    }
-
-    // Fetch the HTML content of the selected page version
-    const media = await graffiti.getMedia(selected.value.result.media, {
-        types: ["text/html"],
-    });
-    const html = await media.data.text();
-
-    // Double check that the selected page version is still the same
-    if (selected.url !== selectedPageVersion.value?.url) return;
-    // If so, assign the html
-    selectedPageHtml.value = html;
+watch(pageVersions, async (versions) => {
+    selectedPageVersion.value = versions.at(0) || null;
 });
 </script>

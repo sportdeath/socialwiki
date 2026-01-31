@@ -1,5 +1,9 @@
 import type { Graffiti } from "@graffiti-garden/api";
-import { getPageVersions } from "../helpers/page-versions";
+import {
+  getPageVersions,
+  pageVersionSchema,
+  type PageVersionObject,
+} from "../helpers/page-versions";
 
 export function installTransclude(graffiti: Graffiti) {
   class SocialWikiTransclude extends HTMLElement {
@@ -49,6 +53,7 @@ export function installTransclude(graffiti: Graffiti) {
 
     currentSrc = "";
     currentSrcDoc = "";
+    currentVersion: null | string = null;
     async renderPage() {
       if (!this.alive) return;
 
@@ -58,19 +63,30 @@ export function installTransclude(graffiti: Graffiti) {
         return srcdoc ? this.setSrcDoc(srcdoc) : this.pageNotFound();
       }
 
-      if (this.currentSrc === src) return;
+      const version = this.getAttribute("version");
+      if (this.currentSrc === src && this.currentVersion === version) return;
       this.currentSrc = src;
+      this.currentVersion = version;
 
       const token = ++this.renderVersion;
       this.pageLoading();
 
       try {
-        const pageVersions = await getPageVersions(graffiti, src);
-        if (!this.alive || token !== this.renderVersion) return;
+        let selectedPageVersion: PageVersionObject;
 
-        // TODO: add more logic here
-        const selectedPageVersion = pageVersions.at(0);
-        if (!selectedPageVersion) return this.pageNotFound();
+        if (version === null) {
+          const pageVersions = await getPageVersions(graffiti, src);
+
+          // TODO: add more logic here
+          const potentialPageVersion = pageVersions.at(0);
+          if (!potentialPageVersion) return this.pageNotFound();
+          selectedPageVersion = potentialPageVersion;
+        } else {
+          selectedPageVersion = await graffiti.get<
+            ReturnType<typeof pageVersionSchema>
+          >(version, pageVersionSchema(src));
+        }
+        if (!this.alive || token !== this.renderVersion) return;
 
         const media = await graffiti.getMedia(
           selectedPageVersion.value.result.media,
@@ -108,7 +124,7 @@ export function installTransclude(graffiti: Graffiti) {
 
     // Rerender on initialization or src/srcdoc changes
     static get observedAttributes(): string[] {
-      return ["src", "srcdoc"];
+      return ["src", "srcdoc", "version"];
     }
     connectedCallback() {
       this.renderPage();
