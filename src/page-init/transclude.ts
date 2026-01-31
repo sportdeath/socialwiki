@@ -107,13 +107,13 @@ export function installTransclude(graffiti: Graffiti) {
       }
     }
     pageLoading() {
-      this.setSrcDoc("Loading...");
+      this.setSrcDoc(loading);
     }
     pageNotFound() {
-      this.setSrcDoc("Page not found");
+      this.setSrcDoc(pageNotFound);
     }
     pageError() {
-      this.setSrcDoc("Error!");
+      this.setSrcDoc(error);
     }
     setSrcDoc(srcdoc: string) {
       if (this.currentSrcDoc === srcdoc) return;
@@ -139,3 +139,104 @@ export function installTransclude(graffiti: Graffiti) {
 
   customElements.define("social-wiki-transclude", SocialWikiTransclude);
 }
+
+const style = `
+<style>
+:root {
+    color-scheme: light dark;
+    --background-color: #fff;
+    --text-color: #202122;
+    --title-color: #101418;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        color-scheme: dark;
+        --background-color: #101418;
+        --text-color: #eaecf0;
+        --title-color: #f8f9fa;
+    }
+}
+
+html, body, main {
+  height: 100%;
+}
+
+body {
+  background: var(--background-color);
+  color: var(--text-color);
+  font-family:
+      system-ui,
+      -apple-system,
+      BlinkMacSystemFont,
+      "Segoe UI",
+      Roboto,
+      Helvetica,
+      Arial,
+      sans-serif;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+main {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+h1 {
+  color: var(--title-color);
+}
+
+.dots::after {
+    content: "";
+    display: inline-block;
+    width: 3ch;
+    animation: dots 0.7s linear infinite;
+}
+
+@keyframes dots {
+    0%   { content: ""; }
+    25%  { content: "."; }
+    50%  { content: ".."; }
+    75%  { content: "..."; }
+}
+</style>
+`;
+
+const loading = `
+<!doctype html>
+<html>
+    <head>${style}</head>
+    <body>
+        <main>
+          <h1 class="dots">Page loading</h1>
+        </main>
+    </body>
+</html>
+`;
+
+const pageNotFound = `
+<!doctype html>
+<html>
+    <head>${style}</head>
+    <body>
+        <main>
+            <h1>Page not found.</h1>
+        </main>
+    </body>
+</html>
+`;
+
+const error = `
+<!doctype html>
+<html>
+    <head>${style}</head>
+    <body>
+        <main>
+            <h1>Error loading page.</h1>
+        </main>
+    </body>
+</html>
+`;
