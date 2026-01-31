@@ -14,25 +14,25 @@
         >
             <input
                 type="text"
-                v-model="channelInput"
+                v-model="pageNameInput"
                 placeholder="Enter page name"
                 :disabled="disabled"
                 @mousedown="selectPageName"
                 @focusout="pageNameFocused = false"
                 @dragstart.prevent
             />
-            <ul class="dropdown" v-if="isDropdownOpen">
+            <ul
+                class="dropdown"
+                v-if="isDropdownOpen && pageNameInput !== pageName"
+            >
                 <li>
                     <a
-                        :href="`sw:${channel}`"
-                        @mousedown="channelInput = channel"
-                        v-if="channelInput !== channel"
+                        :href="`sw:${pageName}`"
+                        @mousedown="pageNameInput = pageName"
+                        v-if="pageNameInput !== pageName"
                     >
-                        Current page: {{ channel }}
+                        Current page: {{ pageName }}
                     </a>
-                </li>
-                <li>
-                    <a href="sw:Social.Wiki"> Home </a>
                 </li>
             </ul>
         </form>
@@ -53,27 +53,29 @@ import { ref, toRef, watch } from "vue";
 import { useRouter } from "vue-router";
 const props = withDefaults(
     defineProps<{
-        channel: string;
+        pageName: string;
         disabled?: boolean;
     }>(),
     {
         disabled: false,
     },
 );
-const channel = toRef(props, "channel");
+const pageName = toRef(props, "pageName");
 const disabled = toRef(props, "disabled");
 
-const emit = defineEmits(["update:channel", "update:submit-channel"]);
+const emit = defineEmits(["update:pageName"]);
 
+// Partially couple the input page name to the external page name
+// When external changes, internal changes.
+const pageNameInput = ref(pageName.value);
+watch(pageName, (newVal) => (pageNameInput.value = newVal), {
+    immediate: true,
+});
+//  When internal is submitted, external changes
 function submitForm() {
-    emit("update:channel", channelInput.value);
+    emit("update:pageName", pageNameInput.value);
     (document.activeElement as HTMLElement | null)?.blur();
 }
-
-// Partially couple the input channel to the external channel
-// When external changes, internal changes. When internal changes, alert external
-const channelInput = ref(channel.value);
-watch(channel, (newVal) => (channelInput.value = newVal), { immediate: true });
 
 const isDropdownOpen = ref(false);
 

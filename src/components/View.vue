@@ -1,7 +1,7 @@
 <template>
     <Header
-        :channel="pageName"
-        @update:channel="
+        :pageName="pageName"
+        @update:pageName="
             ($event) =>
                 $router.push({ name: 'view', params: { pageName: $event } })
         "
@@ -63,7 +63,7 @@
                             :to="{
                                 name: 'view',
                                 params: {
-                                    channel: `${$graffitiSession.value.actor}?actors=${$graffitiSession.value.actor}`,
+                                    pageName: `${$graffitiSession.value.actor}`,
                                 },
                             }"
                             @click="personalMenuOpen = false"
@@ -136,7 +136,7 @@ function editPage() {
             html,
         );
     }
-    router.push({ name: "edit", params: { channel: props.pageName } });
+    router.push({ name: "edit" });
 }
 
 const personalMenuOpen = ref(false);
@@ -179,11 +179,11 @@ function logout(session: GraffitiSession) {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
-.router-link-active {
+.router-link-exact-active {
     text-decoration: underline 2px;
     color: var(--text-color);
 }
-.router-link-active:hover {
+.router-link-exact-active:hover {
     color: var(--text-color);
 }
 </style>
