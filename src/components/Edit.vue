@@ -83,11 +83,7 @@
             <!-- Left pane body (Editor) -->
             <template #left-pane>
                 <div class="pane">
-                    <section
-                        v-if="showSettings"
-                        class="settings-panel"
-                        v-click-away="() => (showSettings = false)"
-                    >
+                    <section v-if="showSettings" class="settings-panel">
                         <div class="settings-group">
                             <h3>Appearance</h3>
                             <label>
@@ -170,17 +166,14 @@
             <!-- Right pane body (Preview) -->
             <template #right-pane>
                 <div class="pane">
-                    <section
-                        v-if="showPreviewMenu"
-                        class="settings-panel"
-                        v-click-away="() => (showPreviewMenu = false)"
-                    >
+                    <section v-if="showPreviewMenu" class="settings-panel">
                         <label class="checkbox-inline">
                             <input type="checkbox" v-model="livePreview" />
                             Auto-Refresh
                         </label>
                     </section>
                     <social-wiki-transclude
+                        :key="refreshKey"
                         :srcdoc="previewHtml"
                     ></social-wiki-transclude>
                 </div>
@@ -315,9 +308,10 @@ watch(
 // --- Preview updates -----------------------------
 
 // Manually refresh the preview
+const refreshKey = ref(0);
 function refreshPreview() {
     previewHtml.value = editorHtml.value;
-    // TODO: implement refresh
+    refreshKey.value++;
 }
 
 // Preview menu state and option

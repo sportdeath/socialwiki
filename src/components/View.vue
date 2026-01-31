@@ -174,7 +174,7 @@ function logout(session: GraffitiSession) {
     flex-direction: column;
     gap: 0.25rem;
     padding: 0.5rem;
-    background: white;
+    background: var(--background-color);
     border: 1px solid var(--border-color);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
