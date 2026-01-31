@@ -87,7 +87,7 @@ const isDropdownOpen = ref(false);
 // Logic for open and closing navigation
 const navOpen = ref(true);
 const isSmall = ref(false);
-const mq = window.matchMedia("(min-width: 600px)");
+const mq = window.matchMedia("(min-width: 700px)");
 const syncNav = () => {
     isSmall.value = !mq.matches;
     navOpen.value = mq.matches;
@@ -239,13 +239,13 @@ header {
     z-index: 1;
 }
 
-@media (min-width: 600px) {
+@media (min-width: 700px) {
     summary {
         display: none;
     }
 }
 
-@media (max-width: 599px) {
+@media (max-width: 699px) {
     .brand-full {
         display: none;
     }
