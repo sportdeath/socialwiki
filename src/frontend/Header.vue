@@ -9,8 +9,12 @@
 
         <form
             @submit.prevent="submitForm"
-            @focusin="isDropdownOpen = true"
-            @focusout="isDropdownOpen = false"
+            @focusin="
+                isDropdownOpen = true;
+                isSmall && (navOpen = false);
+            "
+            ref="bar"
+            @focusout="onBarLeave"
         >
             <input
                 type="text"
@@ -26,13 +30,16 @@
                 v-if="isDropdownOpen && pageNameInput !== pageName"
             >
                 <li>
-                    <a
-                        :href="`/w/${encodeURIComponent(pageName)}`"
-                        @click.prevent="pageNameInput = pageName"
+                    <RouterLink
+                        :to="{ name: 'view' }"
+                        @click="
+                            pageNameInput = pageName;
+                            isDropdownOpen = false;
+                        "
                         v-if="pageNameInput !== pageName"
                     >
                         Current page: {{ pageName }}
-                    </a>
+                    </RouterLink>
                 </li>
             </ul>
         </form>
@@ -45,15 +52,15 @@
             </nav>
         </details>
         <div
-            v-if="navOpen && isSmall"
+            v-if="isDropdownOpen || (navOpen && isSmall)"
             class="backdrop"
-            @pointerdown.prevent="syncNav"
+            @pointerdown.prevent="onBackdropClick"
         ></div>
     </header>
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted } from "vue";
+import { onMounted, onUnmounted, useTemplateRef } from "vue";
 import { ref, toRef, watch } from "vue";
 import { useRouter } from "vue-router";
 const props = withDefaults(
@@ -83,6 +90,17 @@ function submitForm() {
 }
 
 const isDropdownOpen = ref(false);
+const bar = useTemplateRef("bar");
+function onBarLeave(event: FocusEvent) {
+    const formEl = bar.value;
+    const nextFocusedEl = event.relatedTarget;
+    if (
+        !formEl ||
+        !(nextFocusedEl instanceof Node && formEl.contains(nextFocusedEl))
+    ) {
+        isDropdownOpen.value = false;
+    }
+}
 
 // Logic for open and closing navigation
 const navOpen = ref(true);
@@ -134,6 +152,12 @@ function selectPageName(event: MouseEvent) {
     };
     document.addEventListener("mousemove", onMouseMove, { once: true });
     document.addEventListener("mouseup", onMouseUp, { once: true });
+}
+
+function onBackdropClick() {
+    syncNav();
+    const el = document.activeElement;
+    el instanceof HTMLElement && el.blur();
 }
 </script>
 

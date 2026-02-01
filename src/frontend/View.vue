@@ -121,11 +121,11 @@ function logout(session: GraffitiSession) {
 </script>
 
 <style>
-.router-link-exact-active {
+nav .router-link-exact-active {
     text-decoration: underline 2px;
     color: var(--text-color);
 }
-.router-link-exact-active:hover {
+nav .router-link-exact-active:hover {
     color: var(--text-color);
 }
 </style>
