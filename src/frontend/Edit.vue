@@ -173,10 +173,10 @@
                             Auto-Refresh
                         </label>
                     </section>
-                    <social-wiki-transclude
+                    <sw-transclude
                         :key="refreshKey"
                         :srcdoc="previewHtml"
-                    ></social-wiki-transclude>
+                    ></sw-transclude>
                 </div>
             </template>
         </TwoPaneLayout>
@@ -268,9 +268,10 @@ const monacoOptions = computed(() => ({
     lineNumbersMinChars: 3,
 }));
 
-function onEditorDidMount(editor: any) {
-    const vimMode = initVimMode(editor, null);
-}
+// TODO: add toggle for VIM
+// function onEditorDidMount(editor: any) {
+//     const vimMode = initVimMode(editor, null);
+// }
 
 // --- Diff settings ------------------------------------
 

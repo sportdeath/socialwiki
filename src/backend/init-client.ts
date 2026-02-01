@@ -52,7 +52,7 @@ if (window.top !== window) {
     });
 
     // Transclude the document
-    const transclude = document.createElement("social-wiki-transclude");
+    const transclude = document.createElement("sw-transclude");
     transclude.style.position = "fixed";
     transclude.style.top = "0";
     transclude.style.left = "0";

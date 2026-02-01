@@ -67,11 +67,11 @@
             </ol>
         </template>
         <template #right-pane>
-            <social-wiki-transclude
+            <sw-transclude
                 ref="transclude"
-                :src="pageName"
+                :src="`sw:w/${pageName}`"
                 :version="selectedPageVersion?.url"
-            ></social-wiki-transclude>
+            ></sw-transclude>
         </template>
     </TwoPaneLayout>
     <!-- <ul>

@@ -55,11 +55,11 @@
         </ul>
     </Header>
     <main>
-        <social-wiki-transclude
+        <sw-transclude
             v-if="!history"
-            :src="pageName"
+            :src="`sw:w/${pageName}`"
             ref="transclude"
-        ></social-wiki-transclude>
+        ></sw-transclude>
         <History :pageName="pageName" ref="history" v-else></History>
     </main>
 </template>

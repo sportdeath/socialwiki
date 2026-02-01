@@ -67,7 +67,7 @@ export default defineConfig({
     vue({
       template: {
         compilerOptions: {
-          isCustomElement: (tag) => ["social-wiki-transclude"].includes(tag),
+          isCustomElement: (tag) => ["sw-transclude"].includes(tag),
         },
       },
     }),

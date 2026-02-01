@@ -68,6 +68,12 @@ export function installTransclude(graffiti: Graffiti) {
       this.currentSrc = src;
       this.currentVersion = version;
 
+      if (!src.startsWith("sw:w/")) {
+        return this.pageError();
+      }
+
+      const pageName = src.slice(5);
+
       const token = ++this.renderVersion;
       this.pageLoading();
 
@@ -75,7 +81,7 @@ export function installTransclude(graffiti: Graffiti) {
         let selectedPageVersion: PageVersionObject;
 
         if (version === null) {
-          const pageVersions = await getPageVersions(graffiti, src);
+          const pageVersions = await getPageVersions(graffiti, pageName);
 
           // TODO: add more logic here
           const potentialPageVersion = pageVersions.at(0);
@@ -84,7 +90,7 @@ export function installTransclude(graffiti: Graffiti) {
         } else {
           selectedPageVersion = await graffiti.get<
             ReturnType<typeof pageVersionSchema>
-          >(version, pageVersionSchema(src));
+          >(version, pageVersionSchema(pageName));
         }
         if (!this.alive || token !== this.renderVersion) return;
 
@@ -137,7 +143,7 @@ export function installTransclude(graffiti: Graffiti) {
     }
   }
 
-  customElements.define("social-wiki-transclude", SocialWikiTransclude);
+  customElements.define("sw-transclude", SocialWikiTransclude);
 }
 
 const style = `
