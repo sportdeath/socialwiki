@@ -30,7 +30,7 @@ const router = createRouter({
       props: (route) => ({ history: true, pageName: route.params.pageName }),
     },
     {
-      path: "/e/:pageName",
+      path: "/e/:pageName/:draftKey?",
       name: "edit",
       component: () => import("./frontend/Edit.vue"),
       props: true,
@@ -44,10 +44,16 @@ const graffiti = serveGraffiti();
 // Add the web components
 const origin = window.location.origin;
 installTransclude(graffiti, origin);
-serveNavigation((to) => {
+serveNavigation((to, fromSrcdoc) => {
   const url = new URL(to, window.location.href).toString();
   if (url.startsWith(origin)) {
-    router.push(url.slice(origin.length));
+    let route = url.slice(origin.length);
+    if (route.startsWith("/e/") && fromSrcdoc) {
+      const draftKey = `draft:${crypto.randomUUID()}`;
+      localStorage.setItem(draftKey, fromSrcdoc);
+      route += `/${draftKey}`;
+    }
+    router.push(route);
   } else {
     window.location.href = url;
   }

@@ -5,11 +5,22 @@ declare global {
 }
 
 export function installNavigation(origin: string) {
+  // Listen from the server for the pages own source
+  let fromSrcdoc: string | null = null;
+  window.addEventListener("message", (event: MessageEvent<unknown>) => {
+    const data = event.data;
+    if (typeof data !== "object" || data === null) return;
+    const d = data as Record<string, unknown>;
+    if (d.type !== "transcluded-srcdoc" || typeof d.srcdoc !== "string") return;
+    fromSrcdoc = d.srcdoc;
+  });
+
   window.navigate = (to: string) => {
     window.top?.postMessage(
       {
         type: "navigate",
         to,
+        fromSrcdoc,
       },
       "*",
     );

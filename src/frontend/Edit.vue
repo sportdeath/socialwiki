@@ -207,11 +207,13 @@ const router = useRouter();
 
 const props = defineProps<{
     pageName: string;
+    draftKey?: string;
 }>();
 const pageName = toRef(props, "pageName");
 
-let draftHtml =
-    localStorage.getItem(`draft:${encodeURIComponent(pageName.value)}`) ?? "";
+let draftHtml = props.draftKey
+    ? (localStorage.getItem(props.draftKey) ?? "")
+    : "";
 
 // Initialize the editor, diff and preview with the existing HTML
 const editorHtml = ref(draftHtml);
@@ -350,11 +352,13 @@ watch(livePreview, (enabled, oldVal) => {
 
 // --- Publishing ----------------------------------------------
 onBeforeRouteLeave((to, from, next) => {
-    if (editorHtml.value === draftHtml) return next();
-
-    const leave = confirm(
-        "You have unsaved changes, are you sure you want to cancel?",
-    );
+    const leave =
+        editorHtml.value === draftHtml ||
+        confirm("You have unsaved changes, are you sure you want to cancel?");
+    if (leave && props.draftKey) {
+        // Delete the hanging draft
+        localStorage.removeItem(props.draftKey);
+    }
     leave ? next() : next(false);
 });
 const beforeUnload = (event: BeforeUnloadEvent) => {
@@ -363,11 +367,18 @@ const beforeUnload = (event: BeforeUnloadEvent) => {
     event.preventDefault();
     event.returnValue = "";
 };
+const onPageHide = () => {
+    if (props.draftKey) {
+        localStorage.removeItem(props.draftKey);
+    }
+};
 onMounted(() => {
     window.addEventListener("beforeunload", beforeUnload);
+    window.addEventListener("pagehide", onPageHide);
 });
 onBeforeUnmount(() => {
     window.removeEventListener("beforeunload", beforeUnload);
+    window.removeEventListener("pagehide", onPageHide);
 });
 
 const publishing = ref(false);

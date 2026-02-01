@@ -126,6 +126,20 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
       this.currentSrcDoc = srcdoc;
       this.iframe.srcdoc = srcdoc;
       this.setAttribute("srcdoc", srcdoc);
+      // Send the iframe its own source
+      this.iframe.addEventListener(
+        "load",
+        () => {
+          this.iframe.contentWindow?.postMessage(
+            {
+              type: "transcluded-srcdoc",
+              srcdoc,
+            },
+            "*",
+          );
+        },
+        { once: true },
+      );
     }
 
     // Rerender on initialization or src/srcdoc changes

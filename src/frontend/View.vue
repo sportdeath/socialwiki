@@ -94,13 +94,12 @@ const transclude = computed<HTMLElement | null | undefined>(() => {
 });
 function editPage() {
     const html = transclude.value?.getAttribute("srcdoc");
+    let draftKey: string | undefined;
     if (html) {
-        window.localStorage.setItem(
-            `draft:${encodeURIComponent(props.pageName)}`,
-            html,
-        );
+        draftKey = `draft:${crypto.randomUUID()}`;
+        window.localStorage.setItem(draftKey, html);
     }
-    router.push({ name: "edit" });
+    router.push({ name: "edit", params: { draftKey } });
 }
 
 const loggingIn = ref(false);
