@@ -1,17 +1,24 @@
 <template>
     <Header :pageName="pageName" :disabled="true">
-        <ul v-if="$graffitiSession.value">
+        <ul v-if="publishing">
+            <li>
+                <button class="selected" disabled>Publishing…</button>
+            </li>
+        </ul>
+        <ul v-else-if="$graffitiSession.value">
             <li>
                 <RouterLink :to="{ name: 'view' }" class="warning"
                     >Cancel</RouterLink
                 >
             </li>
             <li>
-                <button
-                    @click="publish($graffitiSession.value)"
-                    :class="{ selected: publishing }"
-                >
-                    {{ publishing ? "Publishing..." : "Publish" }}
+                <button @click="publish($graffitiSession.value)">
+                    Publish
+                </button>
+            </li>
+            <li>
+                <button @click="publish($graffitiSession.value, true)">
+                    Publish as…
                 </button>
             </li>
         </ul>
@@ -382,8 +389,15 @@ onBeforeUnmount(() => {
 });
 
 const publishing = ref(false);
-async function publish(session: GraffitiSession) {
+async function publish(session: GraffitiSession, as?: boolean) {
     publishing.value = true;
+    const publishName = as
+        ? prompt("What page name do you want to publish to?", pageName.value)
+        : pageName.value;
+    if (publishName === null) {
+        publishing.value = false;
+        return;
+    }
     const summary = prompt("Edit summary (Briefly describe your changes)");
     if (summary === null) {
         publishing.value = false;
@@ -392,7 +406,7 @@ async function publish(session: GraffitiSession) {
     const publishedHtml = editorHtml.value;
     await createPageVersion(
         graffiti,
-        pageName.value,
+        publishName,
         publishedHtml,
         [],
         summary,
@@ -400,7 +414,7 @@ async function publish(session: GraffitiSession) {
     );
 
     draftHtml = publishedHtml;
-    router.push({ name: "view" });
+    router.push({ name: "view", params: { pageName: publishName } });
     publishing.value = false;
 }
 
