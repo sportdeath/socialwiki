@@ -18,7 +18,7 @@
                     View
                 </RouterLink>
             </li>
-            <li v-if="$graffitiSession.value">
+            <li>
                 <button
                     @click="editPage"
                     title="Edit the source code of this page"

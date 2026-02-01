@@ -1,16 +1,6 @@
 <template>
     <Header :pageName="pageName" :disabled="true">
-        <ul v-if="$graffitiSession.value === undefined">
-            <li>Loading...</li>
-        </ul>
-        <ul v-else-if="$graffitiSession.value === null">
-            <li>
-                <button :class="{ selected: loggingIn }" @click="login">
-                    {{ loggingIn ? "Logging in..." : "Log In" }}
-                </button>
-            </li>
-        </ul>
-        <ul v-else>
+        <ul v-if="$graffitiSession.value">
             <li>
                 <RouterLink :to="{ name: 'view' }" class="warning"
                     >Cancel</RouterLink
@@ -180,6 +170,24 @@
                 </div>
             </template>
         </TwoPaneLayout>
+
+        <dialog v-if="!$graffitiSession?.value" open>
+            <form method="dialog">
+                <button @click="$graffiti.login()">Log in to edit</button>
+                <button
+                    @click="$router.push({ name: 'view' })"
+                    class="secondary"
+                >
+                    Cancel
+                </button>
+            </form>
+        </dialog>
+
+        <div
+            v-if="!$graffitiSession?.value"
+            class="dialog-backdrop"
+            @click="$router.push({ name: 'view' })"
+        ></div>
     </main>
 </template>
 
@@ -451,6 +459,42 @@ function login() {
         display: flex;
         flex-direction: column;
         gap: 0.35rem;
+    }
+}
+
+main {
+    position: relative;
+
+    dialog {
+        position: fixed;
+        inset: auto;
+        top: 30%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        margin: 0;
+        border: 0;
+        border-radius: 0.5rem;
+        z-index: 1000;
+        padding: 2rem;
+        background: var(--background-color);
+        border: 2px solid var(--border-color);
+
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+            font-size: 2rem;
+        }
+    }
+
+    .dialog-backdrop {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: #000000aa;
+        z-index: 10;
     }
 }
 </style>
