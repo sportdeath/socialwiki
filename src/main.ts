@@ -4,6 +4,7 @@ import "./style.css";
 import { GraffitiPlugin } from "@graffiti-garden/wrapper-vue";
 import { serveGraffiti } from "./page-init/rpc-server";
 import { installTransclude } from "./page-init/transclude";
+import { serveNavigation } from "./page-init/navigation-server";
 
 const router = createRouter({
   history: createWebHistory(),
@@ -42,6 +43,13 @@ const router = createRouter({
 const graffiti = serveGraffiti();
 // Add the web components
 installTransclude(graffiti);
+serveNavigation((to) => {
+  if (to.startsWith("sw:")) {
+    router.push("/" + to.slice(3));
+  } else {
+    window.location.href = to;
+  }
+});
 
 createApp(RouterView)
   .use(GraffitiPlugin, { graffiti })

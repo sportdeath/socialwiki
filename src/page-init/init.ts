@@ -2,6 +2,7 @@ import type { Graffiti } from "@graffiti-garden/api";
 import importMap from "./import-map.json";
 import { GraffitiRpcClient } from "./rpc-client";
 import { installTransclude } from "./transclude";
+import { installNavigation } from "./navigation-client";
 
 declare global {
   interface Window {
@@ -27,6 +28,7 @@ if (window.top !== window) {
   window.graffiti = GraffitiRpcClient;
 
   installTransclude(new window.graffiti() as unknown as Graffiti);
+  installNavigation();
 } else {
   // If we are the top level window, wrap the content in an iframe
   // and spin up the RPC "server".
