@@ -69,7 +69,7 @@
         <template #right-pane>
             <sw-transclude
                 ref="transclude"
-                :src="`sw:w/${pageName}`"
+                :src="`web+sw:w/${pageName}`"
                 :version="selectedPageVersion?.url"
             ></sw-transclude>
         </template>

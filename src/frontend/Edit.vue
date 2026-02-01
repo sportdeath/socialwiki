@@ -190,23 +190,12 @@ import { CodeEditor, DiffEditor } from "monaco-editor-vue3";
 import Header from "./Header.vue";
 import TwoPaneLayout from "./TwoPaneLayout.vue";
 import { useRouter, onBeforeRouteLeave } from "vue-router";
-import { useGraffiti, useGraffitiSession } from "@graffiti-garden/wrapper-vue";
+import { useGraffiti } from "@graffiti-garden/wrapper-vue";
 import { createPageVersion } from "../backend/page-versions";
 import type { GraffitiSession } from "@graffiti-garden/api";
 import { initVimMode } from "monaco-vim";
 
 const router = useRouter();
-const session = useGraffitiSession();
-watch(
-    session,
-    () => {
-        // If logged out, redirect to the view
-        if (session.value === null) {
-            router.push({ name: "view" });
-        }
-    },
-    { immediate: true },
-);
 
 const props = defineProps<{
     pageName: string;

@@ -68,11 +68,11 @@ export function installTransclude(graffiti: Graffiti) {
       this.currentSrc = src;
       this.currentVersion = version;
 
-      if (!src.startsWith("sw:w/")) {
+      if (!src.startsWith("web+sw:w/")) {
         return this.pageError();
       }
 
-      const pageName = src.slice(5);
+      const pageName = src.slice(9);
 
       const token = ++this.renderVersion;
       this.pageLoading();

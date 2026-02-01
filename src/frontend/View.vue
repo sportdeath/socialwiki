@@ -57,7 +57,7 @@
     <main>
         <sw-transclude
             v-if="!history"
-            :src="`sw:w/${pageName}`"
+            :src="`web+sw:w/${pageName}`"
             ref="transclude"
         ></sw-transclude>
         <History :pageName="pageName" ref="history" v-else></History>

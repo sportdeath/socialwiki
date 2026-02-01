@@ -27,7 +27,7 @@
             >
                 <li>
                     <a
-                        :href="`sw:${pageName}`"
+                        :href="`web+sw:${pageName}`"
                         @mousedown="pageNameInput = pageName"
                         v-if="pageNameInput !== pageName"
                     >

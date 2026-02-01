@@ -44,8 +44,8 @@ const graffiti = serveGraffiti();
 // Add the web components
 installTransclude(graffiti);
 serveNavigation((to) => {
-  if (to.startsWith("sw:")) {
-    router.push("/" + to.slice(3));
+  if (to.startsWith("web+sw:")) {
+    router.push("/" + to.slice(7));
   } else {
     window.location.href = to;
   }
