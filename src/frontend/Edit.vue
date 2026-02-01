@@ -218,9 +218,10 @@ const props = defineProps<{
 }>();
 const pageName = toRef(props, "pageName");
 
+const template = "TODO: template";
 let draftHtml = props.draftKey
-    ? (localStorage.getItem(props.draftKey) ?? "")
-    : "";
+    ? (localStorage.getItem(props.draftKey) ?? template)
+    : template;
 
 // Initialize the editor, diff and preview with the existing HTML
 const editorHtml = ref(draftHtml);

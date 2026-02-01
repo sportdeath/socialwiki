@@ -113,33 +113,35 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
       }
     }
     pageLoading() {
-      this.setSrcDoc(loading);
+      this.setSrcDoc(loading, "loading");
     }
     pageNotFound(pageName: string) {
-      this.setSrcDoc(pageNotFound(pageName, origin));
+      this.setSrcDoc(pageNotFound(pageName, origin), "not-found");
     }
     pageError(e: string) {
-      this.setSrcDoc(error(e));
+      this.setSrcDoc(error(e), "error");
     }
-    setSrcDoc(srcdoc: string) {
+    setSrcDoc(srcdoc: string, status?: string) {
       if (this.currentSrcDoc === srcdoc) return;
       this.currentSrcDoc = srcdoc;
       this.iframe.srcdoc = srcdoc;
       this.setAttribute("srcdoc", srcdoc);
-      // Send the iframe its own source
-      this.iframe.addEventListener(
-        "load",
-        () => {
-          this.iframe.contentWindow?.postMessage(
-            {
-              type: "transcluded-srcdoc",
-              srcdoc,
-            },
-            "*",
-          );
-        },
-        { once: true },
-      );
+      this.setAttribute("status", status ?? "ok");
+      // Send the iframe its own source if status is ok
+      if (status === undefined)
+        this.iframe.addEventListener(
+          "load",
+          () => {
+            this.iframe.contentWindow?.postMessage(
+              {
+                type: "transcluded-srcdoc",
+                srcdoc,
+              },
+              "*",
+            );
+          },
+          { once: true },
+        );
     }
 
     // Rerender on initialization or src/srcdoc changes
@@ -277,7 +279,7 @@ const pageNotFound = (pageName: string, origin: string) => `
         <main>
             <h1>Nothing here…yet.</h1>
             <p>
-                <a href="/e/${pageName}">
+                <a href="/e/${encodeURIComponent(pageName)}">
                     Edit page
                 </a>
             </p>

@@ -94,8 +94,9 @@ const transclude = computed<HTMLElement | null | undefined>(() => {
 });
 function editPage() {
     const html = transclude.value?.getAttribute("srcdoc");
+    const status = transclude.value?.getAttribute("status");
     let draftKey: string | undefined;
-    if (html) {
+    if (html && status === "ok") {
         draftKey = `draft:${crypto.randomUUID()}`;
         window.localStorage.setItem(draftKey, html);
     }
