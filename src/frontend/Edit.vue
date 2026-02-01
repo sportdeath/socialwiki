@@ -172,7 +172,7 @@
         </TwoPaneLayout>
 
         <dialog v-if="!$graffitiSession?.value" open>
-            <form method="dialog">
+            <form @submit.prevent="">
                 <button @click="$graffiti.login()">Log in to edit</button>
                 <button
                     @click="$router.push({ name: 'view' })"
@@ -467,17 +467,16 @@ main {
 
     dialog {
         position: fixed;
-        inset: auto;
-        top: 30%;
+        top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
-        margin: 0;
-        border: 0;
         border-radius: 0.5rem;
         z-index: 1000;
         padding: 2rem;
         background: var(--background-color);
         border: 2px solid var(--border-color);
+        width: max-content;
+        max-width: 90dvw;
 
         form {
             display: flex;
@@ -493,7 +492,7 @@ main {
         left: 0;
         right: 0;
         bottom: 0;
-        background: #000000aa;
+        background: #000000cc;
         z-index: 10;
     }
 }
