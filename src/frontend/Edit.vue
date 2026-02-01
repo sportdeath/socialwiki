@@ -385,18 +385,11 @@ const beforeUnload = (event: BeforeUnloadEvent) => {
     event.preventDefault();
     event.returnValue = "";
 };
-const onPageHide = () => {
-    if (props.draftKey) {
-        localStorage.removeItem(props.draftKey);
-    }
-};
 onMounted(() => {
     window.addEventListener("beforeunload", beforeUnload);
-    window.addEventListener("pagehide", onPageHide);
 });
 onBeforeUnmount(() => {
     window.removeEventListener("beforeunload", beforeUnload);
-    window.removeEventListener("pagehide", onPageHide);
 });
 
 const publishing = ref(false);
