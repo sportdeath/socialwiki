@@ -4,7 +4,7 @@ declare global {
   }
 }
 
-export function installNavigation() {
+export function installNavigation(origin: string) {
   window.navigate = (to: string) => {
     window.top?.postMessage(
       {
@@ -14,6 +14,10 @@ export function installNavigation() {
       "*",
     );
   };
+
+  const base = document.createElement("base");
+  base.href = origin;
+  document.head.append(base);
 
   document.addEventListener("click", (e: MouseEvent) => {
     if (e.button !== 0) return;

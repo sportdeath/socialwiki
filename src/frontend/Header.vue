@@ -27,8 +27,8 @@
             >
                 <li>
                     <a
-                        :href="`web+sw:${pageName}`"
-                        @mousedown="pageNameInput = pageName"
+                        :href="`/w/${encodeURIComponent(pageName)}`"
+                        @click.prevent="pageNameInput = pageName"
                         v-if="pageNameInput !== pageName"
                     >
                         Current page: {{ pageName }}

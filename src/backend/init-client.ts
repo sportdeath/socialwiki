@@ -4,6 +4,9 @@ import { GraffitiRpcClient } from "./graffiti-client";
 import { installTransclude } from "./transclude";
 import { installNavigation } from "./navigation-client";
 
+const currentScriptSrc = (document.currentScript as HTMLScriptElement).src;
+const origin = new URL(currentScriptSrc).origin;
+
 declare global {
   interface Window {
     graffiti: typeof GraffitiRpcClient;
@@ -27,13 +30,12 @@ if (window.top !== window) {
   // Then inject graffiti
   window.graffiti = GraffitiRpcClient;
 
-  installTransclude(new window.graffiti() as unknown as Graffiti);
-  installNavigation();
+  installTransclude(new window.graffiti() as unknown as Graffiti, origin);
+  installNavigation(origin);
 } else {
   // If we are the top level window, wrap the content in an iframe
   // and spin up the RPC "server".
   // This allows SocialWiki pages to work as standalone files.
-  const currentScriptSrc = (document.currentScript as HTMLScriptElement).src;
   window.addEventListener("DOMContentLoaded", async () => {
     // Serialize the entire document
     const html = document.documentElement.outerHTML;
@@ -44,7 +46,6 @@ if (window.top !== window) {
     // Wait for the "server" to initialize
     await new Promise<void>((resolve, reject) => {
       const script = document.createElement("script");
-      const origin = new URL(currentScriptSrc).origin;
       script.src = `${origin}/init-server.js`;
       script.onload = () => resolve();
       script.onerror = (e) => reject(e);

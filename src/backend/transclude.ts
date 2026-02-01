@@ -5,7 +5,7 @@ import {
   type PageVersionObject,
 } from "./page-versions";
 
-export function installTransclude(graffiti: Graffiti) {
+export function installTransclude(graffiti: Graffiti, origin: string) {
   class SocialWikiTransclude extends HTMLElement {
     protected iframe: HTMLIFrameElement;
     protected renderVersion = 0;
@@ -68,11 +68,12 @@ export function installTransclude(graffiti: Graffiti) {
       this.currentSrc = src;
       this.currentVersion = version;
 
-      if (!src.startsWith("web+sw:w/")) {
+      const url = new URL(src, origin).toString();
+      const prefix = `${origin}/w/`;
+      if (!url.startsWith(prefix)) {
         return this.pageError();
       }
-
-      const pageName = src.slice(9);
+      const pageName = decodeURIComponent(url.slice(prefix.length));
 
       const token = ++this.renderVersion;
       this.pageLoading();

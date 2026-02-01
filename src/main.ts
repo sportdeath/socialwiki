@@ -42,12 +42,14 @@ const router = createRouter({
 // to all the "client" pages
 const graffiti = serveGraffiti();
 // Add the web components
-installTransclude(graffiti);
+const origin = window.location.origin;
+installTransclude(graffiti, origin);
 serveNavigation((to) => {
-  if (to.startsWith("web+sw:")) {
-    router.push("/" + to.slice(7));
+  const url = new URL(to, window.location.href).toString();
+  if (url.startsWith(origin)) {
+    router.push(url.slice(origin.length));
   } else {
-    window.location.href = to;
+    window.location.href = url;
   }
 });
 

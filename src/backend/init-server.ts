@@ -2,12 +2,12 @@ import { serveGraffiti } from "./graffiti-server";
 import { installTransclude } from "./transclude";
 import { serveNavigation } from "./navigation-server";
 
+const currentScriptSrc = (document.currentScript as HTMLScriptElement).src;
+const origin = new URL(currentScriptSrc).origin;
+
 const graffiti = serveGraffiti();
-installTransclude(graffiti);
+installTransclude(graffiti, origin);
 serveNavigation((to) => {
-  if (to.startsWith("web+sw:")) {
-    window.location.href = "https://social.wiki/" + to.slice(7);
-  } else {
-    window.location.href = to;
-  }
+  const url = new URL(to, origin).toString();
+  window.location.href = url;
 });
