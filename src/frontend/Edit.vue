@@ -218,7 +218,17 @@ const props = defineProps<{
 }>();
 const pageName = toRef(props, "pageName");
 
-const template = "TODO: template";
+const template = `<!doctype html>
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <script src="${window.location.origin}/init.js"><\/script>
+</head>
+
+<body>
+    <h1>Your app here!</h1>
+</body>`;
+
 let draftHtml = props.draftKey
     ? (localStorage.getItem(props.draftKey) ?? template)
     : template;
