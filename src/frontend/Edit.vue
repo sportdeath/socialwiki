@@ -147,6 +147,7 @@
                         :theme="editorTheme"
                         :options="monacoOptions"
                         class="code-editor"
+                        @editorDidMount="onEditorDidMount"
                     />
 
                     <DiffEditor
@@ -190,8 +191,9 @@ import Header from "./Header.vue";
 import TwoPaneLayout from "./TwoPaneLayout.vue";
 import { useRouter, onBeforeRouteLeave } from "vue-router";
 import { useGraffiti, useGraffitiSession } from "@graffiti-garden/wrapper-vue";
-import { createPageVersion } from "../helpers/page-versions";
+import { createPageVersion } from "../backend/page-versions";
 import type { GraffitiSession } from "@graffiti-garden/api";
+import { initVimMode } from "monaco-vim";
 
 const router = useRouter();
 const session = useGraffitiSession();
@@ -265,6 +267,10 @@ const monacoOptions = computed(() => ({
     parameterHints: { enabled: true },
     lineNumbersMinChars: 3,
 }));
+
+function onEditorDidMount(editor: any) {
+    const vimMode = initVimMode(editor, null);
+}
 
 // --- Diff settings ------------------------------------
 

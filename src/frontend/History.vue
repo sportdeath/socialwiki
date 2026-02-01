@@ -89,7 +89,7 @@ import {
     deletePageVersion,
     pageVersionSchema,
     type PageVersionObject,
-} from "../helpers/page-versions";
+} from "../backend/page-versions";
 import {
     useGraffiti,
     GraffitiActorToHandle,

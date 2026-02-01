@@ -5,11 +5,11 @@ import { build } from "esbuild";
 
 const files = [
   {
-    input: "src/page-init/init.ts",
+    input: "src/backend/init-client.ts",
     output: "/init.js",
   },
   {
-    input: "src/page-init/init-server.ts",
+    input: "src/backend/init-server.ts",
     output: "/init-server.js",
   },
 ];

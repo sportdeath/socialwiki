@@ -3,7 +3,7 @@ import {
   getPageVersions,
   pageVersionSchema,
   type PageVersionObject,
-} from "../helpers/page-versions";
+} from "./page-versions";
 
 export function installTransclude(graffiti: Graffiti) {
   class SocialWikiTransclude extends HTMLElement {

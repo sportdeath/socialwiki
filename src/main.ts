@@ -2,9 +2,9 @@ import { createApp } from "vue";
 import { createRouter, createWebHistory, RouterView } from "vue-router";
 import "./style.css";
 import { GraffitiPlugin } from "@graffiti-garden/wrapper-vue";
-import { serveGraffiti } from "./page-init/rpc-server";
-import { installTransclude } from "./page-init/transclude";
-import { serveNavigation } from "./page-init/navigation-server";
+import { serveGraffiti } from "./backend/graffiti-server";
+import { installTransclude } from "./backend/transclude";
+import { serveNavigation } from "./backend/navigation-server";
 
 const router = createRouter({
   history: createWebHistory(),
@@ -20,19 +20,19 @@ const router = createRouter({
     {
       path: "/w/:pageName",
       name: "view",
-      component: () => import("./components/View.vue"),
+      component: () => import("./frontend/View.vue"),
       props: true,
     },
     {
       path: "/h/:pageName",
       name: "history",
-      component: () => import("./components/View.vue"),
+      component: () => import("./frontend/View.vue"),
       props: (route) => ({ history: true, pageName: route.params.pageName }),
     },
     {
       path: "/e/:pageName",
       name: "edit",
-      component: () => import("./components/Edit.vue"),
+      component: () => import("./frontend/Edit.vue"),
       props: true,
     },
   ],

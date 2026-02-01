@@ -68,10 +68,7 @@
 import { computed, ref, useTemplateRef } from "vue";
 import Header from "./Header.vue";
 import History from "./History.vue";
-import {
-    useGraffiti,
-    GraffitiActorToHandle,
-} from "@graffiti-garden/wrapper-vue";
+import { useGraffiti } from "@graffiti-garden/wrapper-vue";
 import type { GraffitiSession } from "@graffiti-garden/api";
 import { useRouter } from "vue-router";
 const graffiti = useGraffiti();

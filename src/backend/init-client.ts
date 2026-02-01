@@ -1,6 +1,6 @@
 import type { Graffiti } from "@graffiti-garden/api";
 import importMap from "./import-map.json";
-import { GraffitiRpcClient } from "./rpc-client";
+import { GraffitiRpcClient } from "./graffiti-client";
 import { installTransclude } from "./transclude";
 import { installNavigation } from "./navigation-client";
 

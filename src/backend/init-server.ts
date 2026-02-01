@@ -1,4 +1,4 @@
-import { serveGraffiti } from "./rpc-server";
+import { serveGraffiti } from "./graffiti-server";
 import { installTransclude } from "./transclude";
 import { serveNavigation } from "./navigation-server";
 
