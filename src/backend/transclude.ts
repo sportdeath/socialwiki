@@ -70,12 +70,17 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
       this.currentSrc = src;
       this.currentVersion = version;
 
-      const url = new URL(src, origin).toString();
-      const prefix = `${origin}/w/`;
-      if (!url.startsWith(prefix)) {
-        return this.pageError(`Invalid page src: ${src}`);
+      const url = new URL(src, origin);
+      if (url.origin !== origin) {
+        return this.pageError(`Cannot transclude cross origin: ${src}`);
       }
-      const pageName = decodeURIComponent(url.slice(prefix.length));
+      const pageName = url.pathname.match(/^\/w\/(.+)$/)?.[1];
+      if (typeof pageName !== "string") {
+        return this.pageError(`Could not extract page name from src: ${src}`);
+      }
+      // TODO
+      const query = url.search;
+      const hash = url.hash;
 
       const token = ++this.renderVersion;
       this.pageLoading();
@@ -279,7 +284,7 @@ const pageNotFound = (pageName: string, origin: string) => `
         <main>
             <h1>Nothing here…yet.</h1>
             <p>
-                <a href="/e/${encodeURIComponent(pageName)}">
+                <a href="/e/${pageName}">
                     Edit page
                 </a>
             </p>

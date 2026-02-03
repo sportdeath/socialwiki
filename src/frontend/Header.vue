@@ -31,7 +31,7 @@
             >
                 <li>
                     <RouterLink
-                        :to="{ name: 'view' }"
+                        :to="`/w/${pageName}`"
                         @click="
                             pageNameInput = pageName;
                             isDropdownOpen = false;

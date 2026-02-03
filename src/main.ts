@@ -18,19 +18,19 @@ const router = createRouter({
       },
     },
     {
-      path: "/w/:pageName",
+      path: "/w/:pageName(.+)",
       name: "view",
       component: () => import("./frontend/View.vue"),
       props: true,
     },
     {
-      path: "/h/:pageName",
+      path: "/h/:pageName(.+)",
       name: "history",
       component: () => import("./frontend/View.vue"),
       props: (route) => ({ history: true, pageName: route.params.pageName }),
     },
     {
-      path: "/e/:pageName/:draftKey?",
+      path: "/e/:pageName(.+)",
       name: "edit",
       component: () => import("./frontend/Edit.vue"),
       props: true,
@@ -45,17 +45,22 @@ const graffiti = serveGraffiti();
 const origin = window.location.origin;
 installTransclude(graffiti, origin);
 serveNavigation((to, fromSrcdoc) => {
-  const url = new URL(to, window.location.href).toString();
-  if (url.startsWith(origin)) {
-    let route = url.slice(origin.length);
-    if (route.startsWith("/e/") && fromSrcdoc) {
-      const draftKey = `draft:${crypto.randomUUID()}`;
+  const url = new URL(to, window.location.href);
+  if (url.origin === origin) {
+    // If editing a page, save the source in local
+    // storage because it is too large to be passed
+    // in the URL
+    const path = url.pathname;
+    const editPageName = path.match(/^\/e\/(.+)$/)?.[1];
+    if (typeof editPageName === "string" && fromSrcdoc) {
+      const draftKey = `draft:${editPageName}`;
       localStorage.setItem(draftKey, fromSrcdoc);
-      route += `/${draftKey}`;
     }
-    router.push(route);
+
+    // Push the full route including hash/search
+    router.push(url.toString().slice(origin.length));
   } else {
-    window.location.href = url;
+    window.location.href = url.toString();
   }
 });
 

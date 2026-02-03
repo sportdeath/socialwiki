@@ -1,18 +1,12 @@
 <template>
     <Header
         :pageName="pageName"
-        @update:pageName="
-            ($event) =>
-                $router.push({ name: 'view', params: { pageName: $event } })
-        "
+        @update:pageName="$router.push(`/w/${$event}`)"
     >
         <ul>
             <li>
                 <RouterLink
-                    :to="{
-                        name: 'view',
-                        params: { pageName },
-                    }"
+                    :to="`/w/${pageName}`"
                     title="The current version of this page"
                 >
                     View
@@ -28,10 +22,7 @@
             </li>
             <li>
                 <RouterLink
-                    :to="{
-                        name: 'history',
-                        params: { pageName },
-                    }"
+                    :to="`/h/${pageName}`"
                     title="Past revisions of this page"
                 >
                     History
@@ -57,7 +48,7 @@
     <main>
         <sw-transclude
             v-if="!history"
-            :src="`/w/${encodeURIComponent(pageName)}`"
+            :src="`/w/${pageName}`"
             ref="transclude"
         ></sw-transclude>
         <History :pageName="pageName" ref="history" v-else></History>
@@ -95,12 +86,11 @@ const transclude = computed<HTMLElement | null | undefined>(() => {
 function editPage() {
     const html = transclude.value?.getAttribute("srcdoc");
     const status = transclude.value?.getAttribute("status");
-    let draftKey: string | undefined;
     if (html && status === "ok") {
-        draftKey = `draft:${crypto.randomUUID()}`;
+        const draftKey = `draft:${props.pageName}`;
         window.localStorage.setItem(draftKey, html);
     }
-    router.push({ name: "edit", params: { draftKey } });
+    router.push(`/e/${props.pageName}`);
 }
 
 const loggingIn = ref(false);

@@ -7,7 +7,7 @@
         </ul>
         <ul v-else-if="$graffitiSession.value">
             <li>
-                <RouterLink :to="{ name: 'view' }" class="warning"
+                <RouterLink :to="`/w/${pageName}`" class="warning"
                     >Cancel</RouterLink
                 >
             </li>
@@ -182,7 +182,7 @@
             <form @submit.prevent="">
                 <button @click="$graffiti.login()">Log in to edit</button>
                 <button
-                    @click="$router.push({ name: 'view' })"
+                    @click="$router.push(`/w/${pageName}`)"
                     class="secondary"
                 >
                     Cancel
@@ -193,7 +193,7 @@
         <div
             v-if="!$graffitiSession?.value"
             class="dialog-backdrop"
-            @click="$router.push({ name: 'view' })"
+            @click="$router.push(`/w/${pageName}`)"
         ></div>
     </main>
 </template>
@@ -214,7 +214,6 @@ const router = useRouter();
 
 const props = defineProps<{
     pageName: string;
-    draftKey?: string;
 }>();
 const pageName = toRef(props, "pageName");
 
@@ -229,9 +228,8 @@ const template = `<!doctype html>
     <h1>Your app here!</h1>
 </body>`;
 
-let draftHtml = props.draftKey
-    ? (localStorage.getItem(props.draftKey) ?? template)
-    : template;
+const draftKey = `draft:${props.pageName}`;
+let draftHtml = localStorage.getItem(draftKey) ?? template;
 
 // Initialize the editor, diff and preview with the existing HTML
 const editorHtml = ref(draftHtml);
@@ -373,10 +371,7 @@ onBeforeRouteLeave((to, from, next) => {
     const leave =
         editorHtml.value === draftHtml ||
         confirm("You have unsaved changes, are you sure you want to cancel?");
-    if (leave && props.draftKey) {
-        // Delete the hanging draft
-        localStorage.removeItem(props.draftKey);
-    }
+    if (leave) localStorage.removeItem(draftKey);
     leave ? next() : next(false);
 });
 const beforeUnload = (event: BeforeUnloadEvent) => {
@@ -418,7 +413,7 @@ async function publish(session: GraffitiSession, as?: boolean) {
     );
 
     draftHtml = publishedHtml;
-    router.push({ name: "view", params: { pageName: publishName } });
+    router.push(`/w/${publishName}`);
     publishing.value = false;
 }
 
