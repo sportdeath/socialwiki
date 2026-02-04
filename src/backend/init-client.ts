@@ -4,7 +4,10 @@ import { GraffitiRpcClient } from "./graffiti-client";
 import { installTransclude } from "./transclude";
 import { installNavigation } from "./navigation-client";
 
-const currentScriptSrc = (document.currentScript as HTMLScriptElement).src;
+const isClassic = document.currentScript !== null;
+const currentScriptSrc = isClassic
+  ? (document.currentScript as HTMLScriptElement).src
+  : import.meta.url;
 const origin = new URL(currentScriptSrc).origin;
 
 declare global {
@@ -22,10 +25,12 @@ if (window.top !== window) {
   });
 
   // Inject the import map
-  const importScript = document.createElement("script");
-  importScript.type = "importmap";
-  importScript.textContent = JSON.stringify(importMap);
-  document.head.append(importScript);
+  if (isClassic) {
+    const importScript = document.createElement("script");
+    importScript.type = "importmap";
+    importScript.textContent = JSON.stringify(importMap);
+    document.head.append(importScript);
+  }
 
   // Then inject graffiti
   window.graffiti = GraffitiRpcClient;

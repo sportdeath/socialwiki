@@ -29,6 +29,9 @@ function serveInitJs(): Plugin {
               write: false,
               sourcemap: "inline",
               platform: "browser",
+              logOverride: {
+                "empty-import-meta": "silent",
+              },
             });
 
             res.setHeader("Content-Type", "application/javascript");
@@ -56,6 +59,9 @@ function buildInitJs(): Plugin {
           platform: "browser",
           sourcemap: false,
           minify: true,
+          logOverride: {
+            "empty-import-meta": "silent",
+          },
         });
       }
     },
