@@ -80,15 +80,15 @@
 </template>
 
 <script lang="ts" setup>
-import "../style.css";
-import TwoPaneLayout from "./TwoPaneLayout.vue";
+import "../../style.css";
+import TwoPaneLayout from "../TwoPaneLayout.vue";
 import type { GraffitiSession } from "@graffiti-garden/api";
 import {
     createPageVersion,
     deletePageVersion,
     pageVersionSchema,
     type PageVersionObject,
-} from "../backend/page-versions";
+} from "../../backend/page-versions";
 import {
     useGraffiti,
     GraffitiActorToHandle,
@@ -96,7 +96,7 @@ import {
 } from "@graffiti-garden/wrapper-vue";
 import { computed, ref, watch } from "vue";
 import { useTemplateRef } from "vue";
-import { initLens } from "../backend/lens-client";
+import { initLens } from "../../backend/lens-client";
 
 const pageName = ref("");
 

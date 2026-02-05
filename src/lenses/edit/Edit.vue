@@ -153,33 +153,36 @@
             </template>
         </TwoPaneLayout>
 
-        <dialog v-if="!$graffitiSession?.value" open>
-            <form @submit.prevent="">
-                <button @click="$graffiti.login()">Log in to edit</button>
-                <button @click="$router.push(`/${pageName}`)" class="secondary">
-                    Cancel
-                </button>
-            </form>
-        </dialog>
-
-        <div
-            v-if="!$graffitiSession?.value"
-            class="dialog-backdrop"
-            @click="$router.push(`/${pageName}`)"
-        ></div>
+        <template v-if="$graffitiSession.value === null">
+            <dialog open>
+                <form @submit.prevent="">
+                    <button @click="$graffiti.login()">Log in to edit</button>
+                    <button
+                        @click="$router.push(`/${pageName}`)"
+                        class="secondary"
+                    >
+                        Cancel
+                    </button>
+                </form>
+            </dialog>
+            <div
+                class="dialog-backdrop"
+                @click="$router.push(`/${pageName}`)"
+            ></div>
+        </template>
     </main>
 </template>
 
 <script setup lang="ts">
+import "../../style.css";
 import { ref, toRef, watch, computed, onBeforeUnmount, onMounted } from "vue";
 import * as monaco from "monaco-editor";
 import { CodeEditor, DiffEditor } from "monaco-editor-vue3";
-import TwoPaneLayout from "./TwoPaneLayout.vue";
+import TwoPaneLayout from "../TwoPaneLayout.vue";
 import { useGraffiti } from "@graffiti-garden/wrapper-vue";
-import { createPageVersion } from "../backend/page-versions";
+import { createPageVersion } from "../../backend/page-versions";
 import type { GraffitiSession } from "@graffiti-garden/api";
 import { initVimMode } from "monaco-vim";
-import "../style.css";
 
 const props = defineProps<{
     pageName: string;

@@ -1,6 +1,6 @@
 import { createApp } from "vue";
 import { GraffitiPlugin } from "@graffiti-garden/wrapper-vue";
-import History from "../../frontend/History.vue";
+import History from "./History.vue";
 import type { Graffiti } from "@graffiti-garden/api";
 
 createApp(History)
