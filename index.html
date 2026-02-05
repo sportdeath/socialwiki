@@ -3,21 +3,20 @@
     <head>
         <meta charset="utf-8" />
         <title>Social Wiki</title>
-        <meta
-            name="viewport"
-            content="width=device-width, initial-scale=1, shrink-to-fit=no"
-        />
-        <!--<meta name="color-scheme" content="light dark" />-->
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
         <script>
-            const redirect = sessionStorage.redirect;
-            delete sessionStorage.redirect;
-            if (redirect && redirect !== location.href) {
-                history.replaceState(null, null, redirect);
+            const redirectAddress = sessionStorage.redirectAddress;
+            sessionStorage.redirectAddress = location.href.slice(
+                location.origin.length,
+            );
+            delete sessionStorage.redirectAddress;
+            if (redirectAddress) {
+                history.replaceState(null, null, "/#" + redirectAddress);
             }
         </script>
     </head>
     <body>
         <div id="app"></div>
-        <script type="module" src="./src/main.ts"></script>
+        <script type="module" src="/src/main.ts"></script>
     </body>
 </html>

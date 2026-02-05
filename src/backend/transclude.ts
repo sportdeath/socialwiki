@@ -1,14 +1,24 @@
 import type { Graffiti } from "@graffiti-garden/api";
-import {
-  getPageVersions,
-  pageVersionSchema,
-  type PageVersionObject,
-} from "./page-versions";
+import { inputLensAddress, serveLens } from "./lens-server";
+
+const lenses = {
+  view: "src/lenses/view/index.html",
+  edit: "src/lenses/edit/index.html",
+  history: "src/lenses/history/index.html",
+  version: "src/lenses/version/index.html",
+};
+type Lens = keyof typeof lenses;
+function assertLens(x: string): asserts x is Lens {
+  if (!(x in lenses)) {
+    throw new Error("Unrecognized lens");
+  }
+}
 
 export function installTransclude(graffiti: Graffiti, origin: string) {
   class SocialWikiTransclude extends HTMLElement {
     protected iframe: HTMLIFrameElement;
     protected renderVersion = 0;
+    protected destroyLens = () => {};
 
     constructor() {
       super();
@@ -18,14 +28,24 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
 
       // Create iframe
       this.iframe = document.createElement("iframe");
-      this.iframe.title = "SocialWiki Page";
+      this.iframe.title = "Social.Wiki Transclude";
       this.iframe.loading = "lazy";
       this.iframe.sandbox.add(
         "allow-scripts",
         "allow-forms",
         "allow-modals",
         "allow-pointer-lock",
+        "allow-downloads",
       );
+
+      this.destroyLens = serveLens(this.iframe, (status, srcdoc) => {
+        this.setAttribute("status", status);
+        if (srcdoc === undefined) {
+          this.removeAttribute("srcdoc");
+        } else {
+          this.setAttribute("srcdoc", srcdoc);
+        }
+      });
 
       // Add styling
       const style = document.createElement("style");
@@ -46,72 +66,76 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
       shadow.append(style, this.iframe);
     }
 
-    alive = true;
+    protected alive = true;
     disconnectedCallback() {
       this.alive = false;
+      this.destroyLens();
     }
 
-    currentSrc = "";
-    currentSrcDoc = "";
-    currentVersion: null | string = null;
+    protected currentSrc = "";
+    protected currentLens = "";
+    protected lensReadyPromise: Promise<void> | null = null;
     async renderPage() {
       if (!this.alive) return;
 
       const src = this.getAttribute("src");
       if (src === null) {
         const srcdoc = this.getAttribute("srcdoc");
-        return srcdoc
-          ? this.setSrcDoc(srcdoc)
-          : this.pageError("Transclude must have a src or srcdoc attribute");
+        return srcdoc ? this.setSrcDoc(srcdoc, "ok") : this.pageLoading();
       }
 
-      const version = this.getAttribute("version");
-      if (this.currentSrc === src && this.currentVersion === version) return;
-      this.currentSrc = src;
-      this.currentVersion = version;
+      if (this.currentSrc === src) return;
 
-      const url = new URL(src, origin);
-      if (url.origin !== origin) {
-        return this.pageError(`Cannot transclude cross origin: ${src}`);
-      }
-      const pageName = url.pathname.match(/^\/w\/(.+)$/)?.[1];
-      if (typeof pageName !== "string") {
+      const url = new URL(src, origin).toString();
+      if (!url.startsWith(origin + "/#/")) {
         return this.pageError(`Could not extract page name from src: ${src}`);
       }
-      // TODO
-      const query = url.search;
-      const hash = url.hash;
+      const route = url.slice(origin.length + 3);
+
+      // The "lens" is everything before the first "/"
+      // The "address" is everything after the first "/"
+      const [lens, address] = route.split(/\/(.+)/).filter(Boolean);
 
       const token = ++this.renderVersion;
+
+      if (this.currentLens === lens) {
+        this.currentSrc = src;
+        await this.lensReadyPromise;
+        if (!this.alive || token !== this.renderVersion) return;
+        inputLensAddress(this.iframe, address);
+        return;
+      }
+
       this.pageLoading();
 
+      this.currentSrc = src;
+      this.currentLens = lens;
+
       try {
-        let selectedPageVersion: PageVersionObject;
+        assertLens(lens);
+        const lensSource = lenses[lens];
 
-        if (version === null) {
-          const pageVersions = await getPageVersions(graffiti, pageName);
+        this.lensReadyPromise = (async () => {
+          const response = await fetch(`${origin}/${lensSource}`);
+          if (!this.alive || token !== this.renderVersion) return;
 
-          // TODO: add more logic here
-          const potentialPageVersion = pageVersions.at(0);
-          if (!potentialPageVersion) return this.pageNotFound(pageName);
-          selectedPageVersion = potentialPageVersion;
-        } else {
-          selectedPageVersion = await graffiti.get<
-            ReturnType<typeof pageVersionSchema>
-          >(version, pageVersionSchema(pageName));
-        }
+          if (!response.ok) {
+            throw new Error(`Error fetching lens: ${response.statusText}`);
+          }
+
+          const html = await response.text();
+          if (!this.alive || token !== this.renderVersion) return;
+
+          this.setSrcDoc(html, "loading");
+          await new Promise((resolve) => {
+            this.iframe.addEventListener("load", resolve, { once: true });
+          });
+        })();
+
+        await this.lensReadyPromise;
         if (!this.alive || token !== this.renderVersion) return;
 
-        const media = await graffiti.getMedia(
-          selectedPageVersion.value.result.media,
-          {
-            types: ["text/html"],
-          },
-        );
-        if (!this.alive || token !== this.renderVersion) return;
-        const html = await media.data.text();
-        if (!this.alive || token !== this.renderVersion) return;
-        this.setSrcDoc(html);
+        inputLensAddress(this.iframe, address);
       } catch (e) {
         if (!this.alive || token !== this.renderVersion) return;
         return this.pageError(e instanceof Error ? e.message : String(e));
@@ -126,32 +150,17 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
     pageError(e: string) {
       this.setSrcDoc(error(e), "error");
     }
-    setSrcDoc(srcdoc: string, status?: string) {
+    currentSrcDoc = "";
+    setSrcDoc(srcdoc: string, status: string) {
       if (this.currentSrcDoc === srcdoc) return;
       this.currentSrcDoc = srcdoc;
       this.iframe.srcdoc = srcdoc;
-      this.setAttribute("srcdoc", srcdoc);
-      this.setAttribute("status", status ?? "ok");
-      // Send the iframe its own source if status is ok
-      if (status === undefined)
-        this.iframe.addEventListener(
-          "load",
-          () => {
-            this.iframe.contentWindow?.postMessage(
-              {
-                type: "transcluded-srcdoc",
-                srcdoc,
-              },
-              "*",
-            );
-          },
-          { once: true },
-        );
+      this.setAttribute("status", status);
     }
 
     // Rerender on initialization or src/srcdoc changes
     static get observedAttributes(): string[] {
-      return ["src", "srcdoc", "version"];
+      return ["src", "srcdoc"];
     }
     connectedCallback() {
       this.renderPage();
@@ -284,7 +293,7 @@ const pageNotFound = (pageName: string, origin: string) => `
         <main>
             <h1>Nothing here…yet.</h1>
             <p>
-                <a href="/e/${pageName}">
+                <a href="#/edit/${pageName}">
                     Edit page
                 </a>
             </p>

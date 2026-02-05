@@ -1,29 +1,4 @@
 <template>
-    <Header :pageName="pageName" :disabled="true">
-        <ul v-if="publishing">
-            <li>
-                <button class="selected" disabled>Publishing…</button>
-            </li>
-        </ul>
-        <ul v-else-if="$graffitiSession.value">
-            <li>
-                <RouterLink :to="`/w/${pageName}`" class="warning"
-                    >Cancel</RouterLink
-                >
-            </li>
-            <li>
-                <button @click="publish($graffitiSession.value)">
-                    Publish
-                </button>
-            </li>
-            <li>
-                <button @click="publish($graffitiSession.value, true)">
-                    Publish as…
-                </button>
-            </li>
-        </ul>
-    </Header>
-
     <main>
         <TwoPaneLayout left-title="Editor" right-title="Preview">
             <template #left-controls>
@@ -144,8 +119,8 @@
                         :theme="editorTheme"
                         :options="monacoOptions"
                         class="code-editor"
-                        @editorDidMount="onEditorDidMount"
                     />
+                    <!-- @editorDidMount="onEditorDidMount" -->
 
                     <DiffEditor
                         v-else
@@ -181,10 +156,7 @@
         <dialog v-if="!$graffitiSession?.value" open>
             <form @submit.prevent="">
                 <button @click="$graffiti.login()">Log in to edit</button>
-                <button
-                    @click="$router.push(`/w/${pageName}`)"
-                    class="secondary"
-                >
+                <button @click="$router.push(`/${pageName}`)" class="secondary">
                     Cancel
                 </button>
             </form>
@@ -193,7 +165,7 @@
         <div
             v-if="!$graffitiSession?.value"
             class="dialog-backdrop"
-            @click="$router.push(`/w/${pageName}`)"
+            @click="$router.push(`/${pageName}`)"
         ></div>
     </main>
 </template>
@@ -202,15 +174,12 @@
 import { ref, toRef, watch, computed, onBeforeUnmount, onMounted } from "vue";
 import * as monaco from "monaco-editor";
 import { CodeEditor, DiffEditor } from "monaco-editor-vue3";
-import Header from "./Header.vue";
 import TwoPaneLayout from "./TwoPaneLayout.vue";
-import { useRouter, onBeforeRouteLeave } from "vue-router";
 import { useGraffiti } from "@graffiti-garden/wrapper-vue";
 import { createPageVersion } from "../backend/page-versions";
 import type { GraffitiSession } from "@graffiti-garden/api";
 import { initVimMode } from "monaco-vim";
-
-const router = useRouter();
+import "../style.css";
 
 const props = defineProps<{
     pageName: string;
@@ -228,8 +197,7 @@ const template = `<!doctype html>
     <h1>Your app here!</h1>
 </body>`;
 
-const draftKey = `draft:${props.pageName}`;
-let draftHtml = localStorage.getItem(draftKey) ?? template;
+let draftHtml = template;
 
 // Initialize the editor, diff and preview with the existing HTML
 const editorHtml = ref(draftHtml);
@@ -367,13 +335,6 @@ watch(livePreview, (enabled, oldVal) => {
 });
 
 // --- Publishing ----------------------------------------------
-onBeforeRouteLeave((to, from, next) => {
-    const leave =
-        editorHtml.value === draftHtml ||
-        confirm("You have unsaved changes, are you sure you want to cancel?");
-    if (leave) localStorage.removeItem(draftKey);
-    leave ? next() : next(false);
-});
 const beforeUnload = (event: BeforeUnloadEvent) => {
     if (editorHtml.value === draftHtml) return;
 

@@ -1,28 +1,28 @@
 <template>
     <Header
-        :pageName="pageName"
-        @update:pageName="$router.push(`/w/${$event}`)"
+        :pageName="address"
+        @update:pageName="$router.push(`/${lens}/${$event}`)"
     >
         <ul>
             <li>
                 <RouterLink
-                    :to="`/w/${pageName}`"
+                    :to="`/view/${address}`"
                     title="The current version of this page"
                 >
                     View
                 </RouterLink>
             </li>
             <li>
-                <button
-                    @click="editPage"
+                <RouterLink
+                    :to="`/edit/${address}`"
                     title="Edit the source code of this page"
                 >
                     Edit
-                </button>
+                </RouterLink>
             </li>
             <li>
                 <RouterLink
-                    :to="`/h/${pageName}`"
+                    :to="`/history/${address}`"
                     title="Past revisions of this page"
                 >
                     History
@@ -47,51 +47,36 @@
     </Header>
     <main>
         <sw-transclude
-            v-if="!history"
-            :src="`/w/${pageName}`"
+            :src="`#/${lens}/${address}`"
             ref="transclude"
         ></sw-transclude>
-        <History :pageName="pageName" ref="history" v-else></History>
     </main>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, useTemplateRef } from "vue";
+import { ref, useTemplateRef, watch } from "vue";
 import Header from "./Header.vue";
-import History from "./History.vue";
 import { useGraffiti } from "@graffiti-garden/wrapper-vue";
 import type { GraffitiSession } from "@graffiti-garden/api";
 import { useRouter } from "vue-router";
 const graffiti = useGraffiti();
 
-const props = withDefaults(
-    defineProps<{
-        pageName: string;
-        history?: boolean;
-    }>(),
-    {
-        history: false,
-    },
-);
+const props = defineProps<{
+    lens: string;
+    address: string;
+}>();
 
-const router = useRouter();
-const viewTransclude = useTemplateRef<HTMLElement>("transclude");
-const historyComponent =
-    useTemplateRef<InstanceType<typeof History>>("history");
-const transclude = computed<HTMLElement | null | undefined>(() => {
-    return props.history
-        ? historyComponent.value?.transclude
-        : viewTransclude.value;
-});
-function editPage() {
-    const html = transclude.value?.getAttribute("srcdoc");
-    const status = transclude.value?.getAttribute("status");
-    if (html && status === "ok") {
-        const draftKey = `draft:${props.pageName}`;
-        window.localStorage.setItem(draftKey, html);
-    }
-    router.push(`/e/${props.pageName}`);
-}
+// const router = useRouter();
+// const transclude = useTemplateRef<HTMLElement>("transclude");
+// function editPage() {
+//     const html = transclude.value?.getAttribute("srcdoc");
+//     const status = transclude.value?.getAttribute("status");
+//     if (html && status === "ok") {
+//         const draftKey = `draft:${props.pageName}`;
+//         window.localStorage.setItem(draftKey, html);
+//     }
+//     router.push(`${props.pageName}/edit`);
+// }
 
 const loggingIn = ref(false);
 const loggingOut = ref(false);

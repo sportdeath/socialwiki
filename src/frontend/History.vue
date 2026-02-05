@@ -69,19 +69,18 @@
         <template #right-pane>
             <sw-transclude
                 ref="transclude"
-                :src="`/w/${pageName}`"
-                :version="selectedPageVersion?.url"
+                :src="
+                    selectedPageVersion
+                        ? `#/version/${selectedPageVersion.value.result.media}`
+                        : ''
+                "
             ></sw-transclude>
         </template>
     </TwoPaneLayout>
-    <!-- <ul>
-        <li>TODO!!</li>
-        <li>Filter by authorship (makes it "look" owned)</li>
-        <li>Filters (by author or previous) go into the URL so they can be shared</li>
-    </ul> -->
 </template>
 
 <script lang="ts" setup>
+import "../style.css";
 import TwoPaneLayout from "./TwoPaneLayout.vue";
 import type { GraffitiSession } from "@graffiti-garden/api";
 import {
@@ -97,17 +96,21 @@ import {
 } from "@graffiti-garden/wrapper-vue";
 import { computed, ref, watch } from "vue";
 import { useTemplateRef } from "vue";
+import { initLens } from "../backend/lens-client";
 
-const props = defineProps<{
-    pageName: string;
-}>();
+const pageName = ref("");
+
+initLens(async (address: string) => {
+    // TODO: fix this and extract query/hash
+    pageName.value = address;
+});
 
 const transclude = useTemplateRef<HTMLElement>("transclude");
 defineExpose({ transclude });
 
 const { objects: pageVersionsRaw } = useGraffitiDiscover(
-    () => [props.pageName],
-    () => pageVersionSchema(props.pageName),
+    () => [pageName.value],
+    () => pageVersionSchema(pageName.value),
 );
 const pageVersions = computed(() =>
     // TODO: make a sort function that does the topological sort

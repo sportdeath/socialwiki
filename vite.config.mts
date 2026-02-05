@@ -80,4 +80,18 @@ export default defineConfig({
     serveInitJs(),
     buildInitJs(),
   ],
+  server: {
+    cors: true,
+  },
+  build: {
+    rollupOptions: {
+      input: {
+        main: resolve(__dirname, "index.html"),
+        view: resolve(__dirname, "src/lenses/view/index.html"),
+        edit: resolve(__dirname, "src/lenses/edit/index.html"),
+        history: resolve(__dirname, "src/lenses/history/index.html"),
+        version: resolve(__dirname, "src/lenses/version/index.html"),
+      },
+    },
+  },
 });

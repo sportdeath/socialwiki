@@ -9,7 +9,7 @@
     "resolveJsonModule": true,
     "verbatimModuleSyntax": true,
     "types": ["vite/client"],
-    "plugins": [{ "name": "@vue/typescript-plugin" }]
+    "plugins": [{ "name": "@vue/typescript-plugin" }],
   },
-  "include": ["src"]
+  "include": ["src"],
 }
