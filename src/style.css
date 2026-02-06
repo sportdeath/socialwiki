@@ -117,3 +117,10 @@ h1 {
     font-family: "Linux Libertine", "Georgia", "Times", "Source Serif 4", serif;
     color: var(--title-color);
 }
+
+header nav > ul {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    list-style: none;
+}

@@ -235,13 +235,6 @@ header {
         font-size: 0.9rem;
     }
 
-    nav > ul {
-        display: flex;
-        align-items: center;
-        gap: 0.7rem;
-        list-style: none;
-    }
-
     details {
         display: contents;
     }

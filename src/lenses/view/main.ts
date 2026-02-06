@@ -1,17 +1,23 @@
 import type { Graffiti } from "@graffiti-garden/api";
 import { initLens, outputLensStatus } from "../../backend/lens-client";
 import { getPageVersions } from "../../backend/page-versions";
+import {
+  ErrorPage,
+  LoadingPage,
+  PageNotFound,
+} from "../../backend/status-pages";
 
-const graffiti = new window.graffiti() as unknown as Graffiti;
+const graffiti = new window.graffiti();
 
 let currentAddress = "";
 const transclude = document.querySelector("#transclude");
-transclude?.setAttribute("srcdoc", "Loading");
+transclude?.setAttribute("srcdoc", LoadingPage);
 
 initLens(async (address: string) => {
+  // TODO: select out the page name from the address
   if (address === currentAddress) return;
   currentAddress = address;
-  transclude?.setAttribute("srcdoc", "Loading");
+  transclude?.setAttribute("srcdoc", LoadingPage);
 
   try {
     const pageVersions = await getPageVersions(graffiti, address);
@@ -20,7 +26,10 @@ initLens(async (address: string) => {
     const potentialPageVersion = pageVersions.at(0);
     if (!potentialPageVersion) {
       outputLensStatus("not-found");
-      transclude?.setAttribute("srcdoc", "Not found");
+      transclude?.setAttribute(
+        "srcdoc",
+        PageNotFound(address, window.topOrigin),
+      );
       return;
     }
 
@@ -41,7 +50,7 @@ initLens(async (address: string) => {
     outputLensStatus("error");
     transclude?.setAttribute(
       "srcdoc",
-      `Error: ${e instanceof Error ? e.message : String(e)}`,
+      ErrorPage(e instanceof Error ? e.message : String(e)),
     );
   }
 });
