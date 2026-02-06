@@ -18,13 +18,6 @@ const currentScriptSrc = isClassic
 window.topOrigin = new URL(currentScriptSrc).origin;
 
 if (window.top !== window) {
-  // If an iframe, ask the "server" for a connection
-  window.top?.postMessage("graffiti-init", "*");
-  // Destroy that connection on close
-  addEventListener("beforeunload", () => {
-    window.top?.postMessage("graffiti-destroy", "*");
-  });
-
   // Inject the import map
   if (isClassic) {
     const importScript = document.createElement("script");

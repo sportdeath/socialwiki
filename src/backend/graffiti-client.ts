@@ -79,6 +79,8 @@ async function remote() {
   return remote_;
 }
 
+let isFirstClient = true;
+
 // @ts-ignore - this implements Graffiti but the programmatic
 // construction confuses the type checker.
 export class GraffitiRpcClient extends Graffiti {
@@ -86,6 +88,17 @@ export class GraffitiRpcClient extends Graffiti {
 
   constructor() {
     super();
+
+    if (isFirstClient) {
+      isFirstClient = false;
+      // Ask the "server" for a connection
+      window.top?.postMessage("graffiti-init", "*");
+      // Destroy that connection on close
+      addEventListener("beforeunload", () => {
+        window.top?.postMessage("graffiti-destroy", "*");
+      });
+    }
+
     // Bind all "simple" methods to their remote counterparts
     for (const m of simpleMethods) {
       (this as any)[m] = async (...args: any[]) => {

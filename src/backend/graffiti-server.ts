@@ -1,10 +1,9 @@
-import { connect, Reply, WindowMessenger, type Connection } from "penpal";
+import { connect, Reply, WindowMessenger } from "penpal";
 import type {
   Graffiti,
   GraffitiLoginEvent,
   GraffitiLogoutEvent,
   GraffitiObjectStream,
-  GraffitiObjectStreamReturn,
   GraffitiSession,
   GraffitiSessionInitializedEvent,
 } from "@graffiti-garden/api";
