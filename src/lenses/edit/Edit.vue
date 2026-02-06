@@ -174,7 +174,6 @@
 </template>
 
 <script setup lang="ts">
-import "../../style.css";
 import { ref, toRef, watch, computed, onBeforeUnmount, onMounted } from "vue";
 import * as monaco from "monaco-editor";
 import { CodeEditor, DiffEditor } from "monaco-editor-vue3";

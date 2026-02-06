@@ -4,10 +4,56 @@
     padding: 0;
 }
 
-/* Body is exactly screen view */
+:root {
+    color-scheme: light dark;
+    --background-color: #fff;
+    --text-color: #202122;
+    --title-color: #101418;
+    --border-color: #a2a9b1;
+    --border-color-hover: #27292d;
+    --link-color: #36c;
+    --link-hover-color: #3056a9;
+    --secondary-color: #54595d;
+    --secondary-hover-color: #202122;
+    --warning-color: #bf3c2c;
+    --warning-hover-color: #9f3526;
+    --background-color-interactive: #eaecf0;
+    --background-color-interactive-hover: #dadde3;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        color-scheme: dark;
+        --background-color: #101418;
+        --text-color: #eaecf0;
+        --title-color: #f8f9fa;
+        --border-color: #72777d;
+        --border-color-hover: #a2a9b1;
+        --link-color: #88a3e8;
+        --link-hover-color: #a6bbf5;
+        --secondary-color: #a2a9b1;
+        --secondary-hover-color: #c8ccd1;
+        --warning-color: #fd7865;
+        --warning-hover-color: #fea898;
+        --background-color-interactive: #27292d;
+        --background-color-interactive-hover: #404244;
+    }
+}
+
 body {
-    margin: 0;
-    padding: 0;
+    background: var(--background-color);
+    color: var(--text-color);
+    font-family:
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        Roboto,
+        Helvetica,
+        Arial,
+        sans-serif;
+
+    /* Body is exactly screen view */
     height: 100dvh;
     width: 100dvw;
     display: flex;
@@ -67,8 +113,11 @@ button {
 }
 
 h1 {
-    font-family: "Linux Libertine", "Georgia", "Times", "Source Serif 4", serif;
     color: var(--title-color);
+}
+
+header h1 {
+    font-family: "Linux Libertine", "Georgia", "Times", "Source Serif 4", serif;
 }
 
 header nav > ul {
@@ -76,4 +125,46 @@ header nav > ul {
     align-items: center;
     gap: 0.7rem;
     list-style: none;
+}
+
+/* status dots */
+.dots::after {
+    content: "";
+    display: inline-block;
+    width: 3ch;
+    animation: dots 0.7s linear infinite;
+}
+
+@keyframes dots {
+    0% {
+        content: "";
+    }
+    25% {
+        content: ".";
+    }
+    50% {
+        content: "..";
+    }
+    75% {
+        content: "...";
+    }
+}
+
+.status-button {
+    background: var(--background-color-interactive);
+    padding: 1rem;
+    border-radius: 0.5rem;
+    font-size: 2rem;
+    font-weight: bold;
+    border: 2px solid var(--border-color);
+}
+
+.status-button:hover {
+    background: var(--background-color-interactive-hover);
+}
+
+body:has(.status) {
+    align-items: center;
+    justify-content: center;
+    gap: 1rem;
 }

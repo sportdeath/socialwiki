@@ -80,7 +80,6 @@
 </template>
 
 <script lang="ts" setup>
-import "../../style.css";
 import TwoPaneLayout from "../TwoPaneLayout.vue";
 import type { GraffitiSession } from "@graffiti-garden/api";
 import {

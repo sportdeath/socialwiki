@@ -1,7 +1,8 @@
 import { defineConfig, type Plugin } from "vite";
 import vue from "@vitejs/plugin-vue";
-import { resolve } from "node:path";
-import { build } from "esbuild";
+import { resolve, isAbsolute, join } from "node:path";
+import { build, type Plugin as EsbuildPlugin } from "esbuild";
+import fs from "node:fs/promises";
 
 const files = [
   {
@@ -14,6 +15,35 @@ const files = [
   },
 ];
 
+// Make Esbuild understand vite string imports
+// This is necessary to bundle styling for status
+// pages into transclude
+function inlineCssQueryPlugin(): EsbuildPlugin {
+  return {
+    name: "inline-css-query",
+    setup(build) {
+      build.onResolve({ filter: /\.css\?(inline|raw)$/ }, (args) => {
+        const [withoutQuery] = args.path.split("?");
+        const abs = isAbsolute(withoutQuery)
+          ? withoutQuery
+          : join(args.resolveDir, withoutQuery);
+
+        return { path: abs, namespace: "inline-css-query" };
+      });
+
+      build.onLoad(
+        { filter: /.*/, namespace: "inline-css-query" },
+        async (args) => {
+          const css = await fs.readFile(args.path, "utf8");
+          return {
+            contents: `export default ${JSON.stringify(css)};`,
+            loader: "js",
+          };
+        },
+      );
+    },
+  };
+}
 function serveInitJs(): Plugin {
   return {
     name: "serve-init-js",
@@ -29,6 +59,7 @@ function serveInitJs(): Plugin {
               write: false,
               sourcemap: "inline",
               platform: "browser",
+              plugins: [inlineCssQueryPlugin()],
               logOverride: {
                 "empty-import-meta": "silent",
               },
@@ -59,6 +90,7 @@ function buildInitJs(): Plugin {
           platform: "browser",
           sourcemap: false,
           minify: true,
+          plugins: [inlineCssQueryPlugin()],
           logOverride: {
             "empty-import-meta": "silent",
           },

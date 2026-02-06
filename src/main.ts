@@ -1,4 +1,3 @@
-import "./base.css";
 import "./style.css";
 import { createApp } from "vue";
 import {

@@ -5,17 +5,13 @@
         <title>Social Wiki View Lens</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="color-scheme" content="light dark" />
-        <style>
-            body {
-                width: 100dvw;
-                height: 100dvh;
-                margin: 0;
-            }
-        </style>
+        <link rel="stylesheet" href="/src/style.css" />
         <script type="module" src="/src/backend/init-client.ts"></script>
         <script type="module" src="/src/lenses/view/main.ts"></script>
     </head>
     <body>
-        <sw-transclude id="transclude">Loading...</sw-transclude>
+        <sw-transclude id="transclude">
+            <h1 class="status dots">Page loading</h1>
+        </sw-transclude>
     </body>
 </html>
