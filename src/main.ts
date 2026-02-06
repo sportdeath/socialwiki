@@ -10,7 +10,6 @@ import App from "./App.vue";
 import { GraffitiPlugin } from "@graffiti-garden/wrapper-vue";
 import { serveGraffiti } from "./backend/graffiti-server";
 import { installTransclude } from "./backend/transclude";
-import { serveNavigation } from "./backend/navigation-server";
 
 const router = createRouter({
   // Use web hash history so that the page name
@@ -52,38 +51,6 @@ const graffiti = serveGraffiti();
 // Add the web components
 const origin = window.location.origin;
 installTransclude(graffiti, origin);
-serveNavigation((to, fromSrcdoc) => {
-  const url = new URL(to, origin);
-  if (url.origin !== origin + "/#") {
-    window.location.href = url.toString();
-    return;
-  }
-  let route = url.toString().slice(origin.length + 2);
-
-  // Treat pure hashes or queries as relative.
-  // All other paths are treated as absolute.
-  // This ensures that copied pages operate exactly
-  // the same as each other.
-  if (route.startsWith("#") || route.startsWith("?")) {
-    const currentRoute = router.currentRoute;
-    console.log("current route is");
-    console.log(currentRoute);
-
-    // If editing a page, save the source in local
-    // storage because it is too large to be passed
-    // in the URL
-    if (route === "?edit") {
-      route += "=";
-      if (fromSrcdoc !== null) {
-        const draftKey = `draft:${crypto.randomUUID()}`;
-        localStorage.setItem(draftKey, fromSrcdoc);
-        route += `${draftKey}`;
-      }
-    }
-  }
-
-  router.push(route);
-});
 
 createApp(RouterView)
   .use(GraffitiPlugin, { graffiti })

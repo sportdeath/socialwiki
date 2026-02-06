@@ -58,7 +58,7 @@
                     </li>
                     <li>
                         <RouterLink
-                            :to="`/edit/${address}`"
+                            :to="`/edit/${address}?draft=${encodeURIComponent(srcdoc)}`"
                             title="Edit the source code of this page"
                         >
                             Edit
@@ -107,7 +107,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, useTemplateRef } from "vue";
+import { onBeforeUnmount, onMounted, onUnmounted, useTemplateRef } from "vue";
 import { ref, toRef, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useGraffiti } from "@graffiti-garden/wrapper-vue";
@@ -136,6 +136,38 @@ function logout(session: GraffitiSession) {
         loggingOut.value = false;
     });
 }
+
+// Watch the transclude srcdoc and src for changes.
+// Update the route to reflect the src and store the
+// srcdoc for the purpose of populating the edit draft.
+const transclude = useTemplateRef<HTMLElement>("transclude");
+const srcdoc = ref("");
+let observer: MutationObserver | undefined;
+onMounted(() => {
+    if (!transclude.value) return;
+    observer = new MutationObserver(() => {
+        srcdoc.value = transclude.value?.getAttribute("srcdoc") ?? "";
+
+        const src = transclude.value?.getAttribute("src") ?? "";
+
+        const url = new URL(src, window.origin).toString();
+        if (url.startsWith(window.origin + "/#")) {
+            const route = url.slice(window.origin.length + 2);
+            router.push(route);
+        } else {
+            window.location.href = url;
+        }
+    });
+    observer.observe(transclude.value, {
+        attributes: true,
+        attributeFilter: ["srcdoc", "src"],
+    });
+    // initialize value
+    srcdoc.value = transclude.value?.getAttribute("srcdoc") ?? "";
+});
+onBeforeUnmount(() => {
+    observer?.disconnect();
+});
 
 // Partially couple the input address to the route address
 // When the route changes, the input changes

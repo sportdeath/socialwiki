@@ -1,4 +1,3 @@
-import type { Graffiti } from "@graffiti-garden/api";
 import importMap from "./import-map.json";
 import { GraffitiRpcClient } from "./graffiti-client";
 import { installTransclude } from "./transclude";
@@ -18,7 +17,9 @@ const currentScriptSrc = isClassic
 window.topOrigin = new URL(currentScriptSrc).origin;
 
 if (window.top !== window) {
-  // Inject the import map
+  // Inject the import map if possible
+  // (this can only be done by classic scripts which
+  //  can execute before the import map is loaded)
   if (isClassic) {
     const importScript = document.createElement("script");
     importScript.type = "importmap";
@@ -29,6 +30,8 @@ if (window.top !== window) {
   // Then inject graffiti
   window.graffiti = GraffitiRpcClient;
 
+  // Give the page access to transclude,
+  // and the ability to navigate
   installTransclude(new window.graffiti(), window.topOrigin);
   installNavigation(window.topOrigin);
 } else {
@@ -60,15 +63,5 @@ if (window.top !== window) {
     transclude.style.height = "100dvh";
     transclude.setAttribute("srcdoc", html);
     document.body.appendChild(transclude);
-
-    // Other defaults
-    const metaCharset = document.createElement("meta");
-    metaCharset.setAttribute("charset", "utf-8");
-    document.head.appendChild(metaCharset);
-    const metaViewport = document.createElement("meta");
-    metaViewport.name = "viewport";
-    metaViewport.content =
-      "width=device-width, initial-scale=1, shrink-to-fit=no";
-    document.head.appendChild(metaViewport);
   });
 }

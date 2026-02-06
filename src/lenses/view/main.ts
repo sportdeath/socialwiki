@@ -10,8 +10,19 @@ import {
 const graffiti = new window.graffiti();
 
 let currentAddress = "";
-const transclude = document.querySelector("#transclude");
-transclude?.setAttribute("srcdoc", LoadingPage);
+const transclude = document.querySelector("#transclude") as HTMLElement;
+transclude.setAttribute("srcdoc", LoadingPage);
+
+// Watch the transclude src attribute.
+// If it changes, forward the navigation to the parent
+const observer = new MutationObserver(() => {
+  const to = transclude.getAttribute("src");
+  if (to) window.navigate(to);
+});
+observer.observe(transclude, {
+  attributes: true,
+  attributeFilter: ["src"],
+});
 
 initLens(async (address: string) => {
   // TODO: select out the page name from the address

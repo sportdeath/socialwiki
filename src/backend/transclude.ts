@@ -1,6 +1,7 @@
 import type { Graffiti } from "@graffiti-garden/api";
 import { inputLensAddress, serveLens } from "./lens-server";
 import { ErrorPage, LoadingPage } from "./status-pages";
+import { serveNavigation } from "./navigation-server";
 
 const lenses = {
   view: "src/lenses/view/index.html",
@@ -20,6 +21,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
     protected iframe: HTMLIFrameElement;
     protected renderVersion = 0;
     protected destroyLens = () => {};
+    protected destroyNavigation = () => {};
 
     constructor() {
       super();
@@ -65,15 +67,31 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
       `;
 
       shadow.append(style, this.iframe);
+
+      this.destroyNavigation = serveNavigation((to, top) => {
+        const url = new URL(to, origin).toString();
+
+        // If we are not the top and either the link
+        // is external or top is set, propogate the
+        // request to the root with another navigation
+        if (window.top !== window && (!url.startsWith(origin + "/#") || top)) {
+          window.navigate(to, true);
+          return;
+        }
+
+        // Otherwise change own source
+        this.setAttribute("src", to);
+      }, this.iframe);
     }
 
     protected alive = true;
     disconnectedCallback() {
       this.alive = false;
       this.destroyLens();
+      this.destroyNavigation();
     }
 
-    protected currentSrc = "";
+    protected currentRoute = "";
     protected currentLens = "";
     protected lensReadyPromise: Promise<void> | null = null;
     async renderPage() {
@@ -87,8 +105,6 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
           : this.setSrcDoc(LoadingPage, "loading");
       }
 
-      if (this.currentSrc === src) return;
-
       const url = new URL(src, origin).toString();
       if (!url.startsWith(origin + "/#/")) {
         return this.setSrcDoc(
@@ -97,6 +113,8 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         );
       }
       const route = url.slice(origin.length + 3);
+      if (this.currentRoute === route) return;
+      this.currentRoute = route;
 
       // The "lens" is everything before the first "/"
       // The "address" is everything after the first "/"
@@ -105,17 +123,14 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
       const token = ++this.renderVersion;
 
       if (this.currentLens === lens) {
-        this.currentSrc = src;
         await this.lensReadyPromise;
         if (!this.alive || token !== this.renderVersion) return;
         inputLensAddress(this.iframe, address);
         return;
       }
+      this.currentLens = lens;
 
       this.setSrcDoc(LoadingPage, "loading");
-
-      this.currentSrc = src;
-      this.currentLens = lens;
 
       try {
         assertLens(lens);

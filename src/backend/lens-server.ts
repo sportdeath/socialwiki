@@ -4,7 +4,7 @@ export function serveLens(
 ) {
   function onMessage(event: MessageEvent<unknown>) {
     // Make sure the message came from the iframe
-    if (iframe.contentWindow === event.source) return;
+    if (iframe.contentWindow !== event.source) return;
 
     const data = event.data;
     if (typeof data !== "object" || data === null) return;

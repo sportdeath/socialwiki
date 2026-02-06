@@ -1,26 +1,16 @@
 declare global {
   interface Window {
-    navigate: (to: string) => void;
+    navigate: (to: string, top?: boolean) => void;
   }
 }
 
 export function installNavigation(origin: string) {
-  // Listen from the server for the pages own source
-  let fromSrcdoc: string | null = null;
-  window.addEventListener("message", (event: MessageEvent<unknown>) => {
-    const data = event.data;
-    if (typeof data !== "object" || data === null) return;
-    const d = data as Record<string, unknown>;
-    if (d.type !== "transcluded-srcdoc" || typeof d.srcdoc !== "string") return;
-    fromSrcdoc = d.srcdoc;
-  });
-
-  window.navigate = (to: string) => {
-    window.top?.postMessage(
+  window.navigate = (to: string, top = false) => {
+    window.parent?.postMessage(
       {
-        type: "navigate",
+        type: "sw-navigate",
         to,
-        fromSrcdoc,
+        top,
       },
       "*",
     );
@@ -42,10 +32,7 @@ export function installNavigation(origin: string) {
 
     if (a.hasAttribute("download")) return;
 
-    // Only visit links intended for the top
-    if (window.parent !== window.top && a.target !== "_top") return;
-
     e.preventDefault();
-    window.navigate(a.href);
+    window.navigate(a.href, a.target === "_top");
   });
 }
