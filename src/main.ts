@@ -7,11 +7,11 @@ import {
   RouterView,
   stringifyQuery,
 } from "vue-router";
+import App from "./App.vue";
 import { GraffitiPlugin } from "@graffiti-garden/wrapper-vue";
 import { serveGraffiti } from "./backend/graffiti-server";
 import { installTransclude } from "./backend/transclude";
 import { serveNavigation } from "./backend/navigation-server";
-import Header from "./frontend/Header.vue";
 
 const router = createRouter({
   // Use web hash history so that the page name
@@ -33,7 +33,7 @@ const router = createRouter({
     },
     {
       path: "/:lens/:path(.+)",
-      component: Header,
+      component: App,
       props: (to) => {
         const hash = to.hash;
         const path = to.params.path;
