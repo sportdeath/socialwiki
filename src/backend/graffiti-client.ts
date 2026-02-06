@@ -79,10 +79,13 @@ async function remote() {
   return remote_;
 }
 
-export class GraffitiRpcClient {
+// @ts-ignore - this implements Graffiti but the programmatic
+// construction confuses the type checker.
+export class GraffitiRpcClient extends Graffiti {
   readonly sessionEvents = sessionEvents;
 
   constructor() {
+    super();
     // Bind all "simple" methods to their remote counterparts
     for (const m of simpleMethods) {
       (this as any)[m] = async (...args: any[]) => {
