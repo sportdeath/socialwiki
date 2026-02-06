@@ -4,17 +4,18 @@ import { GraffitiRpcClient } from "./graffiti-client";
 import { installTransclude } from "./transclude";
 import { installNavigation } from "./navigation-client";
 
+declare global {
+  interface Window {
+    graffiti: typeof GraffitiRpcClient;
+    topOrigin: string;
+  }
+}
+
 const isClassic = document.currentScript !== null;
 const currentScriptSrc = isClassic
   ? (document.currentScript as HTMLScriptElement).src
   : import.meta.url;
-const origin = new URL(currentScriptSrc).origin;
-
-declare global {
-  interface Window {
-    graffiti: typeof GraffitiRpcClient;
-  }
-}
+window.topOrigin = new URL(currentScriptSrc).origin;
 
 if (window.top !== window) {
   // If an iframe, ask the "server" for a connection
@@ -35,8 +36,8 @@ if (window.top !== window) {
   // Then inject graffiti
   window.graffiti = GraffitiRpcClient;
 
-  installTransclude(new window.graffiti() as unknown as Graffiti, origin);
-  installNavigation(origin);
+  installTransclude(new window.graffiti(), window.topOrigin);
+  installNavigation(window.topOrigin);
 } else {
   // If we are the top level window, wrap the content in an iframe
   // and spin up the RPC "server".
@@ -51,7 +52,7 @@ if (window.top !== window) {
     // Wait for the "server" to initialize
     await new Promise<void>((resolve, reject) => {
       const script = document.createElement("script");
-      script.src = `${origin}/init-server.js`;
+      script.src = `${window.topOrigin}/init-server.js`;
       script.onload = () => resolve();
       script.onerror = (e) => reject(e);
       document.head.append(script);
