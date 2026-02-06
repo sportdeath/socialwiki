@@ -1,3 +1,5 @@
+import "./base.css";
+import "./style.css";
 import { createApp } from "vue";
 import {
   createRouter,
@@ -5,12 +7,11 @@ import {
   RouterView,
   stringifyQuery,
 } from "vue-router";
-import "./style.css";
 import { GraffitiPlugin } from "@graffiti-garden/wrapper-vue";
 import { serveGraffiti } from "./backend/graffiti-server";
 import { installTransclude } from "./backend/transclude";
 import { serveNavigation } from "./backend/navigation-server";
-import View from "./frontend/View.vue";
+import Header from "./frontend/Header.vue";
 
 const router = createRouter({
   // Use web hash history so that the page name
@@ -32,7 +33,7 @@ const router = createRouter({
     },
     {
       path: "/:lens/:path(.+)",
-      component: View,
+      component: Header,
       props: (to) => {
         const hash = to.hash;
         const path = to.params.path;

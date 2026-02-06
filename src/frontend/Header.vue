@@ -13,32 +13,31 @@
                 isDropdownOpen = true;
                 isSmall && (navOpen = false);
             "
-            ref="bar"
-            @focusout="onBarLeave"
+            ref="address-form"
+            @focusout="onAddressLeave"
         >
             <input
                 type="text"
-                v-model="pageNameInput"
+                v-model="addressInput"
                 placeholder="Enter page name"
-                :disabled="disabled"
-                @mousedown="selectPageName"
-                @focusout="pageNameFocused = false"
+                @mousedown="selectAddress"
+                @focusout="addressFocused = false"
                 @dragstart.prevent
             />
             <ul
                 class="dropdown"
-                v-if="isDropdownOpen && pageNameInput !== pageName"
+                v-if="isDropdownOpen && addressInput !== address"
             >
                 <li>
                     <RouterLink
-                        :to="`/w/${pageName}`"
+                        :to="`/w/${address}`"
                         @click="
-                            pageNameInput = pageName;
+                            addressInput = address;
                             isDropdownOpen = false;
                         "
-                        v-if="pageNameInput !== pageName"
+                        v-if="addressInput !== address"
                     >
-                        Current page: {{ pageName }}
+                        Current page: {{ address }}
                     </RouterLink>
                 </li>
             </ul>
@@ -48,7 +47,49 @@
             <summary @click.prevent="navOpen = !navOpen">Menu</summary>
 
             <nav>
-                <slot></slot>
+                <ul>
+                    <li>
+                        <RouterLink
+                            :to="`/view/${address}`"
+                            title="The current version of this page"
+                        >
+                            View
+                        </RouterLink>
+                    </li>
+                    <li>
+                        <RouterLink
+                            :to="`/edit/${address}`"
+                            title="Edit the source code of this page"
+                        >
+                            Edit
+                        </RouterLink>
+                    </li>
+                    <li>
+                        <RouterLink
+                            :to="`/history/${address}`"
+                            title="Past revisions of this page"
+                        >
+                            History
+                        </RouterLink>
+                    </li>
+                    <li v-if="$graffitiSession.value === undefined">
+                        Loading...
+                    </li>
+                    <li v-else-if="$graffitiSession.value === null">
+                        <button @click="login" :disabled="loggingIn">
+                            {{ loggingIn ? "Logging in..." : "Log In" }}
+                        </button>
+                    </li>
+                    <li v-else>
+                        <button
+                            :class="{ selected: loggingOut }"
+                            @click="logout($graffitiSession.value)"
+                            class="secondary"
+                        >
+                            {{ loggingOut ? "Logging out..." : "Log Out" }}
+                        </button>
+                    </li>
+                </ul>
             </nav>
         </details>
         <div
@@ -57,42 +98,61 @@
             @pointerdown.prevent="onBackdropClick"
         ></div>
     </header>
+    <main>
+        <sw-transclude
+            :src="`#/${lens}/${address}`"
+            ref="transclude"
+        ></sw-transclude>
+    </main>
 </template>
 
 <script setup lang="ts">
 import { onMounted, onUnmounted, useTemplateRef } from "vue";
 import { ref, toRef, watch } from "vue";
 import { useRouter } from "vue-router";
-const props = withDefaults(
-    defineProps<{
-        pageName: string;
-        disabled?: boolean;
-    }>(),
-    {
-        disabled: false,
-    },
-);
-const pageName = toRef(props, "pageName");
-const disabled = toRef(props, "disabled");
+import { useGraffiti } from "@graffiti-garden/wrapper-vue";
+import type { GraffitiSession } from "@graffiti-garden/api";
 
-const emit = defineEmits(["update:pageName"]);
+const graffiti = useGraffiti();
 
-// Partially couple the input page name to the external page name
-// When external changes, internal changes.
-const pageNameInput = ref(pageName.value);
-watch(pageName, (newVal) => (pageNameInput.value = newVal), {
+const props = defineProps<{
+    lens: string;
+    address: string;
+}>();
+const address = toRef(props, "address");
+
+const loggingIn = ref(false);
+const loggingOut = ref(false);
+
+function login() {
+    loggingIn.value = true;
+    graffiti.login().finally(() => {
+        loggingIn.value = false;
+    });
+}
+function logout(session: GraffitiSession) {
+    loggingOut.value = true;
+    graffiti.logout(session).finally(() => {
+        loggingOut.value = false;
+    });
+}
+
+// Partially couple the input address to the route address
+// When the route changes, the input changes
+const addressInput = ref(address.value);
+watch(address, (newVal) => (addressInput.value = newVal), {
     immediate: true,
 });
-//  When internal is submitted, external changes
+// When input is submitted, the route changes
 function submitForm() {
-    emit("update:pageName", pageNameInput.value);
+    router.push(`/${props.lens}/${addressInput.value}`);
     (document.activeElement as HTMLElement | null)?.blur();
 }
 
 const isDropdownOpen = ref(false);
-const bar = useTemplateRef("bar");
-function onBarLeave(event: FocusEvent) {
-    const formEl = bar.value;
+const addressForm = useTemplateRef("address-form");
+function onAddressLeave(event: FocusEvent) {
+    const formEl = addressForm.value;
     const nextFocusedEl = event.relatedTarget;
     if (
         !formEl ||
@@ -121,12 +181,12 @@ onUnmounted(() => {
 const router = useRouter();
 router.afterEach(syncNav);
 
-let pageNameFocused = false;
-function selectPageName(event: MouseEvent) {
+let addressFocused = false;
+function selectAddress(event: MouseEvent) {
     // If the user is already interacting with the address bar,
     // do not interfere with native browser selection
-    if (pageNameFocused) return;
-    pageNameFocused = true;
+    if (addressFocused) return;
+    addressFocused = true;
 
     const input = event.target as HTMLInputElement;
 
@@ -156,8 +216,7 @@ function selectPageName(event: MouseEvent) {
 
 function onBackdropClick() {
     syncNav();
-    const el = document.activeElement;
-    el instanceof HTMLElement && el.blur();
+    (document.activeElement as HTMLElement | null)?.blur();
 }
 </script>
 
@@ -254,6 +313,14 @@ header {
     height: calc(100dvh - 100%);
     background: #00000066;
     z-index: 1;
+}
+
+nav .router-link-exact-active {
+    text-decoration: underline 2px;
+    color: var(--text-color);
+}
+nav .router-link-exact-active:hover {
+    color: var(--text-color);
 }
 
 @media (min-width: 700px) {
