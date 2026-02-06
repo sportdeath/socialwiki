@@ -92,10 +92,10 @@ export class GraffitiRpcClient extends Graffiti {
     if (isFirstClient) {
       isFirstClient = false;
       // Ask the "server" for a connection
-      window.top?.postMessage("graffiti-init", "*");
+      window.top?.postMessage("sw-graffiti-init", "*");
       // Destroy that connection on close
       addEventListener("beforeunload", () => {
-        window.top?.postMessage("graffiti-destroy", "*");
+        window.top?.postMessage("sw-graffiti-destroy", "*");
       });
     }
 

@@ -140,9 +140,9 @@ export function serveGraffiti(): Graffiti {
     if (!event.source) return;
     const window = event.source as Window;
     const message = event.data;
-    if (message === "graffiti-init") {
+    if (message === "sw-graffiti-init") {
       serveGraffitiToWindow(window);
-    } else if (message === "graffiti-destroy") {
+    } else if (message === "sw-graffiti-destroy") {
       const existing = served.get(window);
       existing?.();
     }
