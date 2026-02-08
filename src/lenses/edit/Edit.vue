@@ -325,16 +325,17 @@ initLens(async (a: string) => {
     const searchDraft = url.searchParams.get("draft");
     if (searchDraft) {
         draftHtml.value = searchDraft;
+    } else if (!draftHtml.value.length) {
+        // If there's no draft HTML, initialize it with the template
+        draftHtml.value = template(pageName.value);
+    }
+
+    if (searchDraft !== null) {
         // Strip the draft from the URL
         // and navigate to the clean URL
         url.searchParams.delete("draft");
         const cleanAddress = pageName.value + url.search + url.hash;
         navigate(`#/edit/${cleanAddress}`);
-    } else {
-        if (!draftHtml.value.length) {
-            // If there's no draft HTML, initialize it with the template
-            draftHtml.value = template(pageName.value);
-        }
     }
 });
 
