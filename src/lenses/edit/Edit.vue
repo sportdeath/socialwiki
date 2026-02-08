@@ -184,18 +184,121 @@ import type { GraffitiSession } from "@graffiti-garden/api";
 import { initVimMode } from "monaco-vim";
 import { initLens } from "../../backend/lens-client";
 
-const template = `<!doctype html>
+const template = (pageName: string) => `<!doctype html>
 <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <script src="${window.location.origin}/init.js"><\/script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+
+  <!-- Connect the page to Social.Wiki -->
+  <script src="${window.topOrigin}/init.js"><\/script>
+
+  <!-- Better default styling -->
+  <meta name="color-scheme" content="light dark" />
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css"
+  />
+
+  <!-- Initialize Vue.js with Graffiti -->
+  <script type="module">
+    import { createApp } from "vue";
+    import { GraffitiPlugin } from "@graffiti-garden/wrapper-vue";
+
+    createApp({
+      template: "#template",
+      data: () => ({
+        processingWave: false,
+        // Add more app data here
+      }),
+    })
+      .use(GraffitiPlugin, {
+        graffiti: new window.graffiti(),
+      })
+      .mount("#app");
+  <\/script>
 </head>
 
 <body>
-    <h1>Your app here!</h1>
+  <div id="app"><h1>Loading…</h1></div>
+
+  <template id="template">
+    <h1>Your page here!</h1>
+
+    <!-- "Discover" any waves from this page -->
+    <graffiti-discover
+      v-slot="{ objects: waves, isFirstPoll }"
+      :channels="[ '${pageName}' ]"
+      :schema="{ properties: { value: {
+        required: ['activity'],
+        properties: {
+          activity: { const: 'Wave' }
+        }
+      }}}"
+    >
+      <button
+        v-if="!$graffitiSession.value"
+        @click="$graffiti.login()"
+      >
+        Log in to wave!
+      </button>
+
+      <template v-else>
+        <button v-if="isFirstPoll || processingWave" disabled>
+          Loading…
+        </button>
+
+        <!-- If you haven't waved yet, show "Wave" button -->
+        <button
+          v-else-if="!waves.some(
+            wave => wave.actor === $graffitiSession.value.actor
+          )"
+          @click="
+            processingWave = true;
+            $graffiti.post(
+              {
+                value: { activity: 'Wave' },
+                channels: [ '${pageName}' ],
+              },
+              $graffitiSession.value
+            ).then(() => {
+              processingWave = false;
+            });
+          "
+        >
+          👋 Wave!
+        </button>
+
+        <!-- If you have already waved, show "Unwave" button -->
+        <button
+          v-else
+          @click="
+            waves
+              .filter(wave =>
+                wave.actor === $graffitiSession.value.actor
+              )
+              .forEach(wave => {
+                processingWave = true;
+                $graffiti.delete(
+                  wave,
+                  $graffitiSession.value
+                ).then(() => {
+                  processingWave = false;
+                });
+              });
+          "
+        >
+          👋 Unwave
+        </button>
+      </template>
+
+      <p>
+        {{ new Set(waves.map(w => w.actor)).size }} people have waved from this page.
+      </p>
+    </graffiti-discover>
+  </template>
 </body>`;
 
-const draftHtml = ref(template);
+const draftHtml = ref("");
 
 // Initialize the editor, diff and preview with the existing HTML
 const editorHtml = ref("");
@@ -204,7 +307,6 @@ const diffHtml = ref("");
 watch(
     draftHtml,
     (newHtml) => {
-        console.log("helloo");
         editorHtml.value = newHtml;
         previewHtml.value = newHtml;
         diffHtml.value = newHtml;
@@ -228,6 +330,11 @@ initLens(async (a: string) => {
         url.searchParams.delete("draft");
         const cleanAddress = pageName.value + url.search + url.hash;
         navigate(`#/edit/${cleanAddress}`);
+    } else {
+        if (!draftHtml.value.length) {
+            // If there's no draft HTML, initialize it with the template
+            draftHtml.value = template(pageName.value);
+        }
     }
 });
 
