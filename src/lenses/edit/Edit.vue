@@ -158,7 +158,7 @@
                 <form @submit.prevent="">
                     <button @click="$graffiti.login()">Log in to edit</button>
                     <button
-                        @click="$router.push(`/${pageName}`)"
+                        @click="$router.push(`#/view/${address}`)"
                         class="secondary"
                     >
                         Cancel
@@ -167,7 +167,7 @@
             </dialog>
             <div
                 class="dialog-backdrop"
-                @click="$router.push(`/${pageName}`)"
+                @click="navigate(`#/view/${pageName}`)"
             ></div>
         </template>
     </main>
@@ -182,11 +182,7 @@ import { useGraffiti } from "@graffiti-garden/wrapper-vue";
 import { createPageVersion } from "../../backend/page-versions";
 import type { GraffitiSession } from "@graffiti-garden/api";
 import { initVimMode } from "monaco-vim";
-
-const props = defineProps<{
-    pageName: string;
-}>();
-const pageName = toRef(props, "pageName");
+import { initLens } from "../../backend/lens-client";
 
 const template = `<!doctype html>
 <head>
@@ -199,12 +195,41 @@ const template = `<!doctype html>
     <h1>Your app here!</h1>
 </body>`;
 
-let draftHtml = template;
+const draftHtml = ref(template);
 
 // Initialize the editor, diff and preview with the existing HTML
-const editorHtml = ref(draftHtml);
-const previewHtml = ref(draftHtml);
-const diffHtml = ref(draftHtml);
+const editorHtml = ref("");
+const previewHtml = ref("");
+const diffHtml = ref("");
+watch(
+    draftHtml,
+    (newHtml) => {
+        console.log("helloo");
+        editorHtml.value = newHtml;
+        previewHtml.value = newHtml;
+        diffHtml.value = newHtml;
+    },
+    { immediate: true },
+);
+
+const navigate = window.navigate;
+
+const address = ref("");
+const pageName = ref("");
+initLens(async (a: string) => {
+    address.value = a;
+    const url = new URL(a, "https://example.com");
+    pageName.value = url.pathname.slice(1);
+    const searchDraft = url.searchParams.get("draft");
+    if (searchDraft) {
+        draftHtml.value = searchDraft;
+        // Strip the draft from the URL
+        // and navigate to the clean URL
+        url.searchParams.delete("draft");
+        const cleanAddress = pageName.value + url.search + url.hash;
+        navigate(`#/edit/${cleanAddress}`);
+    }
+});
 
 function download() {
     const blob = new Blob([editorHtml.value], { type: "text/html" });
@@ -338,7 +363,7 @@ watch(livePreview, (enabled, oldVal) => {
 
 // --- Publishing ----------------------------------------------
 const beforeUnload = (event: BeforeUnloadEvent) => {
-    if (editorHtml.value === draftHtml) return;
+    if (editorHtml.value === draftHtml.value) return;
 
     event.preventDefault();
     event.returnValue = "";
@@ -375,8 +400,8 @@ async function publish(session: GraffitiSession, as?: boolean) {
         session,
     );
 
-    draftHtml = publishedHtml;
-    router.push(`/w/${publishName}`);
+    draftHtml.value = publishedHtml;
+    navigate(`#/view/${publishName}`);
     publishing.value = false;
 }
 
