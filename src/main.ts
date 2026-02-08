@@ -11,6 +11,10 @@ import { GraffitiPlugin } from "@graffiti-garden/wrapper-vue";
 import { serveGraffiti } from "./backend/graffiti-server";
 import { installTransclude } from "./backend/transclude";
 
+// Set up a graffiti "server" that is served
+// to all the "client" pages
+const graffiti = serveGraffiti();
+
 const router = createRouter({
   // Use web hash history so that the page name
   // is never sent to the server. This means that
@@ -44,10 +48,6 @@ const router = createRouter({
     },
   ],
 });
-
-// Set up a graffiti "server" that is served
-// to all the "client" pages
-const graffiti = serveGraffiti();
 // Add the web components
 const origin = window.location.origin;
 installTransclude(graffiti, origin);

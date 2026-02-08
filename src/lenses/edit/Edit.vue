@@ -3,26 +3,85 @@
         <TwoPaneLayout left-title="Editor" right-title="Preview">
             <template #left-controls>
                 <nav>
-                    <ul>
+                    <ul role="menubar">
                         <li>
-                            <button @click="download()">Download</button>
+                            <details>
+                                <summary role="menuitem">File</summary>
+
+                                <ul role="menu">
+                                    <li>
+                                        <button
+                                            role="menuitem"
+                                            type="button"
+                                            @click="publish()"
+                                        >
+                                            Publish
+                                        </button>
+                                    </li>
+
+                                    <li>
+                                        <button
+                                            role="menuitem"
+                                            type="button"
+                                            @click="publish(true)"
+                                        >
+                                            Publish as…
+                                        </button>
+                                    </li>
+
+                                    <li role="separator"></li>
+
+                                    <li role="none">
+                                        <button
+                                            role="menuitem"
+                                            type="button"
+                                            @click="download()"
+                                        >
+                                            Download
+                                        </button>
+                                    </li>
+                                </ul>
+                            </details>
                         </li>
-                        <li>
-                            <button
-                                :class="{ selected: showDiff }"
-                                @click="showDiff = !showDiff"
-                            >
-                                {{ showDiff ? "Hide changes" : "Show changes" }}
-                            </button>
-                        </li>
-                        <li>
-                            <button
-                                :class="{ selected: showSettings }"
-                                @click="showSettings = !showSettings"
-                                title="Editor settings"
-                            >
-                                ⚙️▼
-                            </button>
+
+                        <li role="none">
+                            <details>
+                                <summary role="menuitem">View</summary>
+
+                                <ul role="menu">
+                                    <li>
+                                        <button
+                                            role="menuitem"
+                                            type="button"
+                                            @click="showDiff = !showDiff"
+                                        >
+                                            {{
+                                                showDiff
+                                                    ? "Hide changes"
+                                                    : "Show changes"
+                                            }}
+                                        </button>
+                                    </li>
+
+                                    <li role="separator"></li>
+
+                                    <li>
+                                        <button
+                                            role="menuitem"
+                                            type="button"
+                                            @click="
+                                                showSettings = !showSettings
+                                            "
+                                        >
+                                            {{
+                                                showSettings
+                                                    ? "Hide editor settings"
+                                                    : "Show editor settings"
+                                            }}
+                                        </button>
+                                    </li>
+                                </ul>
+                            </details>
                         </li>
                     </ul>
                 </nav>
@@ -153,34 +212,23 @@
             </template>
         </TwoPaneLayout>
 
-        <template v-if="$graffitiSession.value === null">
-            <dialog open>
-                <form @submit.prevent="">
-                    <button @click="$graffiti.login()">Log in to edit</button>
-                    <button
-                        @click="$router.push(`#/view/${address}`)"
-                        class="secondary"
-                    >
-                        Cancel
-                    </button>
-                </form>
-            </dialog>
-            <div
-                class="dialog-backdrop"
-                @click="navigate(`#/view/${pageName}`)"
-            ></div>
-        </template>
+        <div
+            v-if="publishing"
+            class="backdrop"
+            @click="navigate(`#/view/${pageName}`)"
+        >
+            <h1 class="dots">Publishing</h1>
+        </div>
     </main>
 </template>
 
 <script setup lang="ts">
-import { ref, toRef, watch, computed, onBeforeUnmount, onMounted } from "vue";
+import { ref, watch, computed, onBeforeUnmount, onMounted } from "vue";
 import * as monaco from "monaco-editor";
 import { CodeEditor, DiffEditor } from "monaco-editor-vue3";
 import TwoPaneLayout from "../TwoPaneLayout.vue";
-import { useGraffiti } from "@graffiti-garden/wrapper-vue";
+import { useGraffiti, useGraffitiSession } from "@graffiti-garden/wrapper-vue";
 import { createPageVersion } from "../../backend/page-versions";
-import type { GraffitiSession } from "@graffiti-garden/api";
 import { initVimMode } from "monaco-vim";
 import { initLens } from "../../backend/lens-client";
 
@@ -244,7 +292,7 @@ const template = (pageName: string) => `<!doctype html>
 
       <template v-else>
         <button v-if="isFirstPoll || processingWave" disabled>
-          Loading…
+          👋 Loading…
         </button>
 
         <!-- If you haven't waved yet, show "Wave" button -->
@@ -318,10 +366,17 @@ const navigate = window.navigate;
 
 const address = ref("");
 const pageName = ref("");
+const session = useGraffitiSession();
 initLens(async (a: string) => {
     address.value = a;
     const url = new URL(a, "https://example.com");
     pageName.value = url.pathname.slice(1);
+    const login = url.searchParams.get("login");
+    if (login !== null && !session.value) {
+        graffiti.login();
+        return;
+    }
+
     const searchDraft = url.searchParams.get("draft");
     if (searchDraft) {
         draftHtml.value = searchDraft;
@@ -330,10 +385,11 @@ initLens(async (a: string) => {
         draftHtml.value = template(pageName.value);
     }
 
-    if (searchDraft !== null) {
-        // Strip the draft from the URL
+    if (searchDraft !== null || login !== null) {
+        // Strip the draft and login state from the URL
         // and navigate to the clean URL
         url.searchParams.delete("draft");
+        url.searchParams.delete("login");
         const cleanAddress = pageName.value + url.search + url.hash;
         navigate(`#/edit/${cleanAddress}`);
     }
@@ -484,7 +540,16 @@ onBeforeUnmount(() => {
 });
 
 const publishing = ref(false);
-async function publish(session: GraffitiSession, as?: boolean) {
+async function publish(as?: boolean) {
+    if (!session.value) {
+        // Save the current draft in the URL
+        // along with "login"
+        navigate(
+            `#/edit/${pageName.value}?draft=${encodeURIComponent(editorHtml.value)}&login=true`,
+        );
+        return;
+    }
+
     publishing.value = true;
     const publishName = as
         ? prompt("What page name do you want to publish to?", pageName.value)
@@ -505,12 +570,11 @@ async function publish(session: GraffitiSession, as?: boolean) {
         publishedHtml,
         [],
         summary,
-        session,
+        session.value,
     );
 
     draftHtml.value = publishedHtml;
     navigate(`#/view/${publishName}`);
-    publishing.value = false;
 }
 
 const loggingIn = ref(false);
@@ -582,38 +646,79 @@ function login() {
     }
 }
 
-main {
+.backdrop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: #000000cc;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Editor menubar + dropdowns */
+nav > ul[role="menubar"] > li {
     position: relative;
+}
 
-    dialog {
-        position: fixed;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
-        border-radius: 0.5rem;
-        z-index: 1000;
-        padding: 2rem;
-        background: var(--background-color);
-        border: 2px solid var(--border-color);
-        width: max-content;
-        max-width: 90dvw;
+:is(nav summary[role="menuitem"], nav > ul > li > button) {
+    list-style: none; /* remove default marker in some browsers */
+    cursor: pointer;
+    color: var(--link-color);
+    background: var(--background-color-interactive);
+    border: 1px solid var(--border-color);
+    user-select: none;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.5rem;
 
-        form {
-            display: flex;
-            flex-direction: column;
-            gap: 2rem;
-            font-size: 2rem;
-        }
+    &:hover {
+        color: var(--link-color-hover);
+        background: var(--background-color-interactive-hover);
+        border-color: var(--border-color-hover);
+        text-decoration: none;
     }
+}
 
-    .dialog-backdrop {
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: #000000cc;
-        z-index: 10;
-    }
+/* dropdown menu */
+nav ul[role="menu"] {
+    position: absolute;
+    top: calc(100% + 0.25rem);
+    left: 0;
+
+    padding: 0.25rem;
+    list-style: none;
+
+    background: var(--background-color);
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    box-shadow: 0 10px 30px #000000aa;
+    z-index: 50;
+
+    width: max-content;
+}
+
+nav ul[role="menu"] > li > button[role="menuitem"] {
+    color: inherit;
+    padding: 0.25rem 0.25rem;
+    border-radius: 0.5rem;
+    cursor: pointer;
+}
+
+nav ul[role="menu"] > li > button[role="menuitem"]:hover {
+    background: var(--background-color-interactive);
+}
+
+nav ul[role="menu"] > li > button[role="menuitem"]:focus-visible {
+    outline: 2px solid var(--border-color-hover);
+}
+
+/* separators */
+nav ul[role="menu"] > li[role="separator"] {
+    height: 1px;
+    background: var(--border-color);
+    margin: 0.25rem 0.25rem;
 }
 </style>

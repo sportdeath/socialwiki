@@ -100,7 +100,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
       const src = this.getAttribute("src");
       if (src === null) {
         const srcdoc = this.getAttribute("srcdoc");
-        return srcdoc
+        return srcdoc !== null
           ? this.setSrcDoc(srcdoc, "ok")
           : this.setSrcDoc(LoadingPage, "loading");
       }

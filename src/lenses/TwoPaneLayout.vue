@@ -129,25 +129,19 @@ onBeforeUnmount(() => {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    justify-content: space-between;
-    gap: 0.35rem;
+    gap: 0.7rem;
     padding: 0.35rem 0.6rem;
     border-bottom: 1px solid var(--border-color);
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+    font-size: 1rem;
     cursor: pointer;
-    overflow: hidden;
     background: var(--background-color-interactive);
-}
-
-.pane > header:hover {
-    background: var(--background-color-interactive-hover);
 }
 
 .pane > header h2 {
     margin: 0;
-    font-size: 0.8rem;
+    font-size: inherit;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
     font-weight: 600;
 }
 
@@ -193,6 +187,10 @@ onBeforeUnmount(() => {
     .pane.active {
         flex: 1 1 auto;
         max-height: 100vh;
+    }
+
+    .pane:not(.active) > header:hover {
+        background: var(--background-color-interactive-hover);
     }
 
     .pane:last-of-type:not(.active) {
