@@ -22,6 +22,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
     protected renderVersion = 0;
     protected destroyLens = () => {};
     protected destroyNavigation = () => {};
+    protected setHash = (hash: string) => {};
 
     constructor() {
       super();
@@ -68,20 +69,70 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
 
       shadow.append(style, this.iframe);
 
-      this.destroyNavigation = serveNavigation((to, top) => {
+      const { destroy, setHash } = serveNavigation((to, top) => {
         const url = new URL(to, origin).toString();
 
-        // If we are not the top and either the link
-        // is external or top is set, propogate the
-        // request to the root with another navigation
-        if (window.top !== window && (!url.startsWith(origin + "/#") || top)) {
+        // Internal links are formatted with hash history
+        const isInternal = url.startsWith(origin + "/#");
+
+        // If we are not the top and either the link is external or top is set,
+        // propagate the request to the root with another navigation
+        if (window.top !== window && (!isInternal || top)) {
           window.navigate(to, true);
           return;
         }
 
-        // Otherwise change own source
-        this.setAttribute("src", to);
+        // Otherwise, if the link is still external, we must be
+        // at the top. Simply set the src and watchers on
+        // the src will take care of the rest.
+        if (!isInternal) {
+          this.setAttribute("src", to);
+          return;
+        }
+
+        // Strip out the origin, leading slash and hash
+        const route = url.slice(origin.length + 2);
+
+        // If there is no current source to compute relative routes
+        // again or the route is not relative, simply set the src,
+        // again assuming watchers on the src will take care of the rest.
+        const currentSrc = this.getAttribute("src");
+        if (
+          currentSrc == null ||
+          !(route.startsWith("?") || route.startsWith("#"))
+        ) {
+          this.setAttribute("src", to);
+          return;
+        }
+
+        const currentSrcUrl = new URL(
+          this.getAttribute("src") || "",
+          origin,
+        ).toString();
+        if (!currentSrcUrl.startsWith(origin + "/#/")) {
+          throw new Error(`Current src is not a valid route: ${currentSrcUrl}`);
+        }
+
+        // Otherwise, the fragment or query is being changed,
+        // which we treat as a relative navigation.
+        const currentRoute = currentSrcUrl.slice(origin.length + 3);
+
+        // Replace the fragment and query with the new ones if they exist
+        const dummyRouteUrl = new URL(route, origin);
+        const toUrl = new URL(currentRoute, origin);
+        toUrl.hash = dummyRouteUrl.hash.length
+          ? dummyRouteUrl.hash
+          : toUrl.hash;
+        toUrl.search = dummyRouteUrl.search.length
+          ? dummyRouteUrl.search
+          : toUrl.search;
+
+        // Navigate to the new route
+        this.setAttribute("src", "#" + toUrl.toString().slice(origin.length));
       }, this.iframe);
+
+      this.destroyNavigation = destroy;
+      this.setHash = setHash;
     }
 
     protected alive = true;
@@ -94,15 +145,41 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
     protected currentRoute = "";
     protected currentLens = "";
     protected lensReadyPromise: Promise<void> | null = null;
+    protected srcDocReadyPromise: Promise<void> | null = null;
     async renderPage() {
       if (!this.alive) return;
 
       const src = this.getAttribute("src");
       if (src === null) {
+        // If no source, then a lens is using transclude
+        // to manually set page contents. Just pay attention
+        // to the srcdoc and the hash in this case.
         const srcdoc = this.getAttribute("srcdoc");
-        return srcdoc !== null
-          ? this.setSrcDoc(srcdoc, "ok")
-          : this.setSrcDoc(LoadingPage, "loading");
+        if (srcdoc === null) {
+          return this.setSrcDoc(LoadingPage, "loading");
+        }
+
+        const token = ++this.renderVersion;
+
+        // If the doc is already set, just set the hash
+        if (this.currentSrcDoc === srcdoc) {
+          await this.srcDocReadyPromise;
+          if (!this.alive || token !== this.renderVersion) return;
+          this.setHash(this.getAttribute("hash") || "");
+          return;
+        }
+
+        this.srcDocReadyPromise = new Promise((resolve) => {
+          this.iframe.addEventListener("load", () => resolve(), { once: true });
+        });
+
+        this.setSrcDoc(srcdoc, "ok");
+
+        await this.srcDocReadyPromise;
+        if (!this.alive || token !== this.renderVersion) return;
+
+        this.setHash(this.getAttribute("hash") || "");
+        return;
       }
 
       const url = new URL(src, origin).toString();
@@ -175,7 +252,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
 
     // Rerender on initialization or src/srcdoc changes
     static get observedAttributes(): string[] {
-      return ["src", "srcdoc"];
+      return ["src", "srcdoc", "hash"];
     }
     connectedCallback() {
       this.renderPage();

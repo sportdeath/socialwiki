@@ -19,5 +19,18 @@ export function serveNavigation(
   };
 
   window.addEventListener("message", onMessage);
-  return () => window.removeEventListener("message", onMessage);
+  return {
+    destroy: () => window.removeEventListener("message", onMessage),
+    setHash: (hash: string) => {
+      if (iframe) {
+        iframe.contentWindow?.postMessage(
+          {
+            type: "sw-hash",
+            hash,
+          },
+          "*",
+        );
+      }
+    },
+  };
 }

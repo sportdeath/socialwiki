@@ -212,11 +212,7 @@
             </template>
         </TwoPaneLayout>
 
-        <div
-            v-if="publishing"
-            class="backdrop"
-            @click="navigate(`#/view/${pageName}`)"
-        >
+        <div v-if="publishing" class="backdrop" @click.prevent="">
             <h1 class="dots">Publishing</h1>
         </div>
     </main>

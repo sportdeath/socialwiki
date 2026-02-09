@@ -1,4 +1,3 @@
-import type { Graffiti } from "@graffiti-garden/api";
 import { initLens, outputLensStatus } from "../../backend/lens-client";
 import { getPageVersions } from "../../backend/page-versions";
 import {
@@ -10,6 +9,7 @@ import {
 const graffiti = new window.graffiti();
 
 let currentAddress = "";
+let currentPageName = "";
 const transclude = document.querySelector("#transclude") as HTMLElement;
 transclude.setAttribute("srcdoc", LoadingPage);
 
@@ -18,6 +18,8 @@ transclude.setAttribute("srcdoc", LoadingPage);
 const observer = new MutationObserver(() => {
   const to = transclude.getAttribute("src");
   if (to) window.navigate(to);
+  // Delete it to avoid loops
+  transclude.removeAttribute("src");
 });
 observer.observe(transclude, {
   attributes: true,
@@ -25,14 +27,23 @@ observer.observe(transclude, {
 });
 
 initLens(async (address: string) => {
-  // TODO: select out the page name from the address
   if (address === currentAddress) return;
   currentAddress = address;
+
+  const url = new URL(address, "http://example.com");
+  const pageName = url.pathname.slice(1);
+  if (pageName === currentPageName) {
+    // If the page name hasn't changed, we can just update the hash
+    transclude?.setAttribute("hash", url.hash);
+    return;
+  }
+  currentPageName = pageName;
+
   transclude?.setAttribute("srcdoc", LoadingPage);
 
   try {
-    const pageVersions = await getPageVersions(graffiti, address);
-    if (currentAddress !== address) return;
+    const pageVersions = await getPageVersions(graffiti, pageName);
+    if (pageName !== currentPageName) return;
 
     const potentialPageVersion = pageVersions.at(0);
     if (!potentialPageVersion) {
@@ -50,13 +61,17 @@ initLens(async (address: string) => {
         types: ["text/html"],
       },
     );
-    if (currentAddress !== address) return;
+    if (pageName !== currentPageName) return;
 
     const html = await media.data.text();
-    if (currentAddress !== address) return;
+    if (pageName !== currentPageName) return;
 
     outputLensStatus("ok", html);
     transclude?.setAttribute("srcdoc", html);
+
+    if (address === currentAddress) {
+      transclude?.setAttribute("hash", url.hash);
+    }
   } catch (e) {
     outputLensStatus("error");
     transclude?.setAttribute(
