@@ -205,6 +205,7 @@
                         </label>
                     </section>
                     <sw-transclude
+                        :hash="pageHash"
                         :key="refreshKey"
                         :srcdoc="previewHtml"
                     ></sw-transclude>
@@ -362,11 +363,14 @@ const navigate = window.navigate;
 
 const address = ref("");
 const pageName = ref("");
+const pageHash = ref("");
 const session = useGraffitiSession();
 initLens(async (a: string) => {
     address.value = a;
     const url = new URL(a, "https://example.com");
     pageName.value = url.pathname.slice(1);
+    pageHash.value = url.hash;
+
     const login = url.searchParams.get("login");
     if (login !== null && !session.value) {
         graffiti.login();
