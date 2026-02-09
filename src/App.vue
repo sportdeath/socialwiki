@@ -30,7 +30,7 @@
             >
                 <li>
                     <RouterLink
-                        :to="`/w/${address}`"
+                        :to="`/v/${address}`"
                         @click="
                             addressInput = address;
                             isDropdownOpen = false;
@@ -50,7 +50,7 @@
                 <ul>
                     <li>
                         <RouterLink
-                            :to="`/view/${address}`"
+                            :to="`/v/${address}`"
                             title="The current version of this page"
                         >
                             View
@@ -58,7 +58,7 @@
                     </li>
                     <li>
                         <RouterLink
-                            :to="`/edit/${address}?draft=${encodeURIComponent(srcdoc)}`"
+                            :to="editAddress"
                             title="Edit the source code of this page"
                         >
                             Edit
@@ -66,7 +66,7 @@
                     </li>
                     <li>
                         <RouterLink
-                            :to="`/history/${address}`"
+                            :to="`/h/${address}`"
                             title="Past revisions of this page"
                         >
                             History
@@ -107,7 +107,13 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, onUnmounted, useTemplateRef } from "vue";
+import {
+    computed,
+    onBeforeUnmount,
+    onMounted,
+    onUnmounted,
+    useTemplateRef,
+} from "vue";
 import { ref, toRef, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useGraffiti } from "@graffiti-garden/wrapper-vue";
@@ -167,6 +173,12 @@ onMounted(() => {
 });
 onBeforeUnmount(() => {
     observer?.disconnect();
+});
+
+const editAddress = computed(() => {
+    const url = new URL(`/e/${address.value}`, window.location.origin);
+    url.searchParams.set("draft", srcdoc.value);
+    return url.toString().slice(window.location.origin.length);
 });
 
 // Partially couple the input address to the route address

@@ -25,12 +25,18 @@ const router = createRouter({
     {
       path: "/",
       name: "home",
-      redirect: "/view/Social.Wiki",
+      redirect: "/v/Social.Wiki",
     },
     {
       path: "/:name",
       redirect: (to) => {
-        return { path: `/view/${to.params.name}` };
+        return { path: `/v/${to.params.name}` };
+      },
+    },
+    {
+      path: "/w/:path(.+)",
+      redirect: (to) => {
+        return { path: `/v/${to.params.path}` };
       },
     },
     {

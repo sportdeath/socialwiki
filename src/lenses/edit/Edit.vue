@@ -387,7 +387,7 @@ initLens(async (a: string) => {
         url.searchParams.delete("draft");
         url.searchParams.delete("login");
         const cleanAddress = pageName.value + url.search + url.hash;
-        navigate(`#/edit/${cleanAddress}`);
+        navigate(`#/e/${cleanAddress}`);
     }
 });
 
@@ -541,7 +541,7 @@ async function publish(as?: boolean) {
         // Save the current draft in the URL
         // along with "login"
         navigate(
-            `#/edit/${pageName.value}?draft=${encodeURIComponent(editorHtml.value)}&login=true`,
+            `#/e/${pageName.value}?draft=${encodeURIComponent(editorHtml.value)}&login=true`,
         );
         return;
     }
@@ -570,7 +570,7 @@ async function publish(as?: boolean) {
     );
 
     draftHtml.value = publishedHtml;
-    navigate(`#/view/${publishName}`);
+    navigate(`#/v/${publishName}`);
 }
 
 const loggingIn = ref(false);

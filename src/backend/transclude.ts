@@ -4,9 +4,9 @@ import { ErrorPage, LoadingPage } from "./status-pages";
 import { serveNavigation } from "./navigation-server";
 
 const lenses = {
-  view: "src/lenses/view/index.html",
-  edit: "src/lenses/edit/index.html",
-  history: "src/lenses/history/index.html",
+  v: "src/lenses/view/index.html",
+  e: "src/lenses/edit/index.html",
+  h: "src/lenses/history/index.html",
   version: "src/lenses/version/index.html",
 };
 type Lens = keyof typeof lenses;
@@ -94,7 +94,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         const route = url.slice(origin.length + 2);
 
         // If there is no current source to compute relative routes
-        // again or the route is not relative, simply set the src,
+        // against or the route is not relative, simply set the src,
         // again assuming watchers on the src will take care of the rest.
         const currentSrc = this.getAttribute("src");
         if (

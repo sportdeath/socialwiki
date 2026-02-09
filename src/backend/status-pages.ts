@@ -20,7 +20,7 @@ export const PageNotFound = (pageName: string, origin: string) => `
     </head>
     <body>
         <h1 class="status">Nothing here…yet.</h1>
-        <a class="status-button" href="#/edit/${pageName}">
+        <a class="status-button" href="#/e/${pageName}">
             Edit page
         </a>
     </body>
