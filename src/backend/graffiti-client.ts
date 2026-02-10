@@ -70,6 +70,9 @@ async function remote() {
     messenger,
     // Establish callbacks for events
     methods: {
+      ping() {
+        return;
+      },
       sessionEvent(type: string, detail: any) {
         sessionEvents.dispatchEvent(new CustomEvent(type, { detail }));
       },

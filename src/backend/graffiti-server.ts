@@ -26,6 +26,10 @@ export function serveGraffiti(): Graffiti {
   });
 
   const served = new Map<Window, () => void>();
+  const iteratorsByWindow = new Map<
+    Window,
+    Map<string, GraffitiObjectStream<{}>>
+  >();
   async function serveGraffitiToWindow(window: Window) {
     const messenger = new WindowMessenger({
       remoteWindow: window,
@@ -44,10 +48,14 @@ export function serveGraffiti(): Graffiti {
     ] as const;
 
     const iterators = new Map<string, GraffitiObjectStream<{}>>();
+    iteratorsByWindow.set(window, iterators);
+
+    const heartbeatIntervalMs = 500;
+    const heartbeatTimeoutMs = 500;
 
     const connection = connect<{
-      streamReturn: (id: string, value: any) => Promise<void>;
       sessionEvent: (type: string, detail: any) => Promise<void>;
+      ping: () => Promise<void>;
     }>({
       messenger,
       methods: {
@@ -127,12 +135,55 @@ export function serveGraffiti(): Graffiti {
       graffiti.sessionEvents.addEventListener(type, forward);
     }
 
-    const destroy = () => {
+    let destroyed = false;
+    let heartbeatTimer: number | undefined;
+    const destroy = async () => {
+      if (destroyed) return;
+      destroyed = true;
+      if (heartbeatTimer !== undefined) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = undefined;
+      }
+      // Remove all listeners
       for (const type of sessionEventTypes) {
         graffiti.sessionEvents.removeEventListener(type, forward);
       }
+
+      // Return all iterators to prevent locked queries
+      const windowIterators = iteratorsByWindow.get(window);
+      if (windowIterators) {
+        const returns = [...windowIterators.values()].map((iterator) =>
+          iterator.return({ cursor: "" }),
+        );
+        await Promise.allSettled(returns);
+        windowIterators.clear();
+        iteratorsByWindow.delete(window);
+      }
+
+      // Destroy the connection
       connection.destroy();
+      served.delete(window);
     };
+
+    const pingOrDestroy = async () => {
+      try {
+        await Promise.race([
+          remote.ping(),
+          new Promise((_, reject) => {
+            setTimeout(
+              () => reject(new Error("heartbeat timeout")),
+              heartbeatTimeoutMs,
+            );
+          }),
+        ]);
+      } catch {
+        await destroy();
+      }
+    };
+
+    heartbeatTimer = setInterval(() => {
+      void pingOrDestroy();
+    }, heartbeatIntervalMs);
     served.set(window, destroy);
   }
 
@@ -144,7 +195,7 @@ export function serveGraffiti(): Graffiti {
       serveGraffitiToWindow(window);
     } else if (message === "sw-graffiti-destroy") {
       const existing = served.get(window);
-      existing?.();
+      void existing?.();
     }
   });
 
