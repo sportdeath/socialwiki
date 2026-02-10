@@ -4,7 +4,10 @@ const style = `<style>${styleCss}</style>`;
 export const LoadingPage = `
 <!doctype html>
 <html>
-    <head>${style}</head>
+    <head>
+      <meta charset="utf-8" />
+      ${style}
+    </head>
     <body>
         <h1 class="status dots">Page loading</h1>
     </body>
@@ -15,6 +18,7 @@ export const PageNotFound = (pageName: string, origin: string) => `
 <!doctype html>
 <html>
     <head>
+      <meta charset="utf-8" />
       <script src="${origin}/init.js"></script>
       ${style}
     </head>
@@ -30,7 +34,10 @@ export const PageNotFound = (pageName: string, origin: string) => `
 export const ErrorPage = (e: string) => `
 <!doctype html>
 <html>
-    <head>${style}</head>
+    <head>
+      <meta charset="utf-8" />
+      ${style}
+    </head>
     <body>
         <h1 class="status">Error loading page.</h1>
         <p>${e}</p>

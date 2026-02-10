@@ -23,6 +23,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
     protected destroyLens = () => {};
     protected destroyNavigation = () => {};
     protected setHash = (hash: string) => {};
+    protected currentBlobUrl: string | null = null;
 
     constructor() {
       super();
@@ -41,6 +42,17 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         "allow-pointer-lock",
         "allow-downloads",
       );
+      this.iframe.allow = [
+        "camera *",
+        "microphone *",
+        "geolocation *",
+        "clipboard-read *",
+        "clipboard-write *",
+        "fullscreen *",
+        "picture-in-picture *",
+        "autoplay *",
+        "screen-wake-lock *",
+      ].join("; ");
 
       this.destroyLens = serveLens(this.iframe, (status, srcdoc) => {
         this.setAttribute("status", status);
@@ -140,6 +152,10 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
       this.alive = false;
       this.destroyLens();
       this.destroyNavigation();
+      if (this.currentBlobUrl) {
+        URL.revokeObjectURL(this.currentBlobUrl);
+        this.currentBlobUrl = null;
+      }
     }
 
     protected currentRoute = "";
@@ -214,17 +230,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         const lensSource = lenses[lens];
 
         this.lensReadyPromise = (async () => {
-          const response = await fetch(`${origin}/${lensSource}`);
-          if (!this.alive || token !== this.renderVersion) return;
-
-          if (!response.ok) {
-            throw new Error(`Error fetching lens: ${response.statusText}`);
-          }
-
-          const html = await response.text();
-          if (!this.alive || token !== this.renderVersion) return;
-
-          this.setSrcDoc(html, "loading");
+          this.setUrl(`${origin}/${lensSource}`, "loading");
           await new Promise((resolve) => {
             this.iframe.addEventListener("load", resolve, { once: true });
           });
@@ -246,7 +252,15 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
     setSrcDoc(srcdoc: string, status: string) {
       if (this.currentSrcDoc === srcdoc) return;
       this.currentSrcDoc = srcdoc;
-      this.iframe.srcdoc = srcdoc;
+      if (this.currentBlobUrl) {
+        URL.revokeObjectURL(this.currentBlobUrl);
+      }
+      const blob = new Blob([srcdoc], { type: "text/html" });
+      this.currentBlobUrl = URL.createObjectURL(blob);
+      this.setUrl(this.currentBlobUrl, status);
+    }
+    setUrl(url: string, status: string) {
+      this.iframe.src = url;
       this.setAttribute("status", status);
     }
 

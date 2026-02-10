@@ -143,7 +143,11 @@ export class GraffitiRpcClient extends Graffiti {
   protected remoteStream(
     startStream: (r: RemoteProxy<Methods>, id: string) => Promise<void>,
   ): GraffitiObjectStream<{}> {
-    const id = crypto.randomUUID();
+    // Generate a unique ID for this stream
+    // (cannot use crypto.randomUUID() in a sandboxed iframe)
+    const id = `sw-${Date.now().toString(36)}-${Math.random()
+      .toString(36)
+      .slice(2, 10)}`;
     return (async function* () {
       try {
         const r = await remote();
