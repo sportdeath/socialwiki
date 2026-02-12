@@ -133,7 +133,6 @@ onBeforeUnmount(() => {
     padding: 0.35rem 0.6rem;
     border-bottom: 1px solid var(--border-color);
     font-size: 1rem;
-    cursor: pointer;
     background: var(--background-color-interactive);
 }
 
@@ -191,6 +190,7 @@ onBeforeUnmount(() => {
 
     .pane:not(.active) > header:hover {
         background: var(--background-color-interactive-hover);
+        cursor: pointer;
     }
 
     .pane:last-of-type:not(.active) {

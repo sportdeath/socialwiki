@@ -4,40 +4,29 @@
             <template #left-controls>
                 <nav>
                     <ul role="menubar">
-                        <li>
-                            <details>
-                                <summary role="menuitem">File</summary>
-
+                        <li class="publish-menu">
+                            <button
+                                :disabled="draftHtml === editorHtml"
+                                @click="publish()"
+                            >
+                                Publish
+                            </button>
+                            <details
+                                :class="{ disabled: draftHtml === editorHtml }"
+                            >
+                                <summary
+                                    :aria-disabled="draftHtml === editorHtml"
+                                >
+                                    ▾
+                                </summary>
                                 <ul role="menu">
                                     <li>
                                         <button
+                                            :disabled="draftHtml === editorHtml"
                                             role="menuitem"
-                                            type="button"
-                                            @click="publish()"
-                                        >
-                                            Publish
-                                        </button>
-                                    </li>
-
-                                    <li>
-                                        <button
-                                            role="menuitem"
-                                            type="button"
                                             @click="publish(true)"
                                         >
                                             Publish as…
-                                        </button>
-                                    </li>
-
-                                    <li role="separator"></li>
-
-                                    <li role="none">
-                                        <button
-                                            role="menuitem"
-                                            type="button"
-                                            @click="download()"
-                                        >
-                                            Download
                                         </button>
                                     </li>
                                 </ul>
@@ -45,8 +34,14 @@
                         </li>
 
                         <li role="none">
+                            <button type="button" @click="download()">
+                                Download
+                            </button>
+                        </li>
+
+                        <li role="none">
                             <details>
-                                <summary role="menuitem">View</summary>
+                                <summary role="menuitem">▾ View</summary>
 
                                 <ul role="menu">
                                     <li>
@@ -709,6 +704,7 @@ nav ul[role="menu"] > li > button[role="menuitem"] {
 
 nav ul[role="menu"] > li > button[role="menuitem"]:hover {
     background: var(--background-color-interactive);
+    text-decoration: none;
 }
 
 nav ul[role="menu"] > li > button[role="menuitem"]:focus-visible {
@@ -720,5 +716,96 @@ nav ul[role="menu"] > li[role="separator"] {
     height: 1px;
     background: var(--border-color);
     margin: 0.25rem 0.25rem;
+}
+
+nav .publish-menu {
+    display: inline-flex;
+    align-items: stretch;
+    gap: 0;
+
+    > button:disabled,
+    summary[aria-disabled="true"] {
+        background: var(--background-color-interactive);
+        color: var(--text-color);
+        cursor: not-allowed;
+    }
+
+    > button,
+    summary {
+        border: 1px solid var(--border-color);
+        background: var(--accent-button-background);
+        color: var(--accent-button-text);
+        display: inline-flex;
+        align-items: center;
+    }
+
+    > button {
+        border-radius: 0.5rem 0 0 0.5rem;
+        height: 100%;
+    }
+
+    summary {
+        border-radius: 0 0.5rem 0.5rem 0;
+        height: 100%;
+    }
+
+    > button:not(:disabled):hover,
+    summary:not([aria-disabled="true"]):hover {
+        background: var(--accent-button-background-hover);
+        color: var(--accent-button-text);
+        cursor: pointer;
+        border-color: var(--border-color-hover);
+        text-decoration: none;
+    }
+
+    summary {
+        border-left: none;
+        width: 1.5rem;
+        text-align: center;
+        justify-content: center;
+        user-select: none;
+    }
+
+    summary::marker {
+        content: "";
+    }
+}
+
+nav .publish-menu > details.disabled > summary {
+    pointer-events: none;
+}
+
+nav .publish-menu > button:disabled:hover {
+    background: var(--background-color-interactive);
+    border-color: var(--border-color);
+    color: var(--text-color);
+    text-decoration: none;
+    cursor: not-allowed;
+}
+
+.publish-menu:has(button:not(:disabled)) {
+    animation: publish-shake 0.3s ease-in-out;
+}
+
+.publish-menu:has(button:disabled) {
+    animation: none;
+}
+
+@keyframes publish-shake {
+    0% {
+        transform: translateX(0);
+    }
+    25% {
+        transform: translateX(-4px);
+    }
+    50% {
+        transform: translateX(4px);
+    }
+    75% {
+        transform: translateX(-2px);
+    }
+    100% {
+        transform: translateX(0);
+    }
 }
 </style>

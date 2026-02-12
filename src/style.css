@@ -19,6 +19,9 @@
     --warning-hover-color: #9f3526;
     --background-color-interactive: #eaecf0;
     --background-color-interactive-hover: #dadde3;
+    --accent-button-background: #36c;
+    --accent-button-background-hover: #3056a9;
+    --accent-button-text: #fff;
 }
 
 @media (prefers-color-scheme: dark) {
