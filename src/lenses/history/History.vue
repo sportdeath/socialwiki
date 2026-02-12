@@ -85,6 +85,7 @@ import type { GraffitiSession } from "@graffiti-garden/api";
 import {
     createPageVersion,
     deletePageVersion,
+    topoSortPageVersions,
     pageVersionSchema,
     type PageVersionObject,
 } from "../../backend/page-versions";
@@ -112,11 +113,7 @@ const { objects: pageVersionsRaw } = useGraffitiDiscover(
     () => pageVersionSchema(pageName.value),
 );
 const pageVersions = computed(() =>
-    // TODO: make a sort function that does the topological sort
-    // Also add filters...
-    pageVersionsRaw.value.toSorted(
-        (a, b) => b.value.published - a.value.published,
-    ),
+    topoSortPageVersions(pageVersionsRaw.value),
 );
 
 const graffiti = useGraffiti();
