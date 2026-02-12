@@ -45,35 +45,55 @@
 
                                 <ul role="menu">
                                     <li>
-                                        <button
-                                            role="menuitem"
-                                            type="button"
-                                            @click="showDiff = !showDiff"
-                                        >
-                                            {{
-                                                showDiff
-                                                    ? "Hide changes"
-                                                    : "Show changes"
-                                            }}
-                                        </button>
+                                        <label class="menu-checkbox">
+                                            <input
+                                                type="checkbox"
+                                                v-model="showDiff"
+                                            />
+                                            Show changes
+                                        </label>
                                     </li>
 
                                     <li role="separator"></li>
 
                                     <li>
-                                        <button
-                                            role="menuitem"
-                                            type="button"
-                                            @click="
-                                                showSettings = !showSettings
-                                            "
-                                        >
-                                            {{
-                                                showSettings
-                                                    ? "Hide editor settings"
-                                                    : "Show editor settings"
-                                            }}
-                                        </button>
+                                        <label class="menu-checkbox">
+                                            <input
+                                                type="checkbox"
+                                                v-model="darkMode"
+                                            />
+                                            Dark mode
+                                        </label>
+                                    </li>
+
+                                    <li>
+                                        <label class="menu-checkbox">
+                                            <input
+                                                type="checkbox"
+                                                v-model="wordWrap"
+                                            />
+                                            Word wrap
+                                        </label>
+                                    </li>
+
+                                    <li>
+                                        <label class="menu-checkbox">
+                                            <input
+                                                type="checkbox"
+                                                v-model="minimapEnabled"
+                                            />
+                                            Show minimap
+                                        </label>
+                                    </li>
+
+                                    <li>
+                                        <label class="menu-checkbox">
+                                            <input
+                                                type="checkbox"
+                                                v-model="renderWhitespace"
+                                            />
+                                            Show whitespace
+                                        </label>
                                     </li>
                                 </ul>
                             </details>
@@ -94,13 +114,10 @@
                             </button>
                         </li>
                         <li>
-                            <button
-                                @click="showPreviewMenu = !showPreviewMenu"
-                                :class="{ selected: showPreviewMenu }"
-                                title="Preview settings"
-                            >
-                                ⚙️▼
-                            </button>
+                            <label class="top-level-checkbox">
+                                <input type="checkbox" v-model="livePreview" />
+                                Auto-refresh
+                            </label>
                         </li>
                     </ul>
                 </nav>
@@ -109,63 +126,6 @@
             <!-- Left pane body (Editor) -->
             <template #left-pane>
                 <div class="pane">
-                    <section v-if="showSettings" class="settings-panel">
-                        <div class="settings-group">
-                            <h3>Appearance</h3>
-                            <label>
-                                Theme
-                                <select v-model="editorTheme">
-                                    <option value="vs-dark">Dark</option>
-                                    <option value="vs">Light</option>
-                                    <option value="hc-black">
-                                        High contrast
-                                    </option>
-                                </select>
-                            </label>
-                            <label>
-                                Font size
-                                <input
-                                    type="number"
-                                    min="10"
-                                    max="24"
-                                    v-model.number="fontSize"
-                                />
-                            </label>
-                            <label>
-                                Line height
-                                <input
-                                    type="number"
-                                    min="1"
-                                    max="5"
-                                    step="0.1"
-                                    v-model.number="lineHeight"
-                                />
-                            </label>
-                        </div>
-
-                        <div class="settings-group">
-                            <h3>Editor UI</h3>
-                            <label class="checkbox-inline">
-                                <input type="checkbox" v-model="wordWrap" />
-                                Word wrap
-                            </label>
-                            <label class="checkbox-inline">
-                                <input
-                                    type="checkbox"
-                                    v-model="minimapEnabled"
-                                />
-                                Show minimap
-                            </label>
-                            <label class="checkbox-inline">
-                                <input
-                                    type="checkbox"
-                                    v-model="renderWhitespace"
-                                />
-                                Show whitespace
-                            </label>
-                        </div>
-                    </section>
-
                     <CodeEditor
                         v-if="!showDiff"
                         v-model:value="editorHtml"
@@ -193,12 +153,6 @@
             <!-- Right pane body (Preview) -->
             <template #right-pane>
                 <div class="pane">
-                    <section v-if="showPreviewMenu" class="settings-panel">
-                        <label class="checkbox-inline">
-                            <input type="checkbox" v-model="livePreview" />
-                            Auto-Refresh
-                        </label>
-                    </section>
                     <sw-transclude
                         :hash="pageHash"
                         :key="refreshKey"
@@ -403,16 +357,18 @@ function download() {
 }
 
 // --- Editor Settings ------------------------------------
-const showSettings = ref(false);
-
-type MonacoTheme = "vs-dark" | "vs" | "hc-black";
+type MonacoTheme = "vs-dark" | "vs";
 const editorTheme = ref<MonacoTheme>("vs-dark");
+const darkMode = computed({
+    get: () => editorTheme.value === "vs-dark",
+    set: (enabled: boolean) => {
+        editorTheme.value = enabled ? "vs-dark" : "vs";
+    },
+});
 
 const wordWrap = ref(true);
 const minimapEnabled = ref(true);
 const renderWhitespace = ref(false);
-const fontSize = ref(14);
-const lineHeight = ref(1.5);
 
 // Apply Monaco theme globally when selection changes
 watch(editorTheme, (theme) => monaco.editor.setTheme(theme), {
@@ -424,8 +380,6 @@ const monacoOptions = computed(() => ({
     automaticLayout: true,
     wordWrap: wordWrap.value ? "on" : "off",
     minimap: { enabled: minimapEnabled.value },
-    fontSize: fontSize.value,
-    lineHeight: lineHeight.value,
     renderWhitespace: renderWhitespace.value ? "all" : "none",
     smoothScrolling: true,
     scrollBeyondLastLine: true,
@@ -490,8 +444,7 @@ function refreshPreview() {
     refreshKey.value++;
 }
 
-// Preview menu state and option
-const showPreviewMenu = ref(false);
+// Preview option
 const livePreview = ref(true);
 
 // Auto-refresh the preview
@@ -594,53 +547,6 @@ function login() {
     min-height: 0;
 }
 
-/* Settings panel (in editor pane) */
-.settings-panel {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 0.75rem 1.25rem;
-    padding: 0.6rem 0.9rem 0.8rem;
-    border-top: 1px solid var(--border-color);
-    font-size: 0.83rem;
-    border-bottom: 1px solid var(--border-color);
-
-    h3 {
-        font-size: 0.8rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        opacity: 0.8;
-    }
-
-    label {
-        display: inline-flex;
-        flex-direction: column;
-        gap: 0.2rem;
-    }
-
-    label.checkbox-inline {
-        flex-direction: row;
-        align-items: center;
-        gap: 0.35rem;
-        cursor: pointer;
-    }
-
-    input[type="number"],
-    select {
-        border-radius: 6px;
-        border: 1px solid var(--border-color);
-        padding: 0.2rem 0.4rem;
-        color: inherit;
-        font-size: inherit;
-    }
-
-    .settings-group {
-        display: flex;
-        flex-direction: column;
-        gap: 0.35rem;
-    }
-}
-
 .backdrop {
     position: absolute;
     top: 0;
@@ -659,7 +565,11 @@ nav > ul[role="menubar"] > li {
     position: relative;
 }
 
-:is(nav summary[role="menuitem"], nav > ul > li > button) {
+:is(
+    nav summary[role="menuitem"],
+    nav > ul > li > button,
+    nav > ul > li > label.top-level-checkbox
+) {
     list-style: none; /* remove default marker in some browsers */
     cursor: pointer;
     color: var(--link-color);
@@ -709,6 +619,26 @@ nav ul[role="menu"] > li > button[role="menuitem"]:hover {
 
 nav ul[role="menu"] > li > button[role="menuitem"]:focus-visible {
     outline: 2px solid var(--border-color-hover);
+}
+
+nav ul[role="menu"] > li > label.menu-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.25rem 0.4rem;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+nav ul[role="menu"] > li > label.menu-checkbox:hover {
+    background: var(--background-color-interactive);
+}
+
+nav .top-level-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
 }
 
 /* separators */
