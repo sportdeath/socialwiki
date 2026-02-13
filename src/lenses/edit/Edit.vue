@@ -568,7 +568,7 @@ nav > ul[role="menubar"] > li {
 :is(
     nav summary[role="menuitem"],
     nav > ul > li > button,
-    nav > ul > li > label.top-level-checkbox
+    nav > ul > li > :where(label.top-level-checkbox)
 ) {
     list-style: none; /* remove default marker in some browsers */
     cursor: pointer;
