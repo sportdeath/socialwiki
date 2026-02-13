@@ -89,7 +89,7 @@ export async function deletePageVersion(
 }
 
 export async function getPageVersions(graffiti: Graffiti, pageName: string): Promise<PageVersionObject[]> {
-  const versions: PageVersionObject[] = [];
+  const versions = new Map<string, PageVersionObject>();
   for await (const result of graffiti.discover(
     [pageName],
     pageVersionSchema(pageName),
@@ -98,18 +98,19 @@ export async function getPageVersions(graffiti: Graffiti, pageName: string): Pro
       console.error(result.error);
       continue;
     }
-    if (!result.tombstone) {
-      versions.push(result.object);
+    if (result.tombstone) {
+      versions.delete(result.object.url);
+    } else {
+      versions.set(result.object.url, result.object);
     }
   }
 
-  return topoSortPageVersions(versions);
+  return topoSortPageVersions([...versions.values()]);
 }
 
 export function topoSortPageVersions(versionsRaw: PageVersionObject[]): PageVersionObject[] {
   // Topological sort via Kahn's algorithm: edge A->B when A's URL is in B's precededBy.
   // Guaranteed acyclic.
-  // Guaranteed that elements in precededBy are in versions??
   // Ties broken by published (newest first).
 
   const versions = new Map<string, PageVersionObject>();
@@ -128,33 +129,34 @@ export function topoSortPageVersions(versionsRaw: PageVersionObject[]): PageVers
 
   for (const target of versions.values()) {
     for (const source of target.value.precededBy) {
-      adj.get(source)!.push(target.url); // Questionable. Is source certainly in versions? If not, we can't do much.
+      // The source may have been deleted. In that case we ignore it.
+      adj.get(source)?.push(target.url);
     }
   }
 
-  // L ← Empty list that will contain the sorted elements. This is what we will return.
-  const L: PageVersionObject[] = [];
+  // sortedList ← Empty list that will contain the sorted elements. This is what we will return.
+  const sortedList: PageVersionObject[] = [];
 
-  // S ← Set of all nodes with no incoming edge
+  // startNodes ← Set of all nodes with no incoming edge
   const urls = [...versions.keys()];
-  let S = urls.filter((u) => indegree.get(u) === 0);
+  let startNodes = urls.filter((u) => indegree.get(u) === 0);
 
   // Tie-breaker: newest first.
-  S.sort(
+  startNodes.sort(
     (a, b) =>
       (versions.get(b)?.value.published ?? 0) -
       (versions.get(a)?.value.published ?? 0),
   );
 
-  while (S.length > 0) {
-    const n = S.shift()!;
-    const obj = versions.get(n)!; // We want the full PageVersionObject, not just the url.
-    L.push(obj);
+  while (startNodes.length > 0) {
+    const n = startNodes.shift();
+    const obj = versions.get(n); // We want the full PageVersionObject, not just the url.
+    sortedList.push(obj);
 
-    for (const m of adj.get(n)!) {
-      const d = indegree.get(m)! - 1;
+    for (const m of adj.get(n)) {
+      const d = indegree.get(m) - 1;
       indegree.set(m, d);
-      if (d === 0) S.push(m);
+      if (d === 0) startNodes.push(m);
     }
   }
 
@@ -165,5 +167,5 @@ export function topoSortPageVersions(versionsRaw: PageVersionObject[]): PageVers
     return [];
   }
 
-  return L;
+  return sortedList;
 }

@@ -113,7 +113,7 @@ const { objects: pageVersionsRaw } = useGraffitiDiscover(
     () => pageVersionSchema(pageName.value),
 );
 const pageVersions = computed(() =>
-    topoSortPageVersions(pageVersionsRaw.value),
+    topoSortPageVersions([...pageVersionsRaw.value.values()]),
 );
 
 const graffiti = useGraffiti();
