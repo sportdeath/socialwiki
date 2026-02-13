@@ -489,6 +489,7 @@ const schedulePreviewUpdate = (newHtml: string) => {
 };
 watch(editorHtml, (newHtml) => {
     if (!livePreview.value) return;
+    if (newHtml === previewHtml.value) return;
     schedulePreviewUpdate(newHtml);
 });
 
