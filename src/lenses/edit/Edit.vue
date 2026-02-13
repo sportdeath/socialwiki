@@ -96,6 +96,16 @@
                                             Show whitespace
                                         </label>
                                     </li>
+
+                                    <li>
+                                        <label class="menu-checkbox">
+                                            <input
+                                                type="checkbox"
+                                                v-model="vimModeEnabled"
+                                            />
+                                            Vim mode
+                                        </label>
+                                    </li>
                                 </ul>
                             </details>
                         </li>
@@ -139,9 +149,9 @@
                         language="html"
                         :theme="editorTheme"
                         :options="monacoOptions"
+                        @editorDidMount="onEditorDidMount"
                         class="code-editor"
                     />
-                    <!-- @editorDidMount="onEditorDidMount" -->
 
                     <DiffEditor
                         v-else
@@ -176,13 +186,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed, onBeforeUnmount, onMounted } from "vue";
+import {
+    ref,
+    shallowRef,
+    watch,
+    computed,
+    onBeforeUnmount,
+    onMounted,
+} from "vue";
 import * as monaco from "monaco-editor";
 import { CodeEditor, DiffEditor } from "monaco-editor-vue3";
 import TwoPaneLayout from "../TwoPaneLayout.vue";
 import { useGraffiti, useGraffitiSession } from "@graffiti-garden/wrapper-vue";
 import { createPageVersion } from "../../backend/page-versions";
-import { initVimMode } from "monaco-vim";
+import { initVimMode, type VimAdapterInstance } from "monaco-vim";
 import { initLens } from "../../backend/lens-client";
 
 const template = (pageName: string) => `<!doctype html>
@@ -376,6 +393,7 @@ const darkMode = computed({
 const wordWrap = ref(true);
 const minimapEnabled = ref(true);
 const renderWhitespace = ref(false);
+const vimModeEnabled = ref(false);
 
 // Apply Monaco theme globally when selection changes
 watch(editorTheme, (theme) => monaco.editor.setTheme(theme), {
@@ -398,10 +416,32 @@ const monacoOptions = computed(() => ({
     lineNumbersMinChars: 3,
 }));
 
-// TODO: add toggle for VIM
-// function onEditorDidMount(editor: any) {
-//     const vimMode = initVimMode(editor, null);
-// }
+const codeEditorInstance = shallowRef<monaco.editor.IStandaloneCodeEditor | null>(
+    null,
+);
+const vimAdapter = shallowRef<VimAdapterInstance | null>(null);
+
+const disposeVimMode = () => {
+    vimAdapter.value?.dispose();
+    vimAdapter.value = null;
+};
+
+const syncVimMode = () => {
+    disposeVimMode();
+    if (!vimModeEnabled.value) return;
+
+    const activeEditor = showDiff.value
+        ? diffEditorInstance.value?.getModifiedEditor() ?? null
+        : codeEditorInstance.value;
+
+    if (!activeEditor) return;
+    vimAdapter.value = initVimMode(activeEditor, null);
+};
+
+const onEditorDidMount = (editor: monaco.editor.IStandaloneCodeEditor) => {
+    codeEditorInstance.value = editor;
+    syncVimMode();
+};
 
 // --- Diff settings ------------------------------------
 
@@ -409,7 +449,10 @@ const monacoOptions = computed(() => ({
 const showDiff = ref(false);
 watch(showDiff, (enabled) => {
     if (enabled) {
+        codeEditorInstance.value = null;
         diffHtml.value = editorHtml.value;
+    } else {
+        diffEditorInstance.value = null;
     }
 });
 const onDiffChange = (value: string) => {
@@ -438,12 +481,14 @@ const diffOptions = computed(() => ({
     ...monacoOptions.value,
     renderSideBySide: false,
 }));
-const diffEditorInstance = ref<monaco.editor.IStandaloneDiffEditor | null>(
+const diffEditorInstance = shallowRef<monaco.editor.IStandaloneDiffEditor | null>(
     null,
 );
 const onDiffDidMount = (editor: monaco.editor.IStandaloneDiffEditor) => {
     diffEditorInstance.value = editor;
+    syncVimMode();
 };
+watch([vimModeEnabled, showDiff], syncVimMode);
 watch(
     monacoOptions,
     (opts) => {
@@ -512,6 +557,7 @@ onMounted(() => {
 onBeforeUnmount(() => {
     window.removeEventListener("beforeunload", beforeUnload);
     document.removeEventListener("pointerdown", onMenuPointerDown);
+    disposeVimMode();
 });
 
 const publishing = ref(false);
