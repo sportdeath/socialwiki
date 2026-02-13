@@ -13,7 +13,7 @@
                         @keydown.space.self.prevent="selectPageVersion(version)"
                     >
                         <header>
-                            <h3>{{ version.value.summary }}</h3>
+                            <h3>{{ formatSummary(version.value.summary) }}</h3>
                         </header>
 
                         <p class="history-meta">
@@ -161,6 +161,9 @@ const selectPageVersion = (version: PageVersionObject) => {
 
 const isSelected = (version: PageVersionObject) =>
     selectedPageVersion.value?.url === version.url;
+
+const formatSummary = (summary?: string) =>
+    summary?.trim() || "No summary provided";
 
 watch(pageVersions, async (versions) => {
     selectedPageVersion.value = versions.at(0) || null;
