@@ -108,10 +108,16 @@
                     <ul>
                         <li>
                             <button
+                                class="refresh-button"
                                 title="Refresh the preview"
                                 @click="refreshPreview"
                             >
-                                {{ debouncing ? "Refreshing…" : "Refresh" }}
+                                Refresh
+                                <span
+                                    v-if="debouncing"
+                                    class="refresh-spinner"
+                                    aria-hidden="true"
+                                ></span>
                             </button>
                         </li>
                         <li>
@@ -661,6 +667,23 @@ nav .top-level-checkbox {
     gap: 0.4rem;
 }
 
+nav .refresh-button {
+    position: relative;
+}
+
+nav .refresh-spinner {
+    position: absolute;
+    top: -0.1rem;
+    right: -0.1rem;
+    width: 0.7rem;
+    height: 0.7rem;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: refresh-spin 1s linear infinite;
+    pointer-events: none;
+}
+
 /* separators */
 nav ul[role="menu"] > li[role="separator"] {
     height: 1px;
@@ -756,6 +779,12 @@ nav .publish-menu > button:disabled:hover {
     }
     100% {
         transform: translateX(0);
+    }
+}
+
+@keyframes refresh-spin {
+    to {
+        transform: rotate(360deg);
     }
 }
 </style>
