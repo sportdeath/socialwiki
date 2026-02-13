@@ -1,38 +1,49 @@
 <template>
     <TwoPaneLayout leftTitle="History" rightTitle="Preview">
         <template #left-pane>
-            <ol>
+            <ol class="history-list">
                 <li v-for="(version, index) in pageVersions" :key="version.url">
-                    <article :id="version.url">
-                        <button
-                            :class="{
-                                selected:
-                                    selectedPageVersion?.url === version.url,
-                            }"
-                            @click="selectedPageVersion = version"
-                        >
-                            <h3>
-                                {{ version.value.summary }}
-                            </h3>
-                        </button>
+                    <article
+                        :id="version.url"
+                        :class="{ selected: isSelected(version) }"
+                        role="button"
+                        tabindex="0"
+                        @click="selectPageVersion(version)"
+                        @keydown.enter.self.prevent="selectPageVersion(version)"
+                        @keydown.space.self.prevent="selectPageVersion(version)"
+                    >
+                        <header>
+                            <h3>{{ version.value.summary }}</h3>
+                        </header>
 
-                        <p>
-                            <GraffitiActorToHandle :actor="version.actor" />
-                            edited on
-                            {{
-                                new Date(
-                                    version.value.published,
-                                ).toLocaleString()
-                            }}
+                        <p class="history-meta">
+                            <strong class="history-actor">
+                                <GraffitiActorToHandle :actor="version.actor" />
+                            </strong>
+                            <time
+                                :datetime="
+                                    new Date(
+                                        version.value.published,
+                                    ).toISOString()
+                                "
+                            >
+                                {{
+                                    new Date(
+                                        version.value.published,
+                                    ).toLocaleString()
+                                }}
+                            </time>
                         </p>
 
-                        <footer v-if="$graffitiSession.value">
-                            <ul v-if="selectedPageVersion?.url === version.url">
+                        <footer
+                            v-if="$graffitiSession.value && isSelected(version)"
+                        >
+                            <ul>
                                 <li
                                     v-if="$graffitiSession.value && index !== 0"
                                 >
                                     <button
-                                        @click="
+                                        @click.stop="
                                             restorePageVersion(
                                                 version,
                                                 $graffitiSession.value,
@@ -49,7 +60,7 @@
                                     "
                                 >
                                     <button
-                                        @click="
+                                        @click.stop="
                                             deletePageVersion(
                                                 graffiti,
                                                 version,
@@ -107,7 +118,7 @@ initLens(async (address: string) => {
 const transclude = useTemplateRef<HTMLElement>("transclude");
 defineExpose({ transclude });
 
-const { objects: pageVersionsRaw } = useGraffitiDiscover(
+const { objects: pageVersionsRaw, isFirstPoll } = useGraffitiDiscover(
     () => [pageName.value],
     () => pageVersionSchema(pageName.value),
 );
@@ -143,7 +154,87 @@ async function restorePageVersion(
 const selectedPageVersion = ref<PageVersionObject | null | undefined>(
     undefined,
 );
+
+const selectPageVersion = (version: PageVersionObject) => {
+    selectedPageVersion.value = version;
+};
+
+const isSelected = (version: PageVersionObject) =>
+    selectedPageVersion.value?.url === version.url;
+
 watch(pageVersions, async (versions) => {
     selectedPageVersion.value = versions.at(0) || null;
 });
 </script>
+
+<style scoped>
+.history-list {
+    width: 100%;
+    list-style: none;
+    padding: 0.75rem;
+    margin: 0;
+    display: grid;
+    gap: 0.75rem;
+}
+
+.history-list > li > article {
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    display: grid;
+    gap: 0.45rem;
+    cursor: pointer;
+    transition:
+        background-color 0.15s ease,
+        border-color 0.15s ease;
+}
+
+.history-list > li > article:hover {
+    background: var(--background-color-interactive);
+    border-color: var(--border-color-hover);
+}
+
+.history-list > li > article.selected {
+    background: var(--background-color-interactive);
+    border-color: var(--border-color-hover);
+    box-shadow: 0 0 0 1px var(--border-color-hover);
+}
+
+.history-list > li > article:focus-visible {
+    outline: 2px solid var(--border-color-hover);
+    outline-offset: 1px;
+}
+
+.history-list h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    line-height: 1.35;
+    color: var(--link-color);
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.history-meta {
+    display: grid;
+    gap: 0.1rem;
+}
+
+.history-meta .history-actor {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.history-meta time {
+    color: var(--secondary-color);
+    font-size: 0.85rem;
+}
+
+.history-list footer > ul {
+    list-style: none;
+    display: flex;
+    gap: 0.85rem;
+    margin: 0;
+    padding: 0.15rem 0 0;
+}
+</style>
