@@ -24,6 +24,13 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
     protected destroyNavigation = () => {};
     protected setHash = (hash: string) => {};
     protected currentBlobUrl: string | null = null;
+    // We intentionally use both srcdoc and blob URLs:
+    // - Top-level, non-opaque contexts use blob URLs because Chrome can behave
+    //   incorrectly with sandboxed srcdoc updates.
+    // - Nested sandboxed contexts use srcdoc because Firefox blocks loading
+    //   parent-created blob:null URLs across partition keys.
+    protected readonly useBlobForSrcDoc =
+      window.top === window && window.origin !== "null";
 
     constructor() {
       super();
@@ -46,12 +53,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         "camera *",
         "microphone *",
         "geolocation *",
-        "clipboard-read *",
-        "clipboard-write *",
         "fullscreen *",
-        "picture-in-picture *",
-        "autoplay *",
-        "screen-wake-lock *",
       ].join("; ");
 
       this.destroyLens = serveLens(this.iframe, (status, srcdoc) => {
@@ -252,14 +254,32 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
     setSrcDoc(srcdoc: string, status: string) {
       if (this.currentSrcDoc === srcdoc) return;
       this.currentSrcDoc = srcdoc;
+
+      if (!this.useBlobForSrcDoc) {
+        // In nested sandboxed frames (opaque/null origin), prefer srcdoc.
+        // Firefox enforces storage partition keys for blob:null URLs and can
+        // reject cross-partition blob access during nested transclusion.
+        if (this.currentBlobUrl) {
+          URL.revokeObjectURL(this.currentBlobUrl);
+          this.currentBlobUrl = null;
+        }
+        this.iframe.srcdoc = srcdoc;
+        this.setAttribute("status", status);
+        return;
+      }
+
       if (this.currentBlobUrl) {
         URL.revokeObjectURL(this.currentBlobUrl);
       }
+      // In top-level, non-opaque contexts, use blob URLs to avoid Chrome
+      // sandbox/srcdoc rendering issues.
       const blob = new Blob([srcdoc], { type: "text/html" });
       this.currentBlobUrl = URL.createObjectURL(blob);
       this.setUrl(this.currentBlobUrl, status);
     }
     setUrl(url: string, status: string) {
+      // If srcdoc is set, it wins over src; clear it before URL navigation.
+      this.iframe.removeAttribute("srcdoc");
       this.iframe.src = url;
       this.setAttribute("status", status);
     }
