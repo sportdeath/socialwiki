@@ -12,6 +12,7 @@
                                 Publish
                             </button>
                             <details
+                                ref="publishMenuDetails"
                                 :class="{ disabled: draftHtml === editorHtml }"
                             >
                                 <summary
@@ -40,7 +41,7 @@
                         </li>
 
                         <li role="none">
-                            <details>
+                            <details ref="viewMenuDetails">
                                 <summary role="menuitem">▾ View</summary>
 
                                 <ul role="menu">
@@ -409,6 +410,23 @@ const onDiffChange = (value: string) => {
     editorHtml.value = value;
 };
 
+const publishMenuDetails = ref<HTMLDetailsElement | null>(null);
+const viewMenuDetails = ref<HTMLDetailsElement | null>(null);
+const onMenuPointerDown = (event: PointerEvent) => {
+    const target = event.target;
+    if (!(target instanceof Node)) return;
+
+    const publishMenu = publishMenuDetails.value;
+    if (publishMenu?.open && !publishMenu.contains(target)) {
+        publishMenu.open = false;
+    }
+
+    const viewMenu = viewMenuDetails.value;
+    if (viewMenu?.open && !viewMenu.contains(target)) {
+        viewMenu.open = false;
+    }
+};
+
 // Keep diff editor options in sync reactively
 const diffOptions = computed(() => ({
     ...monacoOptions.value,
@@ -482,9 +500,11 @@ const beforeUnload = (event: BeforeUnloadEvent) => {
 };
 onMounted(() => {
     window.addEventListener("beforeunload", beforeUnload);
+    document.addEventListener("pointerdown", onMenuPointerDown);
 });
 onBeforeUnmount(() => {
     window.removeEventListener("beforeunload", beforeUnload);
+    document.removeEventListener("pointerdown", onMenuPointerDown);
 });
 
 const publishing = ref(false);
