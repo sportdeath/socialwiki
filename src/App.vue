@@ -141,13 +141,14 @@ watch(
         // If the route is missing a lens (e.g. "#/SomePage"), redirect
         // to the view lens while preserving the raw page address.
         const normalized = newAddress.replace(/^\/+/, "");
-        if (!parsed.pageAddress.length && normalized.length > 0) {
+        const normalizedPageAddress = normalized.replace(/\/+$/, "");
+        if (!parsed.pageAddress.length && normalizedPageAddress.length > 0) {
             const redirectRoute = composeRoute({
                 lens: "v",
                 lensParams: lensParams.value,
-                pageAddress: normalized,
+                pageAddress: normalizedPageAddress,
             });
-            if (`/${normalized}` !== redirectRoute) {
+            if (`/${normalizedPageAddress}` !== redirectRoute) {
                 router.replace(redirectRoute);
             }
             return;
