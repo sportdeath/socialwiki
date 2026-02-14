@@ -43,6 +43,7 @@
                                     v-if="$graffitiSession.value && index !== 0"
                                 >
                                     <button
+                                        :disabled="hasPendingMutation"
                                         @click.stop="
                                             restorePageVersion(
                                                 version,
@@ -50,7 +51,11 @@
                                             )
                                         "
                                     >
-                                        Restore
+                                        {{
+                                            isRestoringVersion(version)
+                                                ? "Restoring..."
+                                                : "Restore"
+                                        }}
                                     </button>
                                 </li>
                                 <li>
@@ -65,15 +70,19 @@
                                     "
                                 >
                                     <button
+                                        :disabled="hasPendingMutation"
                                         @click.stop="
-                                            deletePageVersion(
-                                                graffiti,
+                                            deleteSelectedPageVersion(
                                                 version,
                                                 $graffitiSession.value,
                                             )
                                         "
                                     >
-                                        Delete
+                                        {{
+                                            isDeletingVersion(version)
+                                                ? "Deleting..."
+                                                : "Delete"
+                                        }}
                                     </button>
                                 </li>
                             </ul>
@@ -167,24 +176,53 @@ const pageVersions = computed(() =>
 
 const graffiti = useGraffiti();
 const navigate = window.navigate;
+const restoringVersionUrl = ref<string | null>(null);
+const deletingVersionUrl = ref<string | null>(null);
+const hasPendingMutation = computed(
+    () =>
+        restoringVersionUrl.value !== null || deletingVersionUrl.value !== null,
+);
 
 async function restorePageVersion(
     version: PageVersionObject,
     session: GraffitiSession,
 ) {
+    if (hasPendingMutation.value) return;
     const html = transclude.value?.getAttribute("srcdoc");
     if (!html) {
         console.error("no HTML to restore");
         return;
     }
-    selectedPageVersion.value = await createPageVersion(
-        graffiti,
-        version.value.object,
-        html,
-        pageVersions.value.map<string>((v) => v.url),
-        `Restore: ${version.value.summary}`,
-        session,
-    );
+    restoringVersionUrl.value = version.url;
+    try {
+        selectedPageVersion.value = await createPageVersion(
+            graffiti,
+            version.value.object,
+            html,
+            pageVersions.value.map<string>((v) => v.url),
+            `Restore: ${version.value.summary}`,
+            session,
+        );
+    } finally {
+        if (restoringVersionUrl.value === version.url) {
+            restoringVersionUrl.value = null;
+        }
+    }
+}
+
+async function deleteSelectedPageVersion(
+    version: PageVersionObject,
+    session: GraffitiSession,
+) {
+    if (hasPendingMutation.value) return;
+    deletingVersionUrl.value = version.url;
+    try {
+        await deletePageVersion(graffiti, version, session);
+    } finally {
+        if (deletingVersionUrl.value === version.url) {
+            deletingVersionUrl.value = null;
+        }
+    }
 }
 
 function openEditLens() {
@@ -208,6 +246,10 @@ const selectPageVersion = (version: PageVersionObject) => {
 
 const isSelected = (version: PageVersionObject) =>
     selectedPageVersion.value?.url === version.url;
+const isRestoringVersion = (version: PageVersionObject) =>
+    restoringVersionUrl.value === version.url;
+const isDeletingVersion = (version: PageVersionObject) =>
+    deletingVersionUrl.value === version.url;
 
 const formatSummary = (summary?: string) =>
     summary?.trim() || "No summary provided";
