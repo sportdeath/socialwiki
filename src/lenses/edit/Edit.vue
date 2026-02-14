@@ -638,7 +638,7 @@ async function publish(as?: boolean) {
             clearTimeout(publishShakeTimeout);
             publishShakeTimeout = null;
         }
-        navigate(`#/v/${publishName}`);
+        navigate(`#/v/${publishName}${pageHash.value}`);
     } finally {
         publishing.value = false;
     }

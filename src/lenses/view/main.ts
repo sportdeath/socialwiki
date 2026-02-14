@@ -9,7 +9,8 @@ import {
 const graffiti = new window.graffiti();
 
 let currentAddress = "";
-let currentPageName = "";
+let currentContentKey = "";
+let activeRenderVersion = 0;
 const transclude = document.querySelector("#transclude") as HTMLElement;
 transclude.setAttribute("srcdoc", LoadingPage);
 
@@ -26,54 +27,63 @@ observer.observe(transclude, {
   attributeFilter: ["src"],
 });
 
-initLens(async (pageAddress, _lensParams) => {
+initLens(async (pageAddress, lensParams) => {
   const address = pageAddress;
-  if (address === currentAddress) return;
+  const url = new URL(address, "http://example.com");
+  const requestedVersion = lensParams.get("version") ?? "";
+  const pageName = url.pathname.slice(1);
+  const contentKey = requestedVersion || pageName;
+
+  if (address === currentAddress && contentKey === currentContentKey) return;
   currentAddress = address;
 
-  const url = new URL(address, "http://example.com");
-  const pageName = url.pathname.slice(1);
-  if (pageName === currentPageName) {
-    // If the page name hasn't changed, we can just update the hash
+  if (contentKey === currentContentKey) {
+    // If the rendered content target hasn't changed, only update the hash.
     transclude?.setAttribute("hash", url.hash);
     return;
   }
-  currentPageName = pageName;
+  currentContentKey = contentKey;
+  const renderVersion = ++activeRenderVersion;
 
   transclude?.setAttribute("srcdoc", LoadingPage);
 
   try {
-    const pageVersions = await getPageVersions(graffiti, pageName);
-    if (pageName !== currentPageName) return;
+    let mediaAddress = requestedVersion;
+    if (!mediaAddress.length) {
+      const pageVersions = await getPageVersions(graffiti, pageName);
+      if (renderVersion !== activeRenderVersion) return;
 
-    const potentialPageVersion = pageVersions.at(0);
-    if (!potentialPageVersion) {
-      outputLensStatus("not-found");
-      transclude?.setAttribute(
-        "srcdoc",
-        PageNotFound(address, window.topOrigin),
-      );
-      return;
+      const potentialPageVersion = pageVersions.at(0);
+      if (!potentialPageVersion) {
+        outputLensStatus("not-found");
+        transclude?.setAttribute(
+          "srcdoc",
+          PageNotFound(address, window.topOrigin),
+        );
+        return;
+      }
+
+      mediaAddress = potentialPageVersion.value.result.media;
     }
 
     const media = await graffiti.getMedia(
-      potentialPageVersion.value.result.media,
+      mediaAddress,
       {
         types: ["text/html"],
       },
     );
-    if (pageName !== currentPageName) return;
+    if (renderVersion !== activeRenderVersion) return;
 
     const html = await media.data.text();
-    if (pageName !== currentPageName) return;
+    if (renderVersion !== activeRenderVersion) return;
 
     outputLensStatus("ok", html);
     transclude?.setAttribute("srcdoc", html);
 
-    if (address === currentAddress) {
-      transclude?.setAttribute("hash", url.hash);
-    }
+    const currentUrl = new URL(currentAddress, "http://example.com");
+    transclude?.setAttribute("hash", currentUrl.hash);
   } catch (e) {
+    if (renderVersion !== activeRenderVersion) return;
     outputLensStatus("error");
     transclude?.setAttribute(
       "srcdoc",

@@ -8,7 +8,6 @@ const lenses = {
   v: "src/lenses/view/index.html",
   e: "src/lenses/edit/index.html",
   h: "src/lenses/history/index.html",
-  version: "src/lenses/version/index.html",
 };
 type Lens = keyof typeof lenses;
 function assertLens(x: string): asserts x is Lens {

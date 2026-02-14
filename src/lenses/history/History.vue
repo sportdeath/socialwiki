@@ -94,12 +94,7 @@
         <template #right-pane>
             <sw-transclude
                 ref="transclude"
-                :hash="pageHash"
-                :src="
-                    selectedPageVersion
-                        ? `#/version/${selectedPageVersion.value.result.media}`
-                        : ''
-                "
+                :src="previewAddress"
             ></sw-transclude>
         </template>
     </TwoPaneLayout>
@@ -239,6 +234,17 @@ function openEditLens() {
 const selectedPageVersion = ref<PageVersionObject | null | undefined>(
     undefined,
 );
+const previewAddress = computed(() => {
+    if (!selectedPageVersion.value) return "";
+
+    return `#${composeRoute({
+        lens: "v",
+        lensParams: new URLSearchParams({
+            version: selectedPageVersion.value.value.result.media,
+        }),
+        pageAddress: `${pageName.value}${pageHash.value}`,
+    })}`;
+});
 
 const selectPageVersion = (version: PageVersionObject) => {
     selectedPageVersion.value = version;
