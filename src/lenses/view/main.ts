@@ -27,12 +27,31 @@ observer.observe(transclude, {
   attributeFilter: ["src"],
 });
 
+function normalizeEditorParams(lensParams: URLSearchParams) {
+  return lensParams
+    .getAll("editor")
+    .map((editor) => editor.trim())
+    .filter((editor) => editor.length > 0);
+}
+
+async function resolveEditors(editors: string[]) {
+  const resolved = await Promise.all(
+    editors.map(async (editor) => {
+      if (editor.startsWith("did:")) return editor;
+      return graffiti.handleToActor(editor);
+    }),
+  );
+
+  return [...new Set(resolved)];
+}
+
 initLens(async (pageAddress, lensParams) => {
   const address = pageAddress;
   const url = new URL(address, "http://example.com");
   const requestedVersion = lensParams.get("version") ?? "";
+  const requestedEditors = normalizeEditorParams(lensParams);
   const pageName = url.pathname.slice(1);
-  const contentKey = requestedVersion || pageName;
+  const contentKey = requestedVersion || `${pageName}|${requestedEditors.join("|")}`;
 
   if (address === currentAddress && contentKey === currentContentKey) return;
   currentAddress = address;
@@ -50,7 +69,10 @@ initLens(async (pageAddress, lensParams) => {
   try {
     let mediaAddress = requestedVersion;
     if (!mediaAddress.length) {
-      const pageVersions = await getPageVersions(graffiti, pageName);
+      const editors = await resolveEditors(requestedEditors);
+      if (renderVersion !== activeRenderVersion) return;
+
+      const pageVersions = await getPageVersions(graffiti, pageName, editors);
       if (renderVersion !== activeRenderVersion) return;
 
       const potentialPageVersion = pageVersions.at(0);

@@ -5,9 +5,22 @@ import type {
   JSONSchema,
 } from "@graffiti-garden/api";
 
-export function pageVersionSchema(pageChannel: string) {
+function normalizeEditors(editors?: string[]): string[] | undefined {
+  if (!editors?.length) return;
+  return [...new Set(editors)];
+}
+
+export function pageVersionSchema(pageChannel: string, editors?: string[]) {
+  const normalizedEditors = normalizeEditors(editors);
   return {
     properties: {
+      ...(normalizedEditors?.length
+        ? {
+            actor: {
+              enum: normalizedEditors,
+            },
+          }
+        : {}),
       value: {
         properties: {
           // https://www.w3.org/TR/activitystreams-vocabulary/#dfn-update
@@ -47,6 +60,7 @@ export function pageVersionSchema(pageChannel: string) {
     },
   } as const satisfies JSONSchema;
 }
+
 export type PageVersionSchema = ReturnType<typeof pageVersionSchema>;
 export type PageVersionObject = GraffitiObject<PageVersionSchema>;
 
@@ -88,11 +102,16 @@ export async function deletePageVersion(
   await graffiti.delete(object, session);
 }
 
-export async function getPageVersions(graffiti: Graffiti, pageName: string) {
+export async function getPageVersions(
+  graffiti: Graffiti,
+  pageName: string,
+  editors?: string[],
+) {
   const versions = new Map<string, PageVersionObject>();
+  const normalizedEditors = normalizeEditors(editors);
   for await (const result of graffiti.discover(
     [pageName],
-    pageVersionSchema(pageName),
+    pageVersionSchema(pageName, normalizedEditors),
   )) {
     if (result.error) {
       console.error(result.error);
