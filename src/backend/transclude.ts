@@ -169,6 +169,12 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
 
       const src = this.getAttribute("src");
       if (src === null) {
+        // srcdoc mode renders raw HTML directly in the iframe.
+        // Reset lens/route state so returning to src mode reloads the lens page.
+        this.currentRoute = "";
+        this.currentLens = "";
+        this.lensReadyPromise = null;
+
         // If no source, then a lens is using transclude
         // to manually set page contents. Just pay attention
         // to the srcdoc and the hash in this case.

@@ -121,11 +121,23 @@ import { composeRoute } from "../../backend/route";
 
 const pageName = ref("");
 const pageHash = ref("");
+const selectedPageVersion = ref<PageVersionObject | null | undefined>(
+    undefined,
+);
 
 initLens(async (pageAddress, _lensParams) => {
     const url = new URL(pageAddress, "https://example.com");
-    pageName.value = url.pathname.slice(1);
-    pageHash.value = url.hash;
+    const nextPageName = url.pathname.slice(1);
+    const nextPageHash = url.hash;
+    const didChangePage = pageName.value !== nextPageName;
+
+    pageName.value = nextPageName;
+    pageHash.value = nextPageHash;
+
+    if (didChangePage) {
+        // Avoid rendering stale preview routes while the new page versions load.
+        selectedPageVersion.value = undefined;
+    }
 });
 
 const transclude = useTemplateRef<HTMLElement>("transclude");
@@ -231,17 +243,30 @@ function openEditLens() {
     );
 }
 
-const selectedPageVersion = ref<PageVersionObject | null | undefined>(
-    undefined,
-);
+const effectiveSelectedPageVersion = computed(() => {
+    const selected = selectedPageVersion.value;
+    if (
+        selected &&
+        pageVersions.value.some((version) => version.url === selected.url)
+    ) {
+        return selected;
+    }
+
+    return pageVersions.value.at(0) || null;
+});
+
 const previewAddress = computed(() => {
-    if (!selectedPageVersion.value) return "";
+    const lensParams = new URLSearchParams();
+    if (effectiveSelectedPageVersion.value) {
+        lensParams.set(
+            "version",
+            effectiveSelectedPageVersion.value.value.result.media,
+        );
+    }
 
     return `#${composeRoute({
         lens: "v",
-        lensParams: new URLSearchParams({
-            version: selectedPageVersion.value.value.result.media,
-        }),
+        lensParams,
         pageAddress: `${pageName.value}${pageHash.value}`,
     })}`;
 });
@@ -251,7 +276,7 @@ const selectPageVersion = (version: PageVersionObject) => {
 };
 
 const isSelected = (version: PageVersionObject) =>
-    selectedPageVersion.value?.url === version.url;
+    effectiveSelectedPageVersion.value?.url === version.url;
 const isRestoringVersion = (version: PageVersionObject) =>
     restoringVersionUrl.value === version.url;
 const isDeletingVersion = (version: PageVersionObject) =>
@@ -260,8 +285,16 @@ const isDeletingVersion = (version: PageVersionObject) =>
 const formatSummary = (summary?: string) =>
     summary?.trim() || "No summary provided";
 
-watch(pageVersions, async (versions) => {
-    selectedPageVersion.value = versions.at(0) || null;
+watch(pageVersions, (versions) => {
+    if (!versions.length) {
+        selectedPageVersion.value = undefined;
+        return;
+    }
+
+    const selectedUrl = selectedPageVersion.value?.url;
+    if (selectedUrl && !versions.some((version) => version.url === selectedUrl)) {
+        selectedPageVersion.value = undefined;
+    }
 });
 
 watch([pageVersions, isFirstPoll], ([versions, firstPoll]) => {
