@@ -199,7 +199,6 @@ export function serveGraffiti(): Graffiti {
     // Set a heartbeat to destroy the connection,
     // in case it can't be set up properly
     const heartbeatIntervalMs = 100;
-    const connectedRemote = remote;
     heartbeatTimer = setInterval(async () => {
       if (window.closed) return destroy();
     }, heartbeatIntervalMs);

@@ -53,6 +53,11 @@
                                         Restore
                                     </button>
                                 </li>
+                                <li>
+                                    <button @click.stop="openEditLens">
+                                        Edit
+                                    </button>
+                                </li>
                                 <li
                                     v-if="
                                         $graffitiSession.value?.actor ===
@@ -105,9 +110,10 @@ import {
     GraffitiActorToHandle,
     useGraffitiDiscover,
 } from "@graffiti-garden/wrapper-vue";
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useTemplateRef } from "vue";
-import { initLens } from "../../backend/lens-client";
+import { initLens, outputLensStatus } from "../../backend/lens-client";
+import { composeRoute } from "../../backend/route";
 
 const pageName = ref("");
 const pageHash = ref("");
@@ -120,6 +126,32 @@ initLens(async (pageAddress, _lensParams) => {
 
 const transclude = useTemplateRef<HTMLElement>("transclude");
 defineExpose({ transclude });
+let previewObserver: MutationObserver | undefined;
+
+const outputPreviewIfReady = () => {
+    const preview = transclude.value;
+    if (!preview) return;
+
+    const status = preview.getAttribute("status");
+    const html = preview.getAttribute("srcdoc");
+    if (status === "ok" && html !== null) {
+        outputLensStatus("ok", html);
+    }
+};
+
+onMounted(() => {
+    if (!transclude.value) return;
+    previewObserver = new MutationObserver(outputPreviewIfReady);
+    previewObserver.observe(transclude.value, {
+        attributes: true,
+        attributeFilter: ["srcdoc"],
+    });
+    outputPreviewIfReady();
+});
+
+onBeforeUnmount(() => {
+    previewObserver?.disconnect();
+});
 
 const { objects: pageVersionsRaw, isFirstPoll } = useGraffitiDiscover(
     () => [pageName.value],
@@ -134,6 +166,7 @@ const pageVersions = computed(() =>
 );
 
 const graffiti = useGraffiti();
+const navigate = window.navigate;
 
 async function restorePageVersion(
     version: PageVersionObject,
@@ -154,6 +187,17 @@ async function restorePageVersion(
     );
 }
 
+function openEditLens() {
+    const draft = transclude.value?.getAttribute("srcdoc") ?? "";
+    navigate(
+        `#${composeRoute({
+            lens: "e",
+            lensParams: new URLSearchParams({ draft }),
+            pageAddress: `${pageName.value}${pageHash.value}`,
+        })}`,
+    );
+}
+
 const selectedPageVersion = ref<PageVersionObject | null | undefined>(
     undefined,
 );
@@ -170,6 +214,13 @@ const formatSummary = (summary?: string) =>
 
 watch(pageVersions, async (versions) => {
     selectedPageVersion.value = versions.at(0) || null;
+});
+
+watch([pageVersions, isFirstPoll], ([versions, firstPoll]) => {
+    if (firstPoll) return;
+    if (!versions.length) {
+        outputLensStatus("not-found");
+    }
 });
 </script>
 
