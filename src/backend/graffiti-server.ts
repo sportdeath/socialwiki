@@ -199,27 +199,9 @@ export function serveGraffiti(): Graffiti {
     // Set a heartbeat to destroy the connection,
     // in case it can't be set up properly
     const heartbeatIntervalMs = 100;
-    const heartbeatTimeoutMs = 5000;
     const connectedRemote = remote;
     heartbeatTimer = setInterval(async () => {
       if (window.closed) return destroy();
-
-      try {
-        await Promise.race([
-          connectedRemote.ping(),
-          new Promise((_, reject) => {
-            setTimeout(
-              () => reject(new Error("heartbeat timeout")),
-              heartbeatTimeoutMs,
-            );
-          }),
-        ]);
-      } catch {
-        console.error(
-          "Lost connection with window, destroying graffiti connection...",
-        );
-        await destroy();
-      }
     }, heartbeatIntervalMs);
   }
 
