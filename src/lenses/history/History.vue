@@ -179,8 +179,9 @@ watch(pageVersions, async (versions) => {
     list-style: none;
     padding: 0.75rem;
     margin: 0;
-    display: grid;
-    gap: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
 }
 
 .history-list > li > article {
