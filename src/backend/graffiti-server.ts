@@ -25,12 +25,15 @@ export function serveGraffiti(): Graffiti {
     loggedInActors.delete(detail.actor);
   });
 
-  const served = new Map<Window, () => void>();
+  const served = new Map<Window, () => Promise<void>>();
   const iteratorsByWindow = new Map<
     Window,
     Map<string, GraffitiObjectStream<{}>>
   >();
   async function serveGraffitiToWindow(window: Window) {
+    // Destroy an existing connection if it exists
+    await served.get(window)?.();
+
     const messenger = new WindowMessenger({
       remoteWindow: window,
       allowedOrigins: ["*"],
@@ -49,9 +52,6 @@ export function serveGraffiti(): Graffiti {
 
     const iterators = new Map<string, GraffitiObjectStream<{}>>();
     iteratorsByWindow.set(window, iterators);
-
-    const heartbeatIntervalMs = 500;
-    const heartbeatTimeoutMs = 500;
 
     const connection = connect<{
       sessionEvent: (type: string, detail: any) => Promise<void>;
@@ -135,37 +135,47 @@ export function serveGraffiti(): Graffiti {
       graffiti.sessionEvents.addEventListener(type, forward);
     }
 
-    let destroyed = false;
+    let destroyPromise: Promise<void> | null = null;
     let heartbeatTimer: number | undefined;
     const destroy = async () => {
-      if (destroyed) return;
-      destroyed = true;
-      if (heartbeatTimer !== undefined) {
-        clearInterval(heartbeatTimer);
-        heartbeatTimer = undefined;
-      }
-      // Remove all listeners
-      for (const type of sessionEventTypes) {
-        graffiti.sessionEvents.removeEventListener(type, forward);
-      }
+      if (destroyPromise) return destroyPromise;
+      destroyPromise = (async () => {
+        // Destroy the connection to stop any requests
+        connection.destroy();
 
-      // Return all iterators to prevent locked queries
-      const windowIterators = iteratorsByWindow.get(window);
-      if (windowIterators) {
-        const returns = [...windowIterators.values()].map((iterator) =>
-          iterator.return({ cursor: "" }),
-        );
-        await Promise.allSettled(returns);
-        windowIterators.clear();
-        iteratorsByWindow.delete(window);
-      }
+        // Stop the heartbeat
+        if (heartbeatTimer !== undefined) {
+          clearInterval(heartbeatTimer);
+          heartbeatTimer = undefined;
+        }
 
-      // Destroy the connection
-      connection.destroy();
-      served.delete(window);
+        // Remove all listeners
+        for (const type of sessionEventTypes) {
+          graffiti.sessionEvents.removeEventListener(type, forward);
+        }
+
+        // Return all iterators to prevent locked queries
+        const windowIterators = iteratorsByWindow.get(window);
+        if (windowIterators) {
+          const returns = [...windowIterators.values()].map((iterator) =>
+            iterator.return({ cursor: "" }),
+          );
+          await Promise.allSettled(returns);
+          windowIterators.clear();
+          iteratorsByWindow.delete(window);
+        }
+
+        // Remove the destroy function to allow for new connections
+        served.delete(window);
+      })();
+      return destroyPromise;
     };
 
-    const pingOrDestroy = async () => {
+    const heartbeatIntervalMs = 500;
+    const heartbeatTimeoutMs = 500;
+    heartbeatTimer = setInterval(async () => {
+      if (window.closed) return destroy();
+
       try {
         await Promise.race([
           remote.ping(),
@@ -177,25 +187,22 @@ export function serveGraffiti(): Graffiti {
           }),
         ]);
       } catch {
+        console.log("destroy due to heartbeat");
+        console.log(window.closed);
         await destroy();
       }
-    };
-
-    heartbeatTimer = setInterval(() => {
-      void pingOrDestroy();
     }, heartbeatIntervalMs);
     served.set(window, destroy);
   }
 
-  window.addEventListener("message", (event) => {
+  window.addEventListener("message", async (event) => {
     if (!event.source) return;
     const window = event.source as Window;
     const message = event.data;
     if (message === "sw-graffiti-init") {
-      serveGraffitiToWindow(window);
+      void serveGraffitiToWindow(window);
     } else if (message === "sw-graffiti-destroy") {
-      const existing = served.get(window);
-      void existing?.();
+      await served.get(window)?.();
     }
   });
 
