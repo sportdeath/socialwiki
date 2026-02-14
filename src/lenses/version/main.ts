@@ -7,7 +7,8 @@ let currentAddress = "";
 const transclude = document.querySelector("#transclude");
 transclude?.setAttribute("srcdoc", LoadingPage);
 
-initLens(async (address: string) => {
+initLens(async (pageAddress, _lensParams) => {
+  const address = pageAddress;
   if (address === currentAddress) return;
   currentAddress = address;
   transclude?.setAttribute("srcdoc", LoadingPage);

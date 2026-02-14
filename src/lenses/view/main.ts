@@ -26,7 +26,8 @@ observer.observe(transclude, {
   attributeFilter: ["src"],
 });
 
-initLens(async (address: string) => {
+initLens(async (pageAddress, _lensParams) => {
+  const address = pageAddress;
   if (address === currentAddress) return;
   currentAddress = address;
 

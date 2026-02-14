@@ -4,7 +4,6 @@ import {
   createRouter,
   createWebHashHistory,
   RouterView,
-  stringifyQuery,
 } from "vue-router";
 import App from "./App.vue";
 import { GraffitiPlugin } from "@graffiti-garden/wrapper-vue";
@@ -28,27 +27,15 @@ const router = createRouter({
       redirect: "/v/Social.Wiki",
     },
     {
-      path: "/:name",
-      redirect: (to) => {
-        return { path: `/v/${to.params.name}` };
-      },
-    },
-    {
-      path: "/w/:path(.+)",
-      redirect: (to) => {
-        return { path: `/v/${to.params.path}` };
-      },
-    },
-    {
-      path: "/:lens/:path(.+)",
+      path: "/:path(.+)",
       component: App,
-      props: (to) => {
-        const hash = to.hash;
-        const path = to.params.path;
-        const query = stringifyQuery(to.query);
+      props: () => {
+        // Use the raw hash route to avoid Vue Router query decoding/re-encoding
+        // that can alter reserved characters in lens params.
+        const hash = window.location.hash;
+        const route = hash.replace(/^#\/?/, "");
         return {
-          lens: to.params.lens,
-          address: `${path}${query.length ? `?${query}` : ""}${hash}`,
+          address: route,
         };
       },
     },

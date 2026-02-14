@@ -80,6 +80,7 @@
         <template #right-pane>
             <sw-transclude
                 ref="transclude"
+                :hash="pageHash"
                 :src="
                     selectedPageVersion
                         ? `#/version/${selectedPageVersion.value.result.media}`
@@ -109,10 +110,12 @@ import { useTemplateRef } from "vue";
 import { initLens } from "../../backend/lens-client";
 
 const pageName = ref("");
+const pageHash = ref("");
 
-initLens(async (address: string) => {
-    // TODO: fix this and extract query/hash
-    pageName.value = address;
+initLens(async (pageAddress, _lensParams) => {
+    const url = new URL(pageAddress, "https://example.com");
+    pageName.value = url.pathname.slice(1);
+    pageHash.value = url.hash;
 });
 
 const transclude = useTemplateRef<HTMLElement>("transclude");

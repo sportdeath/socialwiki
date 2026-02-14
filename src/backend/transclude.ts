@@ -2,6 +2,7 @@ import type { Graffiti } from "@graffiti-garden/api";
 import { inputLensAddress, serveLens } from "./lens-server";
 import { ErrorPage, LoadingPage } from "./status-pages";
 import { serveNavigation } from "./navigation-server";
+import { parseRoute } from "./route";
 
 const lenses = {
   v: "src/lenses/view/index.html",
@@ -211,16 +212,14 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
       if (this.currentRoute === route) return;
       this.currentRoute = route;
 
-      // The "lens" is everything before the first "/"
-      // The "address" is everything after the first "/"
-      const [lens, address] = route.split(/\/(.+)/).filter(Boolean);
+      const { lens, lensParams, pageAddress } = parseRoute(route);
 
       const token = ++this.renderVersion;
 
       if (this.currentLens === lens) {
         await this.lensReadyPromise;
         if (!this.alive || token !== this.renderVersion) return;
-        inputLensAddress(this.iframe, address);
+        inputLensAddress(this.iframe, pageAddress, lensParams);
         return;
       }
       this.currentLens = lens;
@@ -241,7 +240,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         await this.lensReadyPromise;
         if (!this.alive || token !== this.renderVersion) return;
 
-        inputLensAddress(this.iframe, address);
+        inputLensAddress(this.iframe, pageAddress, lensParams);
       } catch (e) {
         if (!this.alive || token !== this.renderVersion) return;
         return this.setSrcDoc(

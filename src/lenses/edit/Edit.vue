@@ -201,6 +201,7 @@ import { useGraffiti, useGraffitiSession } from "@graffiti-garden/wrapper-vue";
 import { createPageVersion } from "../../backend/page-versions";
 import { initVimMode, type VimAdapterInstance } from "monaco-vim";
 import { initLens } from "../../backend/lens-client";
+import { composeRoute } from "../../backend/route";
 
 const template = (pageName: string) => `<!doctype html>
 <head>
@@ -334,37 +335,21 @@ watch(
 
 const navigate = window.navigate;
 
-const address = ref("");
 const pageName = ref("");
 const pageHash = ref("");
 const session = useGraffitiSession();
-initLens(async (a: string) => {
-    address.value = a;
-    const url = new URL(a, "https://example.com");
+const graffiti = useGraffiti();
+initLens(async (pageAddress, lensParams) => {
+    const url = new URL(pageAddress, "https://example.com");
     pageName.value = url.pathname.slice(1);
     pageHash.value = url.hash;
 
-    const login = url.searchParams.get("login");
-    if (login !== null && !session.value) {
-        graffiti.login();
-        return;
-    }
-
-    const searchDraft = url.searchParams.get("draft");
+    const searchDraft = lensParams.get("draft");
     if (searchDraft) {
         draftHtml.value = searchDraft;
     } else if (!draftHtml.value.length) {
         // If there's no draft HTML, initialize it with the template
         draftHtml.value = template(pageName.value);
-    }
-
-    if (searchDraft !== null || login !== null) {
-        // Strip the draft and login state from the URL
-        // and navigate to the clean URL
-        url.searchParams.delete("draft");
-        url.searchParams.delete("login");
-        const cleanAddress = pageName.value + url.search + url.hash;
-        navigate(`#/e/${cleanAddress}`);
     }
 });
 
@@ -416,9 +401,8 @@ const monacoOptions = computed(() => ({
     lineNumbersMinChars: 3,
 }));
 
-const codeEditorInstance = shallowRef<monaco.editor.IStandaloneCodeEditor | null>(
-    null,
-);
+const codeEditorInstance =
+    shallowRef<monaco.editor.IStandaloneCodeEditor | null>(null);
 const vimAdapter = shallowRef<VimAdapterInstance | null>(null);
 
 const disposeVimMode = () => {
@@ -431,7 +415,7 @@ const syncVimMode = () => {
     if (!vimModeEnabled.value) return;
 
     const activeEditor = showDiff.value
-        ? diffEditorInstance.value?.getModifiedEditor() ?? null
+        ? (diffEditorInstance.value?.getModifiedEditor() ?? null)
         : codeEditorInstance.value;
 
     if (!activeEditor) return;
@@ -481,9 +465,8 @@ const diffOptions = computed(() => ({
     ...monacoOptions.value,
     renderSideBySide: false,
 }));
-const diffEditorInstance = shallowRef<monaco.editor.IStandaloneDiffEditor | null>(
-    null,
-);
+const diffEditorInstance =
+    shallowRef<monaco.editor.IStandaloneDiffEditor | null>(null);
 const onDiffDidMount = (editor: monaco.editor.IStandaloneDiffEditor) => {
     diffEditorInstance.value = editor;
     syncVimMode();
@@ -528,6 +511,16 @@ const schedulePreviewUpdate = (newHtml: string) => {
     if (timeout !== null) clearTimeout(timeout);
     timeout = window.setTimeout(() => {
         previewHtml.value = newHtml;
+
+        // Set the draft HTML
+        navigate(
+            `#${composeRoute({
+                lens: "e",
+                lensParams: new URLSearchParams({ draft: newHtml }),
+                pageAddress: `${pageName.value}${pageHash.value}`,
+            })}`,
+        );
+
         debouncing.value = false;
         timeout = null;
     }, DEBOUNCE_DELAY);
@@ -562,16 +555,17 @@ onBeforeUnmount(() => {
 
 const publishing = ref(false);
 async function publish(as?: boolean) {
+    publishing.value = true;
+
     if (!session.value) {
-        // Save the current draft in the URL
-        // along with "login"
-        navigate(
-            `#/e/${pageName.value}?draft=${encodeURIComponent(editorHtml.value)}&login=true`,
-        );
+        try {
+            await graffiti.login();
+        } finally {
+            publishing.value = false;
+        }
         return;
     }
 
-    publishing.value = true;
     const publishName = as
         ? prompt("What page name do you want to publish to?", pageName.value)
         : pageName.value;
@@ -596,15 +590,6 @@ async function publish(as?: boolean) {
 
     draftHtml.value = publishedHtml;
     navigate(`#/v/${publishName}`);
-}
-
-const loggingIn = ref(false);
-const graffiti = useGraffiti();
-function login() {
-    loggingIn.value = true;
-    graffiti.login().finally(() => {
-        loggingIn.value = false;
-    });
 }
 </script>
 

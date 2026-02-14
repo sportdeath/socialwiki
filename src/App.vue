@@ -26,18 +26,18 @@
             />
             <ul
                 class="dropdown"
-                v-if="isDropdownOpen && addressInput !== address"
+                v-if="isDropdownOpen && addressInput !== pageAddress"
             >
                 <li>
                     <RouterLink
-                        :to="`/v/${address}`"
+                        :to="composeRoute({ lens, lensParams, pageAddress })"
                         @click="
-                            addressInput = address;
+                            addressInput = pageAddress;
                             isDropdownOpen = false;
                         "
-                        v-if="addressInput !== address"
+                        v-if="addressInput !== pageAddress"
                     >
-                        Current page: {{ address }}
+                        Current page: {{ pageAddress }}
                     </RouterLink>
                 </li>
             </ul>
@@ -50,7 +50,7 @@
                 <ul>
                     <li>
                         <RouterLink
-                            :to="`/v/${address}`"
+                            :to="`/v/${pageAddress}`"
                             title="The current version of this page"
                         >
                             View
@@ -66,7 +66,7 @@
                     </li>
                     <li>
                         <RouterLink
-                            :to="`/h/${address}`"
+                            :to="`/h/${pageAddress}`"
                             title="Past revisions of this page"
                         >
                             History
@@ -100,7 +100,7 @@
     </header>
     <main>
         <sw-transclude
-            :src="`#/${lens}/${address}`"
+            :src="`#${composeRoute({ lens, lensParams, pageAddress })}`"
             ref="transclude"
         ></sw-transclude>
     </main>
@@ -118,14 +118,43 @@ import { ref, toRef, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useGraffiti } from "@graffiti-garden/wrapper-vue";
 import type { GraffitiSession } from "@graffiti-garden/api";
+import { composeRoute, parseRoute } from "./backend/route";
 
 const graffiti = useGraffiti();
+const router = useRouter();
 
 const props = defineProps<{
-    lens: string;
     address: string;
 }>();
-const address = toRef(props, "address");
+
+const lens = ref("");
+const lensParams = ref(new URLSearchParams());
+const pageAddress = ref("");
+watch(
+    () => props.address,
+    (newAddress) => {
+        const parsed = parseRoute(newAddress);
+        lens.value = parsed.lens;
+        lensParams.value = parsed.lensParams;
+        pageAddress.value = parsed.pageAddress;
+
+        // If the route is missing a lens (e.g. "#/SomePage"), redirect
+        // to the view lens while preserving the raw page address.
+        const normalized = newAddress.replace(/^\/+/, "");
+        if (!parsed.pageAddress.length && normalized.length > 0) {
+            const redirectRoute = composeRoute({
+                lens: "v",
+                lensParams: lensParams.value,
+                pageAddress: normalized,
+            });
+            if (`/${normalized}` !== redirectRoute) {
+                router.replace(redirectRoute);
+            }
+            return;
+        }
+    },
+    { immediate: true },
+);
 
 const loggingIn = ref(false);
 const loggingOut = ref(false);
@@ -176,20 +205,31 @@ onBeforeUnmount(() => {
 });
 
 const editAddress = computed(() => {
-    const url = new URL(`/e/${address.value}`, window.location.origin);
-    url.searchParams.set("draft", srcdoc.value);
-    return url.toString().slice(window.location.origin.length);
+    const lensParams = new URLSearchParams({
+        draft: srcdoc.value,
+    });
+    return composeRoute({
+        lens: "e",
+        lensParams,
+        pageAddress: pageAddress.value,
+    });
 });
 
 // Partially couple the input address to the route address
 // When the route changes, the input changes
-const addressInput = ref(address.value);
-watch(address, (newVal) => (addressInput.value = newVal), {
+const addressInput = ref(pageAddress.value);
+watch(pageAddress, (newVal) => (addressInput.value = newVal), {
     immediate: true,
 });
 // When input is submitted, the route changes
 function submitForm() {
-    router.push(`/${props.lens}/${addressInput.value}`);
+    router.push(
+        composeRoute({
+            lens: lens.value,
+            lensParams: lensParams.value,
+            pageAddress: addressInput.value,
+        }),
+    );
     (document.activeElement as HTMLElement | null)?.blur();
 }
 
@@ -222,7 +262,6 @@ onMounted(() => {
 onUnmounted(() => {
     mq.removeEventListener("change", syncNav);
 });
-const router = useRouter();
 router.afterEach(syncNav);
 
 let addressFocused = false;
