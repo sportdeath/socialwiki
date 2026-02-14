@@ -4,26 +4,22 @@
             <template #left-controls>
                 <nav>
                     <ul role="menubar">
-                        <li class="publish-menu">
-                            <button
-                                :disabled="draftHtml === editorHtml"
-                                @click="publish()"
-                            >
+                        <li
+                            class="publish-menu"
+                            :class="{ 'publish-shake': shouldShakePublish }"
+                        >
+                            <button :disabled="publishing" @click="publish()">
                                 Publish
                             </button>
                             <details
                                 ref="publishMenuDetails"
-                                :class="{ disabled: draftHtml === editorHtml }"
+                                :class="{ disabled: publishing }"
                             >
-                                <summary
-                                    :aria-disabled="draftHtml === editorHtml"
-                                >
-                                    ▾
-                                </summary>
+                                <summary :aria-disabled="publishing">▾</summary>
                                 <ul role="menu">
                                     <li>
                                         <button
-                                            :disabled="draftHtml === editorHtml"
+                                            :disabled="publishing"
                                             role="menuitem"
                                             @click="publish(true)"
                                         >
@@ -156,7 +152,7 @@
                     <DiffEditor
                         v-else
                         :value="diffHtml"
-                        :original="draftHtml"
+                        :original="publishedHtml"
                         language="html"
                         :theme="editorTheme"
                         :options="diffOptions"
@@ -318,11 +314,18 @@ const template = (pageName: string) => `<!doctype html>
 </body>`;
 
 const draftHtml = ref("");
+const publishedHtml = ref<string | null>(null);
 
 // Initialize the editor, diff and preview with the existing HTML
 const editorHtml = ref("");
 const previewHtml = ref("");
 const diffHtml = ref("");
+const hasUnsavedChanges = computed(
+    () => editorHtml.value !== publishedHtml.value,
+);
+const hasShownPublishReminder = ref(false);
+const shouldShakePublish = ref(false);
+let publishShakeTimeout: number | null = null;
 watch(
     draftHtml,
     (newHtml) => {
@@ -332,6 +335,16 @@ watch(
     },
     { immediate: true },
 );
+watch(hasUnsavedChanges, (isDirty, wasDirty) => {
+    if (!isDirty || wasDirty || hasShownPublishReminder.value) return;
+    hasShownPublishReminder.value = true;
+    shouldShakePublish.value = true;
+    if (publishShakeTimeout !== null) clearTimeout(publishShakeTimeout);
+    publishShakeTimeout = window.setTimeout(() => {
+        shouldShakePublish.value = false;
+        publishShakeTimeout = null;
+    }, 320);
+});
 
 const navigate = window.navigate;
 
@@ -345,11 +358,21 @@ initLens(async (pageAddress, lensParams) => {
     pageHash.value = url.hash;
 
     const searchDraft = lensParams.get("draft");
-    if (searchDraft) {
+    if (searchDraft !== null) {
         draftHtml.value = searchDraft;
     } else if (!draftHtml.value.length) {
         // If there's no draft HTML, initialize it with the template
         draftHtml.value = template(pageName.value);
+    }
+
+    if (publishedHtml.value === null) {
+        publishedHtml.value = draftHtml.value;
+        hasShownPublishReminder.value = false;
+        shouldShakePublish.value = false;
+        if (publishShakeTimeout !== null) {
+            clearTimeout(publishShakeTimeout);
+            publishShakeTimeout = null;
+        }
     }
 });
 
@@ -504,6 +527,7 @@ const DEBOUNCE_DELAY = 500;
 let timeout: number | null = null;
 onBeforeUnmount(() => {
     if (timeout !== null) clearTimeout(timeout);
+    if (publishShakeTimeout !== null) clearTimeout(publishShakeTimeout);
 });
 const debouncing = ref(false);
 const schedulePreviewUpdate = (newHtml: string) => {
@@ -537,8 +561,9 @@ watch(livePreview, (enabled, oldVal) => {
 });
 
 // --- Publishing ----------------------------------------------
+const bypassBeforeUnload = ref(false);
 const beforeUnload = (event: BeforeUnloadEvent) => {
-    if (editorHtml.value === draftHtml.value) return;
+    if (bypassBeforeUnload.value || !hasUnsavedChanges.value) return;
 
     event.preventDefault();
     event.returnValue = "";
@@ -551,45 +576,72 @@ onBeforeUnmount(() => {
     window.removeEventListener("beforeunload", beforeUnload);
     document.removeEventListener("pointerdown", onMenuPointerDown);
     disposeVimMode();
+    clearLoginBypassListener();
 });
 
 const publishing = ref(false);
+let loginBypassListener: ((event: Event) => void) | null = null;
+function clearLoginBypassListener() {
+    if (!loginBypassListener) return;
+    graffiti.sessionEvents.removeEventListener("login", loginBypassListener);
+    loginBypassListener = null;
+}
+function setupLoginBypassListener() {
+    clearLoginBypassListener();
+    loginBypassListener = () => {
+        bypassBeforeUnload.value = false;
+        clearLoginBypassListener();
+    };
+    graffiti.sessionEvents.addEventListener("login", loginBypassListener);
+}
 async function publish(as?: boolean) {
+    if (publishing.value) return;
     publishing.value = true;
-
-    if (!session.value) {
-        try {
-            await graffiti.login();
-        } finally {
-            publishing.value = false;
+    try {
+        if (!session.value) {
+            bypassBeforeUnload.value = true;
+            setupLoginBypassListener();
+            try {
+                await graffiti.login();
+            } catch (error) {
+                clearLoginBypassListener();
+                bypassBeforeUnload.value = false;
+                throw error;
+            }
+            return;
         }
-        return;
-    }
 
-    const publishName = as
-        ? prompt("What page name do you want to publish to?", pageName.value)
-        : pageName.value;
-    if (publishName === null) {
-        publishing.value = false;
-        return;
-    }
-    const summary = prompt("Edit summary (Briefly describe your changes)");
-    if (summary === null) {
-        publishing.value = false;
-        return;
-    }
-    const publishedHtml = editorHtml.value;
-    await createPageVersion(
-        graffiti,
-        publishName,
-        publishedHtml,
-        [],
-        summary,
-        session.value,
-    );
+        const publishName = as
+            ? prompt(
+                  "What page name do you want to publish to?",
+                  pageName.value,
+              )
+            : pageName.value;
+        if (publishName === null) return;
+        const summary = prompt("Edit summary (Briefly describe your changes)");
+        if (summary === null) return;
+        const nextPublishedHtml = editorHtml.value;
+        await createPageVersion(
+            graffiti,
+            publishName,
+            nextPublishedHtml,
+            [],
+            summary,
+            session.value,
+        );
 
-    draftHtml.value = publishedHtml;
-    navigate(`#/v/${publishName}`);
+        draftHtml.value = nextPublishedHtml;
+        publishedHtml.value = nextPublishedHtml;
+        hasShownPublishReminder.value = false;
+        shouldShakePublish.value = false;
+        if (publishShakeTimeout !== null) {
+            clearTimeout(publishShakeTimeout);
+            publishShakeTimeout = null;
+        }
+        navigate(`#/v/${publishName}`);
+    } finally {
+        publishing.value = false;
+    }
 }
 </script>
 
@@ -788,12 +840,8 @@ nav .publish-menu > button:disabled:hover {
     cursor: not-allowed;
 }
 
-.publish-menu:has(button:not(:disabled)) {
+.publish-menu.publish-shake {
     animation: publish-shake 0.3s ease-in-out;
-}
-
-.publish-menu:has(button:disabled) {
-    animation: none;
 }
 
 @keyframes publish-shake {
