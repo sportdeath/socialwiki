@@ -26,13 +26,19 @@ export function serveGraffiti(): Graffiti {
   });
 
   const served = new Map<Window, () => Promise<void>>();
+  const initEpochByWindow = new Map<Window, number>();
   const iteratorsByWindow = new Map<
     Window,
     Map<string, GraffitiObjectStream<{}>>
   >();
   async function serveGraffitiToWindow(window: Window) {
+    const epoch = (initEpochByWindow.get(window) ?? 0) + 1;
+    initEpochByWindow.set(window, epoch);
+
     // Destroy an existing connection if it exists
-    await served.get(window)?.();
+    const existing = served.get(window);
+    if (existing) await existing();
+    if (initEpochByWindow.get(window) !== epoch) return;
 
     const messenger = new WindowMessenger({
       remoteWindow: window,
@@ -52,6 +58,56 @@ export function serveGraffiti(): Graffiti {
 
     const iterators = new Map<string, GraffitiObjectStream<{}>>();
     iteratorsByWindow.set(window, iterators);
+
+    const sessionEventTypes = ["login", "logout", "initialized"];
+    let remote:
+      | {
+          sessionEvent: (type: string, detail: any) => Promise<void>;
+          ping: () => Promise<void>;
+        }
+      | undefined;
+    const forward = (e: Event) => {
+      if (!(e instanceof CustomEvent)) return;
+      if (!remote) return;
+      remote.sessionEvent(e.type, e.detail);
+    };
+
+    let destroyPromise: Promise<void> | null = null;
+    let heartbeatTimer: number | undefined;
+    const destroy = async () => {
+      if (destroyPromise) return destroyPromise;
+      destroyPromise = (async () => {
+        // Destroy the connection to stop any requests
+        connection.destroy();
+
+        // Stop the heartbeat
+        if (heartbeatTimer !== undefined) {
+          clearInterval(heartbeatTimer);
+          heartbeatTimer = undefined;
+        }
+
+        // Remove all listeners
+        for (const type of sessionEventTypes) {
+          graffiti.sessionEvents.removeEventListener(type, forward);
+        }
+
+        // Return all iterators to prevent locked queries
+        const windowIterators = iteratorsByWindow.get(window);
+        if (windowIterators) {
+          const returns = [...windowIterators.values()].map((iterator) =>
+            iterator.return({ cursor: "" }),
+          );
+          await Promise.allSettled(returns);
+          windowIterators.clear();
+          iteratorsByWindow.delete(window);
+        }
+
+        // Remove the destroy function to allow for new connections
+        served.delete(window);
+      })();
+      return destroyPromise;
+    };
+    served.set(window, destroy);
 
     const connection = connect<{
       sessionEvent: (type: string, detail: any) => Promise<void>;
@@ -124,61 +180,33 @@ export function serveGraffiti(): Graffiti {
       },
     });
 
+    try {
+      remote = await connection.promise;
+    } catch {
+      await destroy();
+      return;
+    }
+    if (destroyPromise || !remote || initEpochByWindow.get(window) !== epoch) {
+      await destroy();
+      return;
+    }
+
     // once connected, forward sessionEvents -> iframe sink
-    const sessionEventTypes = ["login", "logout", "initialized"];
-    const remote = await connection.promise;
-    const forward = (e: Event) => {
-      if (!(e instanceof CustomEvent)) return;
-      remote.sessionEvent(e.type, e.detail);
-    };
     for (const type of sessionEventTypes) {
       graffiti.sessionEvents.addEventListener(type, forward);
     }
 
-    let destroyPromise: Promise<void> | null = null;
-    let heartbeatTimer: number | undefined;
-    const destroy = async () => {
-      if (destroyPromise) return destroyPromise;
-      destroyPromise = (async () => {
-        // Destroy the connection to stop any requests
-        connection.destroy();
-
-        // Stop the heartbeat
-        if (heartbeatTimer !== undefined) {
-          clearInterval(heartbeatTimer);
-          heartbeatTimer = undefined;
-        }
-
-        // Remove all listeners
-        for (const type of sessionEventTypes) {
-          graffiti.sessionEvents.removeEventListener(type, forward);
-        }
-
-        // Return all iterators to prevent locked queries
-        const windowIterators = iteratorsByWindow.get(window);
-        if (windowIterators) {
-          const returns = [...windowIterators.values()].map((iterator) =>
-            iterator.return({ cursor: "" }),
-          );
-          await Promise.allSettled(returns);
-          windowIterators.clear();
-          iteratorsByWindow.delete(window);
-        }
-
-        // Remove the destroy function to allow for new connections
-        served.delete(window);
-      })();
-      return destroyPromise;
-    };
-
-    const heartbeatIntervalMs = 500;
-    const heartbeatTimeoutMs = 500;
+    // Set a heartbeat to destroy the connection,
+    // in case it can't be set up properly
+    const heartbeatIntervalMs = 100;
+    const heartbeatTimeoutMs = 5000;
+    const connectedRemote = remote;
     heartbeatTimer = setInterval(async () => {
       if (window.closed) return destroy();
 
       try {
         await Promise.race([
-          remote.ping(),
+          connectedRemote.ping(),
           new Promise((_, reject) => {
             setTimeout(
               () => reject(new Error("heartbeat timeout")),
@@ -187,12 +215,12 @@ export function serveGraffiti(): Graffiti {
           }),
         ]);
       } catch {
-        console.log("destroy due to heartbeat");
-        console.log(window.closed);
+        console.error(
+          "Lost connection with window, destroying graffiti connection...",
+        );
         await destroy();
       }
     }, heartbeatIntervalMs);
-    served.set(window, destroy);
   }
 
   window.addEventListener("message", async (event) => {
