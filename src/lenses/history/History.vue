@@ -63,6 +63,11 @@
                                         Edit
                                     </button>
                                 </li>
+                                <li>
+                                    <button @click.stop="openVersionLink">
+                                        Link
+                                    </button>
+                                </li>
                                 <li
                                     v-if="
                                         $graffitiSession.value?.actor ===
@@ -241,6 +246,10 @@ function openEditLens() {
             pageAddress: `${pageName.value}${pageHash.value}`,
         })}`,
     );
+}
+
+function openVersionLink() {
+    navigate(previewAddress.value);
 }
 
 const effectiveSelectedPageVersion = computed(() => {
