@@ -75,6 +75,7 @@
                                     "
                                 >
                                     <button
+                                        class="warning"
                                         :disabled="hasPendingMutation"
                                         @click.stop="
                                             deleteSelectedPageVersion(
