@@ -9,7 +9,79 @@ import type {
 } from "@graffiti-garden/api";
 import { GraffitiDecentralized } from "@graffiti-garden/implementation-decentralized";
 
-export function serveGraffiti(): Graffiti {
+const simpleMethods = [
+  "post",
+  "get",
+  "delete",
+  "deleteMedia",
+  "login",
+  "logout",
+  "actorToHandle",
+  "handleToActor",
+] as const;
+
+type GuardedGraffitiMethod =
+  | (typeof simpleMethods)[number]
+  | "postMedia"
+  | "getMedia"
+  | "discover"
+  | "continueDiscover";
+
+export type GraffitiGuardKind = "irreversible" | "reversible";
+
+export interface GraffitiGuardRequest {
+  method: GuardedGraffitiMethod;
+  kind: GraffitiGuardKind;
+  args: unknown[];
+  sourceWindow: Window;
+  createdAtMs: number;
+}
+
+export type GraffitiGuardRequestHandler = (
+  request: GraffitiGuardRequest,
+) => void | Promise<void>;
+
+type SessionReadMethod = "get" | "discover" | "continueDiscover" | "getMedia";
+
+function hasSession(method: SessionReadMethod, args: unknown[]): boolean {
+  const index = method === "continueDiscover" ? 1 : 2;
+
+  const session = args[index];
+  if (
+    typeof session !== "object" ||
+    session === null ||
+    Array.isArray(session)
+  ) {
+    return false;
+  }
+  return typeof (session as { actor?: unknown }).actor === "string";
+}
+
+function classifyGuardRequest(
+  method: GuardedGraffitiMethod,
+  args: unknown[],
+): GraffitiGuardKind | undefined {
+  if (method === "post" || method === "postMedia") return "reversible";
+  if (method === "delete" || method === "deleteMedia" || method === "logout") {
+    return "irreversible";
+  }
+
+  if (
+    (method === "get" ||
+      method === "discover" ||
+      method === "continueDiscover" ||
+      method === "getMedia") &&
+    hasSession(method, args)
+  ) {
+    return "irreversible";
+  }
+
+  return;
+}
+
+export function serveGraffiti(
+  onGuardRequest?: GraffitiGuardRequestHandler,
+): Graffiti {
   const graffiti = new GraffitiDecentralized();
   const loggedInActors = new Set<string>();
   graffiti.sessionEvents.addEventListener("login", (e) => {
@@ -31,6 +103,23 @@ export function serveGraffiti(): Graffiti {
     Window,
     Map<string, GraffitiObjectStream<{}>>
   >();
+
+  async function maybeEmitGuardRequest(
+    sourceWindow: Window,
+    method: GuardedGraffitiMethod,
+    args: unknown[],
+  ) {
+    const kind = classifyGuardRequest(method, args);
+    if (!kind || !onGuardRequest) return;
+    await onGuardRequest({
+      method,
+      kind,
+      args,
+      sourceWindow,
+      createdAtMs: Date.now(),
+    });
+  }
+
   async function serveGraffitiToWindow(window: Window) {
     const epoch = (initEpochByWindow.get(window) ?? 0) + 1;
     initEpochByWindow.set(window, epoch);
@@ -44,17 +133,6 @@ export function serveGraffiti(): Graffiti {
       remoteWindow: window,
       allowedOrigins: ["*"],
     });
-
-    const simpleMethods = [
-      "post",
-      "get",
-      "delete",
-      "deleteMedia",
-      "login",
-      "logout",
-      "actorToHandle",
-      "handleToActor",
-    ] as const;
 
     const iterators = new Map<string, GraffitiObjectStream<{}>>();
     iteratorsByWindow.set(window, iterators);
@@ -109,18 +187,26 @@ export function serveGraffiti(): Graffiti {
     };
     served.set(window, destroy);
 
+    const rpcSimpleMethods = Object.fromEntries(
+      simpleMethods.map((method) => [
+        method,
+        async (...args: unknown[]) => {
+          await maybeEmitGuardRequest(window, method, args);
+          const fn = graffiti[method] as (
+            ...methodArgs: unknown[]
+          ) => Promise<unknown>;
+          return fn.apply(graffiti, args);
+        },
+      ]),
+    );
+
     const connection = connect<{
       sessionEvent: (type: string, detail: any) => Promise<void>;
       ping: () => Promise<void>;
     }>({
       messenger,
       methods: {
-        ...Object.fromEntries(
-          simpleMethods.map((method) => [
-            method,
-            graffiti[method].bind(graffiti),
-          ]),
-        ),
+        ...rpcSimpleMethods,
         async postMedia(
           media: {
             data: { buffer: ArrayBuffer; type: string };
@@ -128,10 +214,12 @@ export function serveGraffiti(): Graffiti {
           },
           session: GraffitiSession,
         ) {
+          await maybeEmitGuardRequest(window, "postMedia", [media, session]);
           const data = new Blob([media.data.buffer], { type: media.data.type });
-          return await graffiti.postMedia({ ...media, data }, session);
+          return graffiti.postMedia({ ...media, data }, session);
         },
         async getMedia(...args: Parameters<Graffiti["getMedia"]>) {
+          await maybeEmitGuardRequest(window, "getMedia", args);
           const result = await graffiti.getMedia(...args);
           const buffer = await result.data.arrayBuffer();
           const type = result.data.type;
@@ -145,6 +233,7 @@ export function serveGraffiti(): Graffiti {
           );
         },
         async discover(id: string, ...args: Parameters<Graffiti["discover"]>) {
+          await maybeEmitGuardRequest(window, "discover", args);
           const iterator = graffiti.discover<{}>(...args);
           iterators.set(id, iterator);
         },
@@ -152,6 +241,7 @@ export function serveGraffiti(): Graffiti {
           id: string,
           ...args: Parameters<Graffiti["continueDiscover"]>
         ) {
+          await maybeEmitGuardRequest(window, "continueDiscover", args);
           const iterator = graffiti.continueDiscover<{}>(...args);
           iterators.set(id, iterator);
         },
