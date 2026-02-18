@@ -54,6 +54,8 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         "microphone *",
         "geolocation *",
         "fullscreen *",
+        "clipboard-read *",
+        "clipboard-write *",
       ].join("; ");
 
       this.destroyLens = serveLens(this.iframe, (status, srcdoc) => {
