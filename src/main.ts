@@ -9,10 +9,11 @@ import App from "./App.vue";
 import { GraffitiPlugin } from "@graffiti-garden/wrapper-vue";
 import { serveGraffiti } from "./backend/graffiti-server";
 import { installTransclude } from "./backend/transclude";
+import { handleGraffitiGuardRequest } from "./guard/graffiti-guard";
 
 // Set up a graffiti "server" that is served
 // to all the "client" pages
-const graffiti = serveGraffiti();
+const graffiti = serveGraffiti(handleGraffitiGuardRequest);
 
 const router = createRouter({
   // Use web hash history so that the page name

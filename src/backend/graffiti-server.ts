@@ -24,14 +24,10 @@ type GuardedGraffitiMethod =
   | (typeof simpleMethods)[number]
   | "postMedia"
   | "getMedia"
-  | "discover"
-  | "continueDiscover";
-
-export type GraffitiGuardKind = "irreversible" | "reversible";
+  | "discover";
 
 export interface GraffitiGuardRequest {
   method: GuardedGraffitiMethod;
-  kind: GraffitiGuardKind;
   args: unknown[];
   sourceWindow: Window;
   createdAtMs: number;
@@ -41,42 +37,21 @@ export type GraffitiGuardRequestHandler = (
   request: GraffitiGuardRequest,
 ) => void | Promise<void>;
 
-type SessionReadMethod = "get" | "discover" | "continueDiscover" | "getMedia";
-
-function hasSession(method: SessionReadMethod, args: unknown[]): boolean {
-  const index = method === "continueDiscover" ? 1 : 2;
-
-  const session = args[index];
-  if (
-    typeof session !== "object" ||
-    session === null ||
-    Array.isArray(session)
-  ) {
-    return false;
-  }
-  return typeof (session as { actor?: unknown }).actor === "string";
+function hasSession(args: unknown[]): boolean {
+  const session = args[2];
+  return (
+    typeof session === "object" &&
+    session !== null &&
+    !Array.isArray(session) &&
+    typeof (session as { actor?: unknown }).actor === "string"
+  );
 }
 
-function classifyGuardRequest(
-  method: GuardedGraffitiMethod,
-  args: unknown[],
-): GraffitiGuardKind | undefined {
-  if (method === "post" || method === "postMedia") return "reversible";
-  if (method === "delete" || method === "deleteMedia" || method === "logout") {
-    return "irreversible";
-  }
-
-  if (
-    (method === "get" ||
-      method === "discover" ||
-      method === "continueDiscover" ||
-      method === "getMedia") &&
-    hasSession(method, args)
-  ) {
-    return "irreversible";
-  }
-
-  return;
+function shouldGuard(method: GuardedGraffitiMethod, args: unknown[]): Boolean {
+  return (
+    ["post", "postMedia", "delete", "deleteMedia", "logout"].includes(method) ||
+    (["get", "discover", "getMedia"].includes(method) && hasSession(args))
+  );
 }
 
 export function serveGraffiti(
@@ -109,15 +84,26 @@ export function serveGraffiti(
     method: GuardedGraffitiMethod,
     args: unknown[],
   ) {
-    const kind = classifyGuardRequest(method, args);
-    if (!kind || !onGuardRequest) return;
+    if (!shouldGuard(method, args) || !onGuardRequest) return;
     await onGuardRequest({
       method,
-      kind,
       args,
       sourceWindow,
       createdAtMs: Date.now(),
     });
+  }
+
+  async function maybeUndoRejectedReversibleAction(
+    sourceWindow: Window,
+    method: "post" | "postMedia",
+    args: unknown[],
+    undo: () => Promise<void>,
+  ): Promise<void> {
+    try {
+      await maybeEmitGuardRequest(sourceWindow, method, args);
+    } catch {
+      await undo();
+    }
   }
 
   async function serveGraffitiToWindow(window: Window) {
@@ -191,6 +177,22 @@ export function serveGraffiti(
       simpleMethods.map((method) => [
         method,
         async (...args: unknown[]) => {
+          if (method === "post") {
+            const [partialObject, session] = args as Parameters<
+              Graffiti["post"]
+            >;
+            const posted = await graffiti.post(partialObject, session);
+            void maybeUndoRejectedReversibleAction(
+              window,
+              "post",
+              args,
+              async () => {
+                await graffiti.delete(posted, session);
+              },
+            );
+            return posted;
+          }
+
           await maybeEmitGuardRequest(window, method, args);
           const fn = graffiti[method] as (
             ...methodArgs: unknown[]
@@ -214,9 +216,18 @@ export function serveGraffiti(
           },
           session: GraffitiSession,
         ) {
-          await maybeEmitGuardRequest(window, "postMedia", [media, session]);
           const data = new Blob([media.data.buffer], { type: media.data.type });
-          return graffiti.postMedia({ ...media, data }, session);
+          const mediaUrl = await graffiti.postMedia(
+            { ...media, data },
+            session,
+          );
+          void maybeUndoRejectedReversibleAction(
+            window,
+            "postMedia",
+            [media, session],
+            () => graffiti.deleteMedia(mediaUrl, session),
+          );
+          return mediaUrl;
         },
         async getMedia(...args: Parameters<Graffiti["getMedia"]>) {
           await maybeEmitGuardRequest(window, "getMedia", args);
@@ -241,14 +252,13 @@ export function serveGraffiti(
           id: string,
           ...args: Parameters<Graffiti["continueDiscover"]>
         ) {
-          await maybeEmitGuardRequest(window, "continueDiscover", args);
           const iterator = graffiti.continueDiscover<{}>(...args);
           iterators.set(id, iterator);
         },
         async streamNext(id: string) {
           const iterator = iterators.get(id);
           if (!iterator) return;
-          return await iterator.next();
+          return iterator.next();
         },
         async streamReturn(id: string) {
           const iterator = iterators.get(id);

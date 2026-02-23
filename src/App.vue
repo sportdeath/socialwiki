@@ -1,4 +1,5 @@
 <template>
+    <GraffitiGuardPrompt />
     <header>
         <RouterLink :to="{ name: 'home' }">
             <h1>
@@ -114,11 +115,12 @@ import {
     onUnmounted,
     useTemplateRef,
 } from "vue";
-import { ref, toRef, watch } from "vue";
+import { ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { useGraffiti } from "@graffiti-garden/wrapper-vue";
 import type { GraffitiSession } from "@graffiti-garden/api";
 import { composeRoute, parseRoute } from "./backend/route";
+import GraffitiGuardPrompt from "./guard/GraffitiGuardPrompt.vue";
 
 const graffiti = useGraffiti();
 const router = useRouter();
