@@ -1,186 +1,179 @@
 <template>
-    <div v-if="activeGuardRequest" class="guard-banner" role="alert">
-        <div class="guard-banner-copy">
-            <strong> Confirm Action </strong>
-            <span>
-                <code>{{ activeGuardRequest.method }}</code> from a sandboxed
-                page
-                <template v-if="formattedGuardSourceId">
-                    (<code>{{ formattedGuardSourceId }}</code>)
-                </template>
-                <template v-if="pendingGuardCount > 1">
-                    ({{ pendingGuardCount - 1 }} more queued)
-                </template>
-            </span>
-        </div>
-        <div class="guard-banner-actions">
-            <button
-                class="secondary"
-                @click="toggleGuardDetails(activeGuardRequest.id)"
-            >
-                {{ guardDetailsOpen ? "Hide details" : "View details" }}
-            </button>
-            <button
-                class="secondary"
-                @click="denyGuardRequest(activeGuardRequest.id)"
-            >
-                Deny
-            </button>
-            <button @click="allowGuardRequest(activeGuardRequest.id)">
-                Allow
-            </button>
-        </div>
-    </div>
-    <section
-        v-if="activeGuardRequest && guardDetailsOpen"
-        class="guard-details"
-    >
-        <h2>Guard Request Details</h2>
-        <p>
-            <strong>Method:</strong>
-            {{ activeGuardRequest.method }}
-        </p>
-        <p>
-            <strong>Source:</strong>
-            <code>{{ formattedGuardSourceId ?? "untracked" }}</code>
-        </p>
-        <pre>{{ formattedGuardArgs }}</pre>
-    </section>
+    <aside v-if="activeGuardRequest" @click.self="rejectActive">
+        <dialog open>
+            <template v-if="activeGuardRequest.method === 'post'">
+                <h2>Allow this page to post data?</h2>
+
+                <ObjectDetails :object="activeGuardRequest.args[0] as any" />
+            </template>
+            <template v-else-if="activeGuardRequest.method === 'delete'">
+                <h2>Allow this page to delete data?</h2>
+                <GraffitiGet
+                    :url="activeGuardRequest.args[0] as any"
+                    :schema="{}"
+                    :session="activeGuardRequest.args[1] as any"
+                    v-slot="{ object }"
+                >
+                    <ObjectDetails :object="object" />
+                </GraffitiGet>
+            </template>
+            <template v-else-if="activeGuardRequest.method === 'get'">
+                <h2>Allow this page to access private data?</h2>
+
+                <GraffitiGet
+                    :url="activeGuardRequest.args[0] as any"
+                    :schema="activeGuardRequest.args[1] as any"
+                    :session="activeGuardRequest.args[2] as any"
+                    v-slot="{ object }"
+                >
+                    <ObjectDetails :object="object" />
+                </GraffitiGet>
+            </template>
+            <template v-else-if="activeGuardRequest.method === 'postMedia'">
+                <h2>Allow this page to post data?</h2>
+
+                <!-- TODO: display media details -->
+            </template>
+            <template v-else-if="activeGuardRequest.method === 'deleteMedia'">
+                <h2>Allow this page to delete data?</h2>
+
+                <!-- TODO: display media details -->
+            </template>
+            <template v-else-if="activeGuardRequest.method === 'getMedia'">
+                <h2>Allow this page to access private data?</h2>
+
+                <!-- TODO: display media details -->
+            </template>
+            <template v-else-if="activeGuardRequest.method === 'discover'">
+                <h2>Allow this page to access private data?</h2>
+
+                <!-- TODO: display discovery request -->
+            </template>
+            <template v-else>
+                <p>Unknown guard request:</p>
+                <pre>{{ activeGuardRequest }}</pre>
+            </template>
+            <footer>
+                <button @click="rejectActive" class="secondary">Cancel</button>
+                <div class="split-button-menu">
+                    <button @click="approveActive">Allow Once</button>
+                    <details>
+                        <summary>▾</summary>
+                        <ul>
+                            <li>
+                                <button @click.prevent type="button">
+                                    Allow for similar data
+                                </button>
+                            </li>
+                            <li>
+                                <button @click.prevent type="button">
+                                    Allow <strong>Always</strong>
+                                </button>
+                            </li>
+                        </ul>
+                    </details>
+                </div>
+            </footer>
+        </dialog>
+    </aside>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import {
     allowGraffitiGuardRequest,
     denyGraffitiGuardRequest,
     graffitiGuardState,
 } from "./graffiti-guard";
+import ObjectDetails from "./ObjectDetails.vue";
 
-const activeGuardRequest = computed(() => graffitiGuardState.pending[0]);
-const pendingGuardCount = computed(() => graffitiGuardState.pending.length);
-const openGuardDetailsForId = ref<number | null>(null);
-const guardDetailsOpen = computed(
-    () =>
-        activeGuardRequest.value !== undefined &&
-        openGuardDetailsForId.value === activeGuardRequest.value.id,
+const activeGuardRequest = computed(
+    () => graffitiGuardState.pending[0] ?? null,
 );
-watch(activeGuardRequest, (request) => {
-    if (!request) {
-        openGuardDetailsForId.value = null;
-        return;
-    }
 
-    if (openGuardDetailsForId.value === null) {
-        openGuardDetailsForId.value = request.id;
-    }
-});
-
-function toggleGuardDetails(id: number) {
-    openGuardDetailsForId.value =
-        openGuardDetailsForId.value === id ? null : id;
-}
-function allowGuardRequest(id: number) {
-    allowGraffitiGuardRequest(id);
-}
-function denyGuardRequest(id: number) {
-    denyGraffitiGuardRequest(id);
-}
-function guardJsonReplacer(_key: string, value: unknown) {
-    if (value instanceof ArrayBuffer) {
-        return `[ArrayBuffer ${value.byteLength} bytes]`;
-    }
-    if (typeof Blob !== "undefined" && value instanceof Blob) {
-        return `[Blob ${value.type || "application/octet-stream"} ${value.size} bytes]`;
-    }
-    if (value instanceof HTMLElement) {
-        return `[HTMLElement ${value.tagName.toLowerCase()}]`;
-    }
-    return value;
-}
-
-const formattedGuardArgs = computed(() => {
+function approveActive() {
     const request = activeGuardRequest.value;
-    if (!request) return "";
-    try {
-        return JSON.stringify(request.args, guardJsonReplacer, 2);
-    } catch {
-        return String(request.args);
-    }
-});
+    if (!request) return;
+    allowGraffitiGuardRequest(request.id);
+}
 
-const formattedGuardSourceId = computed(() => {
+function rejectActive() {
     const request = activeGuardRequest.value;
-    if (!request || request.transcludeId === null) return null;
-    return request.transcludeId;
-});
+    if (!request) return;
+    denyGraffitiGuardRequest(request.id);
+}
 </script>
 
-<style>
-.guard-banner {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    padding: 0.5rem 0.75rem;
-    border-bottom: 1px solid var(--border-color);
-    background: color-mix(
-        in srgb,
-        var(--background-color-interactive) 70%,
-        #ffcc66 30%
-    );
-}
-
-.guard-banner-copy {
+<style scoped>
+dialog {
+    position: static;
+    inset: auto;
+    margin: 0;
+    width: min(42rem, calc(100vw - 2rem));
+    max-height: calc(100dvh - 2rem);
+    overflow: auto;
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    background: var(--background-color);
+    color: var(--text-color);
+    box-shadow: 0 0rem 2.5rem rgb(0 0 0 / 0.9);
     display: flex;
     flex-direction: column;
-    gap: 0.1rem;
-}
-
-.guard-banner-copy span {
-    font-size: 0.9rem;
-}
-
-.guard-banner-actions {
-    display: flex;
-    gap: 0.5rem;
-    align-items: center;
-}
-
-.guard-details {
-    border-bottom: 1px solid var(--border-color);
-    padding: 0.75rem;
-    background: var(--background-color-interactive);
+    gap: 1rem;
+    font-size: 1.5rem;
 
     h2 {
+        font-size: 2rem;
+    }
+
+    & h2,
+    & p {
         margin: 0;
-        font-size: 1rem;
     }
 
-    p {
-        margin: 0.5rem 0 0;
-    }
+    & footer {
+        display: flex;
+        justify-content: space-between;
 
-    pre {
-        margin: 0.5rem 0 0;
-        max-height: 18rem;
-        overflow: auto;
-        white-space: pre-wrap;
-        word-break: break-word;
-        font-size: 0.8rem;
-        border: 1px solid var(--border-color);
-        border-radius: 0.5rem;
-        padding: 0.5rem;
-        background: var(--background-color);
+        & .split-button-menu > details[open] > ul {
+            position: absolute;
+            right: 0;
+            top: calc(100% + 0.25rem);
+            z-index: 1;
+            margin: 0;
+            padding: 0.25rem;
+            min-width: 16rem;
+            list-style: none;
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            background: var(--background-color);
+            box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 0.2);
+            font-size: 1rem;
+        }
+
+        & .split-button-menu > details {
+            position: relative;
+        }
+
+        & .split-button-menu details li {
+            margin: 0;
+        }
+
+        & .split-button-menu details li button {
+            width: 100%;
+            text-align: left;
+        }
     }
 }
 
-@media (max-width: 699px) {
-    .guard-banner {
-        flex-direction: column;
-        align-items: stretch;
-    }
-    .guard-banner-actions {
-        justify-content: flex-end;
-    }
+aside {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+    background: rgb(0 0 0 / 0.2);
 }
 </style>

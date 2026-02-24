@@ -5,7 +5,7 @@
                 <nav>
                     <ul role="menubar">
                         <li
-                            class="publish-menu"
+                            class="split-button-menu"
                             :class="{ 'publish-shake': shouldShakePublish }"
                         >
                             <button :disabled="publishing" @click="publish()">
@@ -280,7 +280,7 @@ const template = (pageName: string) => `<!doctype html>
                 channels: [ '${pageName}' ],
               },
               $graffitiSession.value
-            ).then(() => {
+            ).finally(() => {
               processingWave = false;
             });
           "
@@ -301,7 +301,7 @@ const template = (pageName: string) => `<!doctype html>
                 $graffiti.delete(
                   wave,
                   $graffitiSession.value
-                ).then(() => {
+                ).finally(() => {
                   processingWave = false;
                 });
               });
@@ -682,7 +682,7 @@ nav > ul[role="menubar"] > li {
 
 :is(
     nav summary[role="menuitem"],
-    nav > ul > li > button,
+    nav > ul > li:not(.split-button-menu) > button,
     nav > ul > li > :where(label.top-level-checkbox)
 ) {
     list-style: none; /* remove default marker in some browsers */
@@ -780,72 +780,7 @@ nav ul[role="menu"] > li[role="separator"] {
     margin: 0.25rem 0.25rem;
 }
 
-nav .publish-menu {
-    display: inline-flex;
-    align-items: stretch;
-    gap: 0;
-
-    > button:disabled,
-    summary[aria-disabled="true"] {
-        background: var(--background-color-interactive);
-        color: var(--text-color);
-        cursor: not-allowed;
-    }
-
-    > button,
-    summary {
-        border: 1px solid var(--border-color);
-        background: var(--accent-button-background);
-        color: var(--accent-button-text);
-        display: inline-flex;
-        align-items: center;
-    }
-
-    > button {
-        border-radius: 0.5rem 0 0 0.5rem;
-        height: 100%;
-    }
-
-    summary {
-        border-radius: 0 0.5rem 0.5rem 0;
-        height: 100%;
-    }
-
-    > button:not(:disabled):hover,
-    summary:not([aria-disabled="true"]):hover {
-        background: var(--accent-button-background-hover);
-        color: var(--accent-button-text);
-        cursor: pointer;
-        border-color: var(--border-color-hover);
-        text-decoration: none;
-    }
-
-    summary {
-        border-left: none;
-        width: 1.5rem;
-        text-align: center;
-        justify-content: center;
-        user-select: none;
-    }
-
-    summary::marker {
-        content: "";
-    }
-}
-
-nav .publish-menu > details.disabled > summary {
-    pointer-events: none;
-}
-
-nav .publish-menu > button:disabled:hover {
-    background: var(--background-color-interactive);
-    border-color: var(--border-color);
-    color: var(--text-color);
-    text-decoration: none;
-    cursor: not-allowed;
-}
-
-.publish-menu.publish-shake {
+.split-button-menu.publish-shake {
     animation: publish-shake 0.3s ease-in-out;
 }
 

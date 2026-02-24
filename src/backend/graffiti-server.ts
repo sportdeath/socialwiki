@@ -95,19 +95,6 @@ export function serveGraffiti(
     });
   }
 
-  async function maybeUndoRejectedReversibleAction(
-    sourceWindow: Window,
-    method: "post" | "postMedia",
-    args: unknown[],
-    undo: () => Promise<void>,
-  ): Promise<void> {
-    try {
-      await maybeEmitGuardRequest(sourceWindow, method, args);
-    } catch {
-      await undo();
-    }
-  }
-
   async function serveGraffitiToWindow(window: Window) {
     const epoch = (initEpochByWindow.get(window) ?? 0) + 1;
     initEpochByWindow.set(window, epoch);
@@ -179,22 +166,6 @@ export function serveGraffiti(
       simpleMethods.map((method) => [
         method,
         async (...args: unknown[]) => {
-          if (method === "post") {
-            const [partialObject, session] = args as Parameters<
-              Graffiti["post"]
-            >;
-            const posted = await graffiti.post(partialObject, session);
-            void maybeUndoRejectedReversibleAction(
-              window,
-              "post",
-              args,
-              async () => {
-                await graffiti.delete(posted, session);
-              },
-            );
-            return posted;
-          }
-
           await maybeEmitGuardRequest(window, method, args);
           const fn = graffiti[method] as (
             ...methodArgs: unknown[]
@@ -218,16 +189,11 @@ export function serveGraffiti(
           },
           session: GraffitiSession,
         ) {
+          await maybeEmitGuardRequest(window, "postMedia", [media, session]);
           const data = new Blob([media.data.buffer], { type: media.data.type });
           const mediaUrl = await graffiti.postMedia(
             { ...media, data },
             session,
-          );
-          void maybeUndoRejectedReversibleAction(
-            window,
-            "postMedia",
-            [media, session],
-            () => graffiti.deleteMedia(mediaUrl, session),
           );
           return mediaUrl;
         },
