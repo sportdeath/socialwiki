@@ -3,15 +3,9 @@
         <template #left-pane>
             <ol class="history-list">
                 <li v-for="(version, index) in pageVersions" :key="version.url">
-                    <article
-                        :id="version.url"
-                        :class="{ selected: isSelected(version) }"
-                        role="button"
-                        tabindex="0"
-                        @click="selectPageVersion(version)"
-                        @keydown.enter.self.prevent="selectPageVersion(version)"
-                        @keydown.space.self.prevent="selectPageVersion(version)"
-                    >
+                    <article :id="version.url" :class="{ selected: isSelected(version) }" role="button" tabindex="0"
+                        @click="selectPageVersion(version)" @keydown.enter.self.prevent="selectPageVersion(version)"
+                        @keydown.space.self.prevent="selectPageVersion(version)">
                         <header>
                             <h3>{{ formatSummary(version.value.summary) }}</h3>
                         </header>
@@ -20,13 +14,10 @@
                             <strong class="history-actor">
                                 <GraffitiActorToHandle :actor="version.actor" />
                             </strong>
-                            <time
-                                :datetime="
-                                    new Date(
-                                        version.value.published,
-                                    ).toISOString()
-                                "
-                            >
+                            <time :datetime="new Date(
+                                version.value.published,
+                            ).toISOString()
+                                ">
                                 {{
                                     new Date(
                                         version.value.published,
@@ -35,22 +26,15 @@
                             </time>
                         </p>
 
-                        <footer
-                            v-if="$graffitiSession.value && isSelected(version)"
-                        >
+                        <footer v-if="$graffitiSession.value && isSelected(version)">
                             <ul>
-                                <li
-                                    v-if="$graffitiSession.value && index !== 0"
-                                >
-                                    <button
-                                        :disabled="hasPendingMutation"
-                                        @click.stop="
-                                            restorePageVersion(
-                                                version,
-                                                $graffitiSession.value,
-                                            )
-                                        "
-                                    >
+                                <li v-if="$graffitiSession.value && index !== 0">
+                                    <button :disabled="hasPendingMutation" @click.stop="
+                                        restorePageVersion(
+                                            version,
+                                            $graffitiSession.value,
+                                        )
+                                        ">
                                         {{
                                             isRestoringVersion(version)
                                                 ? "Restoring..."
@@ -68,22 +52,16 @@
                                         Link
                                     </button>
                                 </li>
-                                <li
-                                    v-if="
-                                        $graffitiSession.value?.actor ===
-                                        version.actor
-                                    "
-                                >
-                                    <button
-                                        class="warning"
-                                        :disabled="hasPendingMutation"
-                                        @click.stop="
-                                            deleteSelectedPageVersion(
-                                                version,
-                                                $graffitiSession.value,
-                                            )
-                                        "
-                                    >
+                                <li v-if="
+                                    $graffitiSession.value?.actor ===
+                                    version.actor
+                                ">
+                                    <button class="warning" :disabled="hasPendingMutation" @click.stop="
+                                        deleteSelectedPageVersion(
+                                            version,
+                                            $graffitiSession.value,
+                                        )
+                                        ">
                                         {{
                                             isDeletingVersion(version)
                                                 ? "Deleting..."
@@ -98,17 +76,14 @@
             </ol>
         </template>
         <template #right-pane>
-            <sw-transclude
-                ref="transclude"
-                :src="previewAddress"
-            ></sw-transclude>
+            <sw-transclude ref="transclude" :src="previewAddress"></sw-transclude>
         </template>
     </TwoPaneLayout>
 </template>
 
 <script lang="ts" setup>
 import TwoPaneLayout from "../TwoPaneLayout.vue";
-import type { GraffitiSession } from "@graffiti-garden/api";
+import type { Graffiti, GraffitiObject, GraffitiSession } from "@graffiti-garden/api";
 import {
     createPageVersion,
     deletePageVersion,
@@ -179,13 +154,47 @@ const { objects: pageVersionsRaw, isFirstPoll } = useGraffitiDiscover(
     () => [pageName.value],
     () => pageVersionSchema(pageName.value),
 );
-const pageVersions = computed(() =>
-    // TODO: make a sort function that does the topological sort
-    // Also add filters...
-    pageVersionsRaw.value.toSorted(
-        (a, b) => b.value.published - a.value.published,
-    ),
-);
+
+const pageVersions = computed(() => {
+    // TODO: Add filters...
+    const versionMap = new Map<string, PageVersionObject>();
+    pageVersionsRaw.value.forEach(v => versionMap.getOrInsert(v.url, v));
+
+    const roots = new Set<string>();
+    pageVersionsRaw.value.forEach(v => roots.add(v.url));
+    pageVersionsRaw.value.forEach(version =>
+        version.value.precededBy.forEach(child => roots.delete(child))
+    );
+
+    const queue: Array<PageVersionObject> = roots.values().map((v, i) => versionMap.get(v)!).toArray();
+    // We want the ordering to be deterministic, so we
+    // sort roots first by published timestamp order,
+    // and if that fails by the grafitti url.
+    queue.sort((a, b) => {
+        const publishedOrder = b.value.published - a.value.published;
+        if (publishedOrder != 0) {
+            return publishedOrder;
+        }
+        if (a.url < b.url) {
+            return -1;
+        } else if (a.url > b.url) {
+            return 1;
+        }
+        return 0;
+    });
+    const visited = new Set<string>();
+    const sorted = new Array<PageVersionObject>();
+    while (queue.length > 0) {
+        const current = queue.shift()!;
+        if (visited.has(current.url)) {
+            continue;
+        }
+        visited.add(current.url);
+        sorted.push(current);
+        current.value.precededBy.forEach(child => queue.push(versionMap.get(child)!));
+    }
+    return sorted;
+});
 
 const graffiti = useGraffiti();
 const navigate = window.navigate;
@@ -326,7 +335,7 @@ watch([pageVersions, isFirstPoll], ([versions, firstPoll]) => {
     gap: 1rem;
 }
 
-.history-list > li > article {
+.history-list>li>article {
     border: 1px solid var(--border-color);
     border-radius: 0.5rem;
     padding: 0.75rem;
@@ -338,18 +347,18 @@ watch([pageVersions, isFirstPoll], ([versions, firstPoll]) => {
         border-color 0.15s ease;
 }
 
-.history-list > li > article:hover {
+.history-list>li>article:hover {
     background: var(--background-color-interactive);
     border-color: var(--border-color-hover);
 }
 
-.history-list > li > article.selected {
+.history-list>li>article.selected {
     background: var(--background-color-interactive);
     border-color: var(--border-color-hover);
     box-shadow: 0 0 0 1px var(--border-color-hover);
 }
 
-.history-list > li > article:focus-visible {
+.history-list>li>article:focus-visible {
     outline: 2px solid var(--border-color-hover);
     outline-offset: 1px;
 }
@@ -379,7 +388,7 @@ watch([pageVersions, isFirstPoll], ([versions, firstPoll]) => {
     font-size: 0.85rem;
 }
 
-.history-list footer > ul {
+.history-list footer>ul {
     list-style: none;
     display: flex;
     gap: 0.85rem;
