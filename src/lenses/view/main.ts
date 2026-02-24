@@ -12,7 +12,26 @@ let currentAddress = "";
 let currentContentKey = "";
 let activeRenderVersion = 0;
 const transclude = document.querySelector("#transclude") as HTMLElement;
-transclude.setAttribute("srcdoc", LoadingPage);
+
+function hashStringId(value: string): string {
+  // FNV-1a-ish 32-bit hash; deterministic and cheap (not cryptographic).
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `h-${(hash >>> 0).toString(36)}`;
+}
+
+function setTranscludeSrcDoc(
+  html: string,
+  status: "loading" | "not-found" | "ok" | "error",
+) {
+  transclude.setAttribute("id", status === "ok" ? hashStringId(html) : status);
+  transclude.setAttribute("srcdoc", html);
+}
+
+setTranscludeSrcDoc(LoadingPage, "loading");
 
 // Watch the transclude src attribute.
 // If it changes, forward the navigation to the parent
@@ -64,7 +83,7 @@ initLens(async (pageAddress, lensParams) => {
   currentContentKey = contentKey;
   const renderVersion = ++activeRenderVersion;
 
-  transclude?.setAttribute("srcdoc", LoadingPage);
+  setTranscludeSrcDoc(LoadingPage, "loading");
 
   try {
     let mediaAddress = requestedVersion;
@@ -78,10 +97,7 @@ initLens(async (pageAddress, lensParams) => {
       const potentialPageVersion = pageVersions.at(0);
       if (!potentialPageVersion) {
         outputLensStatus("not-found");
-        transclude?.setAttribute(
-          "srcdoc",
-          PageNotFound(address, window.topOrigin),
-        );
+        setTranscludeSrcDoc(PageNotFound(address, window.topOrigin), "not-found");
         return;
       }
 
@@ -100,16 +116,16 @@ initLens(async (pageAddress, lensParams) => {
     if (renderVersion !== activeRenderVersion) return;
 
     outputLensStatus("ok", html);
-    transclude?.setAttribute("srcdoc", html);
+    setTranscludeSrcDoc(html, "ok");
 
     const currentUrl = new URL(currentAddress, "http://example.com");
     transclude?.setAttribute("hash", currentUrl.hash);
   } catch (e) {
     if (renderVersion !== activeRenderVersion) return;
     outputLensStatus("error");
-    transclude?.setAttribute(
-      "srcdoc",
+    setTranscludeSrcDoc(
       ErrorPage(e instanceof Error ? e.message : String(e)),
+      "error",
     );
   }
 });

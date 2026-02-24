@@ -99,6 +99,7 @@
         </template>
         <template #right-pane>
             <sw-transclude
+                id="preview"
                 ref="transclude"
                 :src="previewAddress"
             ></sw-transclude>

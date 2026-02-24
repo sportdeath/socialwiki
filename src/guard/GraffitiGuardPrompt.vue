@@ -5,6 +5,9 @@
             <span>
                 <code>{{ activeGuardRequest.method }}</code> from a sandboxed
                 page
+                <template v-if="formattedGuardSourceId">
+                    (<code>{{ formattedGuardSourceId }}</code>)
+                </template>
                 <template v-if="pendingGuardCount > 1">
                     ({{ pendingGuardCount - 1 }} more queued)
                 </template>
@@ -36,6 +39,10 @@
         <p>
             <strong>Method:</strong>
             {{ activeGuardRequest.method }}
+        </p>
+        <p>
+            <strong>Source:</strong>
+            <code>{{ formattedGuardSourceId ?? "untracked" }}</code>
         </p>
         <pre>{{ formattedGuardArgs }}</pre>
     </section>
@@ -99,6 +106,12 @@ const formattedGuardArgs = computed(() => {
     } catch {
         return String(request.args);
     }
+});
+
+const formattedGuardSourceId = computed(() => {
+    const request = activeGuardRequest.value;
+    if (!request || request.transcludeId === null) return null;
+    return request.transcludeId;
 });
 </script>
 

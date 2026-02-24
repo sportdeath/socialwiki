@@ -8,6 +8,7 @@ import type {
   GraffitiSessionInitializedEvent,
 } from "@graffiti-garden/api";
 import { GraffitiDecentralized } from "@graffiti-garden/implementation-decentralized";
+import { getTranscludeId } from "./transclude-ids";
 
 const simpleMethods = [
   "post",
@@ -29,7 +30,7 @@ type GuardedGraffitiMethod =
 export interface GraffitiGuardRequest {
   method: GuardedGraffitiMethod;
   args: unknown[];
-  sourceWindow: Window;
+  transcludeId: string | null;
   createdAtMs: number;
 }
 
@@ -85,10 +86,11 @@ export function serveGraffiti(
     args: unknown[],
   ) {
     if (!shouldGuard(method, args) || !onGuardRequest) return;
+    const transcludeId = getTranscludeId(sourceWindow) ?? null;
     await onGuardRequest({
       method,
       args,
-      sourceWindow,
+      transcludeId,
       createdAtMs: Date.now(),
     });
   }

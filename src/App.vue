@@ -101,6 +101,7 @@
     </header>
     <main>
         <sw-transclude
+            :id="lens"
             :src="`#${composeRoute({ lens, lensParams, pageAddress })}`"
             ref="transclude"
         ></sw-transclude>

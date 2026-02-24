@@ -167,6 +167,7 @@
             <template #right-pane>
                 <div class="pane">
                     <sw-transclude
+                        :id="previewTranscludeId"
                         :hash="pageHash"
                         :key="refreshKey"
                         :srcdoc="previewHtml"
@@ -198,6 +199,10 @@ import { createPageVersion } from "../../backend/page-versions";
 import { initVimMode, type VimAdapterInstance } from "monaco-vim";
 import { initLens } from "../../backend/lens-client";
 import { composeRoute } from "../../backend/route";
+
+const previewTranscludeId = `e-${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`;
 
 const template = (pageName: string) => `<!doctype html>
 <head>

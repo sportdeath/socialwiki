@@ -7,7 +7,7 @@ export const graffitiGuardState = reactive({
   pending: [] as PendingGraffitiGuardRequest[],
 });
 
-const grantedRequestSignaturesByWindow = new WeakMap<Window, Set<string>>();
+const grantedRequestSignaturesBySourceId = new Map<string, Set<string>>();
 const pendingHandlers = new Map<
   number,
   { resolve: () => void; reject: (error: Error) => void }
@@ -34,24 +34,29 @@ function getRequestSignature(
   }
 }
 
+function getRequestSourceCacheKey(request: GraffitiGuardRequest): string | undefined {
+  if (request.transcludeId === null) return;
+  return request.transcludeId;
+}
+
 function hasGrantedRequest(request: GraffitiGuardRequest): boolean {
   const signature = getRequestSignature(request);
   if (!signature) return false;
-  return (
-    grantedRequestSignaturesByWindow
-      .get(request.sourceWindow)
-      ?.has(signature) ?? false
-  );
+  const sourceKey = getRequestSourceCacheKey(request);
+  if (!sourceKey) return false;
+  return grantedRequestSignaturesBySourceId.get(sourceKey)?.has(signature) ?? false;
 }
 
 function rememberGrantedRequest(request: GraffitiGuardRequest) {
   const signature = getRequestSignature(request);
   if (!signature) return;
+  const sourceKey = getRequestSourceCacheKey(request);
+  if (!sourceKey) return;
 
-  let signatures = grantedRequestSignaturesByWindow.get(request.sourceWindow);
+  let signatures = grantedRequestSignaturesBySourceId.get(sourceKey);
   if (!signatures) {
     signatures = new Set<string>();
-    grantedRequestSignaturesByWindow.set(request.sourceWindow, signatures);
+    grantedRequestSignaturesBySourceId.set(sourceKey, signatures);
   }
   signatures.add(signature);
 }

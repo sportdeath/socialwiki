@@ -3,6 +3,8 @@ import { inputLensAddress, serveLens } from "./lens-server";
 import { ErrorPage, LoadingPage } from "./status-pages";
 import { serveNavigation } from "./navigation-server";
 import { parseRoute } from "./route";
+import { createTranscludeIdTracker } from "./transclude-ids";
+export { getTranscludeId } from "./transclude-ids";
 
 const lenses = {
   v: "src/lenses/view/index.html",
@@ -17,6 +19,8 @@ function assertLens(x: string): asserts x is Lens {
 }
 
 export function installTransclude(graffiti: Graffiti, origin: string) {
+  const transcludeIdTracker = createTranscludeIdTracker();
+
   class SocialWikiTransclude extends HTMLElement {
     protected iframe: HTMLIFrameElement;
     protected renderVersion = 0;
@@ -57,6 +61,9 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         "clipboard-read *",
         "clipboard-write *",
       ].join("; ");
+      this.iframe.addEventListener("load", () =>
+        transcludeIdTracker.syncIframeWindow(this),
+      );
 
       this.destroyLens = serveLens(this.iframe, (status, srcdoc) => {
         this.setAttribute("status", status);
@@ -154,6 +161,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
     protected alive = true;
     disconnectedCallback() {
       this.alive = false;
+      transcludeIdTracker.untrack(this);
       this.destroyLens();
       this.destroyNavigation();
       if (this.currentBlobUrl) {
@@ -292,15 +300,21 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
 
     // Rerender on initialization or src/srcdoc changes
     static get observedAttributes(): string[] {
-      return ["src", "srcdoc", "hash"];
+      return ["src", "srcdoc", "hash", "id"];
     }
     connectedCallback() {
+      transcludeIdTracker.track(this, this.iframe);
       this.renderPage();
     }
-    attributeChangedCallback() {
+    attributeChangedCallback(name: string) {
+      if (name === "id") {
+        transcludeIdTracker.notifyIdChanged(this);
+        return;
+      }
       this.renderPage();
     }
     adoptedCallback() {
+      transcludeIdTracker.syncIframeWindow(this);
       this.renderPage();
     }
   }
