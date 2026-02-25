@@ -11,6 +11,7 @@
     "@graffiti-garden/api": "^1.2.0",
     "@graffiti-garden/implementation-decentralized": "^0.0.8",
     "@graffiti-garden/wrapper-vue": "^1.2.2",
+    "idb": "^8.0.3",
     "monaco-editor": "^0.55.1",
     "monaco-editor-vue3": "^1.0.5",
     "monaco-vim": "^0.4.4",

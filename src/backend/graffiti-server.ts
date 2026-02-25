@@ -189,12 +189,10 @@ export function serveGraffiti(
           },
           session: GraffitiSession,
         ) {
-          await maybeEmitGuardRequest(window, "postMedia", [media, session]);
           const data = new Blob([media.data.buffer], { type: media.data.type });
-          const mediaUrl = await graffiti.postMedia(
-            { ...media, data },
-            session,
-          );
+          const args = [{ ...media, data }, session] as const;
+          await maybeEmitGuardRequest(window, "postMedia", [...args]);
+          const mediaUrl = await graffiti.postMedia(...args);
           return mediaUrl;
         },
         async getMedia(...args: Parameters<Graffiti["getMedia"]>) {

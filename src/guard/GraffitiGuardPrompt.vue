@@ -18,7 +18,7 @@
                 </GraffitiGet>
             </template>
             <template v-else-if="activeGuardRequest.method === 'get'">
-                <h2>Allow this page to access private data?</h2>
+                <h2>Allow this page to get private data?</h2>
 
                 <GraffitiGet
                     :url="activeGuardRequest.args[0] as any"
@@ -30,28 +30,44 @@
                 </GraffitiGet>
             </template>
             <template v-else-if="activeGuardRequest.method === 'postMedia'">
-                <h2>Allow this page to post data?</h2>
+                <h2>Allow this page to post a file?</h2>
 
-                <!-- TODO: display media details -->
+                <MediaDetails :media="activeGuardRequest.args[0] as any" />
             </template>
             <template v-else-if="activeGuardRequest.method === 'deleteMedia'">
-                <h2>Allow this page to delete data?</h2>
+                <h2>Allow this page to delete a file?</h2>
 
-                <!-- TODO: display media details -->
+                <GraffitiGetMedia
+                    :url="activeGuardRequest.args[0] as any"
+                    :accept="{}"
+                    :session="activeGuardRequest.args[1] as any"
+                    v-slot="{ media }"
+                >
+                    <MediaDetails :media="media" />
+                </GraffitiGetMedia>
             </template>
             <template v-else-if="activeGuardRequest.method === 'getMedia'">
-                <h2>Allow this page to access private data?</h2>
+                <h2>Allow this page to access a private file?</h2>
 
-                <!-- TODO: display media details -->
+                <GraffitiGetMedia
+                    :url="activeGuardRequest.args[0] as any"
+                    :accept="activeGuardRequest.args[1] as any"
+                    :session="activeGuardRequest.args[2] as any"
+                    v-slot="{ media }"
+                >
+                    <MediaDetails :media="media" />
+                </GraffitiGetMedia>
             </template>
             <template v-else-if="activeGuardRequest.method === 'discover'">
-                <h2>Allow this page to access private data?</h2>
+                <h2>Allow this page to discover private data?</h2>
 
-                <!-- TODO: display discovery request -->
+                <DiscoverDetails
+                    :channels="activeGuardRequest.args[0] as any"
+                    :schema="activeGuardRequest.args[1] as any"
+                />
             </template>
-            <template v-else>
-                <p>Unknown guard request:</p>
-                <pre>{{ activeGuardRequest }}</pre>
+            <template v-else-if="activeGuardRequest.method === 'logout'">
+                <h2>Allow this page to log you out?</h2>
             </template>
             <footer>
                 <button @click="rejectActive" class="secondary">Cancel</button>
@@ -59,15 +75,23 @@
                     <button @click="approveActive">Allow Once</button>
                     <details>
                         <summary>▾</summary>
-                        <ul>
-                            <li>
-                                <button @click.prevent type="button">
-                                    Allow for similar data
+                        <ul role="menu">
+                            <!-- <li>
+                                <button
+                                    @click.prevent="approveActiveSimilar"
+                                    role="menuitem"
+                                    type="button"
+                                >
+                                    Allow All <em>Similar</em> Requests
                                 </button>
-                            </li>
+                            </li> -->
                             <li>
-                                <button @click.prevent type="button">
-                                    Allow <strong>Always</strong>
+                                <button
+                                    @click.prevent="approveActiveAlways"
+                                    role="menuitem"
+                                    type="button"
+                                >
+                                    Allow Forever (This Page Version Only)
                                 </button>
                             </li>
                         </ul>
@@ -79,13 +103,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import {
+    allowAlwaysGraffitiGuardRequest,
     allowGraffitiGuardRequest,
+    allowSimilarGraffitiGuardRequest,
     denyGraffitiGuardRequest,
     graffitiGuardState,
 } from "./graffiti-guard";
+import MediaDetails from "./MediaDetails.vue";
 import ObjectDetails from "./ObjectDetails.vue";
+import DiscoverDetails from "./DiscoverDetails.vue";
 
 const activeGuardRequest = computed(
     () => graffitiGuardState.pending[0] ?? null,
@@ -102,6 +130,18 @@ function rejectActive() {
     if (!request) return;
     denyGraffitiGuardRequest(request.id);
 }
+
+function approveActiveSimilar() {
+    const request = activeGuardRequest.value;
+    if (!request) return;
+    void allowSimilarGraffitiGuardRequest(request.id);
+}
+
+function approveActiveAlways() {
+    const request = activeGuardRequest.value;
+    if (!request) return;
+    void allowAlwaysGraffitiGuardRequest(request.id);
+}
 </script>
 
 <style scoped>
@@ -110,8 +150,7 @@ dialog {
     inset: auto;
     margin: 0;
     width: min(42rem, calc(100vw - 2rem));
-    max-height: calc(100dvh - 2rem);
-    overflow: auto;
+    overflow: visible;
     padding: 1rem;
     border: 1px solid var(--border-color);
     border-radius: 0.5rem;
@@ -143,13 +182,13 @@ dialog {
             z-index: 1;
             margin: 0;
             padding: 0.25rem;
-            min-width: 16rem;
+            width: max-content;
             list-style: none;
             border: 1px solid var(--border-color);
             border-radius: 0.5rem;
             background: var(--background-color);
             box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 0.2);
-            font-size: 1rem;
+            font-size: inherit;
         }
 
         & .split-button-menu > details {
@@ -164,6 +203,33 @@ dialog {
             width: 100%;
             text-align: left;
         }
+
+        & .split-button-menu ul[role="menu"] > li > button[role="menuitem"] {
+            color: inherit;
+            padding: 0.25rem 0.35rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            text-decoration: none;
+            white-space: nowrap;
+        }
+
+        &
+            .split-button-menu
+            ul[role="menu"]
+            > li
+            > button[role="menuitem"]:hover {
+            background: var(--background-color-interactive);
+            text-decoration: none;
+        }
+
+        &
+            .split-button-menu
+            ul[role="menu"]
+            > li
+            > button[role="menuitem"]:focus-visible {
+            outline: 2px solid var(--border-color-hover);
+            outline-offset: 0;
+        }
     }
 }
 
@@ -172,7 +238,9 @@ aside {
     inset: 0;
     z-index: 40;
     display: grid;
-    place-items: center;
+    justify-items: center;
+    align-items: start;
+    overflow: auto;
     padding: 1rem;
     background: rgb(0 0 0 / 0.2);
 }

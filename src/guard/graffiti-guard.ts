@@ -1,5 +1,9 @@
 import { reactive } from "vue";
 import type { GraffitiGuardRequest } from "../backend/graffiti-server";
+import {
+  hasMatchingGraffitiGuardApprovalRule,
+  saveGraffitiGuardApprovalRule,
+} from "./graffiti-guard-approval-rules";
 
 export type PendingGraffitiGuardRequest = GraffitiGuardRequest & {
   id: number;
@@ -12,9 +16,13 @@ export const graffitiGuardState = reactive({
 });
 
 let nextGuardRequestId = 1;
-export function handleGraffitiGuardRequest(
+export async function handleGraffitiGuardRequest(
   request: GraffitiGuardRequest,
 ): Promise<void> {
+  if (await hasMatchingGraffitiGuardApprovalRule(request)) {
+    return;
+  }
+
   const id = nextGuardRequestId++;
   const pendingRequest: PendingGraffitiGuardRequest = {
     ...request,
@@ -53,4 +61,28 @@ export function allowGraffitiGuardRequest(id: number) {
 
 export function denyGraffitiGuardRequest(id: number) {
   settlePending(id, false);
+}
+
+async function allowWithStoredRule(
+  id: number,
+  scope: "similar" | "all",
+): Promise<void> {
+  const request = graffitiGuardState.pending.find((pending) => pending.id === id);
+  if (!request) return;
+
+  try {
+    await saveGraffitiGuardApprovalRule(request, scope);
+  } catch {
+    // Approval should still go through even if storage is unavailable.
+  }
+
+  allowGraffitiGuardRequest(id);
+}
+
+export function allowSimilarGraffitiGuardRequest(id: number) {
+  return allowWithStoredRule(id, "similar");
+}
+
+export function allowAlwaysGraffitiGuardRequest(id: number) {
+  return allowWithStoredRule(id, "all");
 }
