@@ -147,6 +147,7 @@ button {
     border-radius: 0 0.5rem 0.5rem 0;
     width: 1.5rem;
     padding-inline: 0;
+    height: 100%;
 }
 
 .split-button-menu > details > summary::marker {

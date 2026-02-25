@@ -174,6 +174,7 @@ dialog {
     & footer {
         display: flex;
         justify-content: space-between;
+        gap: 1rem;
 
         & .split-button-menu > details[open] > ul {
             position: absolute;
@@ -211,6 +212,8 @@ dialog {
             cursor: pointer;
             text-decoration: none;
             white-space: nowrap;
+            max-width: 70dvw;
+            text-wrap: wrap;
         }
 
         &
