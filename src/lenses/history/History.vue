@@ -115,6 +115,7 @@ import {
     deletePageVersion,
     pageVersionSchema,
     type PageVersionObject,
+    sortPageVersions,
 } from "../../backend/page-versions";
 import {
     useGraffiti,
@@ -180,13 +181,7 @@ const { objects: pageVersionsRaw, isFirstPoll } = useGraffitiDiscover(
     () => [pageName.value],
     () => pageVersionSchema(pageName.value),
 );
-const pageVersions = computed(() =>
-    // TODO: make a sort function that does the topological sort
-    // Also add filters...
-    pageVersionsRaw.value.toSorted(
-        (a, b) => b.value.published - a.value.published,
-    ),
-);
+const pageVersions = computed(() => sortPageVersions(pageVersionsRaw.value));
 
 const graffiti = useGraffiti();
 const navigate = window.navigate;

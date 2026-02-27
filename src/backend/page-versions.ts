@@ -106,7 +106,7 @@ export async function getPageVersions(
   graffiti: Graffiti,
   pageName: string,
   editors?: string[],
-) {
+): Promise<PageVersionObject[]> {
   const versions = new Map<string, PageVersionObject>();
   const normalizedEditors = normalizeEditors(editors);
   for await (const result of graffiti.discover(
@@ -124,10 +124,81 @@ export async function getPageVersions(
     }
   }
 
-  // TODO: properly topological sort using published
-  // only to interleave disconnected components or to
-  // find the "beginning" of cycles.
-  return [...versions.values()].sort(
-    (a, b) => b.value.published - a.value.published,
+  return sortPageVersions([...versions.values()]);
+}
+
+export function sortPageVersions(
+  versions: PageVersionObject[],
+): PageVersionObject[] {
+  // Topological sort via Kahn's algorithm:
+  // - versions URLs are content addressed so versions are guaranteed to be acyclic
+  // - edge A->B when A's URL is in B's precededBy.
+  // - ties broken by self-reported published
+
+  const nodes = new Map<
+    string,
+    {
+      version: PageVersionObject;
+      precededBy: string[];
+      followedBy: string[];
+    }
+  >();
+  for (const version of versions) {
+    nodes.set(version.url, {
+      version,
+      precededBy: version.value.precededBy,
+      followedBy: [],
+    });
+  }
+
+  for (const [nodeUrl, node] of nodes) {
+    // Dedupe predecessors and make sure they all exist
+    node.precededBy = [...new Set(node.precededBy)].filter((p) => nodes.has(p));
+
+    for (const predecessorUrl of node.precededBy) {
+      const predecessor = nodes.get(predecessorUrl)!; // guaranteed to exist by above filter
+      predecessor.followedBy.push(nodeUrl);
+    }
+  }
+
+  // startNodes ← Set of all nodes with no incoming edge
+  const queue = [...nodes.values()].filter(
+    (node) => node.precededBy.length === 0,
   );
+
+  // sortedList ← Empty list that will contain the sorted elements. This is what we will return.
+  const sortedList: PageVersionObject[] = [];
+
+  while (true) {
+    // Sort the queue to resolve ambiguity between parallel branches
+    queue.sort((a, b) => {
+      const timeDifference =
+        a.version.value.published - b.version.value.published;
+      if (timeDifference !== 0) return timeDifference;
+
+      // If the nodes have the timestamp, fallback to comparing
+      // URLs to have a deterministic tie breaker
+      return a.version.url < b.version.url ? -1 : 1;
+    });
+
+    // Start with the oldest item
+    const current = queue.shift();
+    if (!current) break; // queue empty! all done
+
+    sortedList.push(current.version);
+
+    for (const followerUrl of current.followedBy) {
+      const follower = nodes.get(followerUrl);
+      if (!follower) continue;
+      follower.precededBy = follower.precededBy.filter(
+        (url) => url !== current?.version.url,
+      );
+      if (follower.precededBy.length === 0) {
+        queue.push(follower);
+      }
+    }
+  }
+
+  // Return in reverse chronological order
+  return sortedList.toReversed();
 }
