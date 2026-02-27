@@ -9,9 +9,29 @@ import {
 const graffiti = new window.graffiti();
 
 let currentAddress = "";
-let currentPageName = "";
+let currentContentKey = "";
+let activeRenderVersion = 0;
 const transclude = document.querySelector("#transclude") as HTMLElement;
-transclude.setAttribute("srcdoc", LoadingPage);
+
+function hashStringId(value: string): string {
+  // FNV-1a-ish 32-bit hash; deterministic and cheap (not cryptographic).
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < value.length; i++) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return `h-${(hash >>> 0).toString(36)}`;
+}
+
+function setTranscludeSrcDoc(
+  html: string,
+  status: "loading" | "not-found" | "ok" | "error",
+) {
+  transclude.setAttribute("id", status === "ok" ? hashStringId(html) : status);
+  transclude.setAttribute("srcdoc", html);
+}
+
+setTranscludeSrcDoc(LoadingPage, "loading");
 
 // Watch the transclude src attribute.
 // If it changes, forward the navigation to the parent
@@ -26,57 +46,86 @@ observer.observe(transclude, {
   attributeFilter: ["src"],
 });
 
-initLens(async (address: string) => {
-  if (address === currentAddress) return;
+function normalizeEditorParams(lensParams: URLSearchParams) {
+  return lensParams
+    .getAll("editor")
+    .map((editor) => editor.trim())
+    .filter((editor) => editor.length > 0);
+}
+
+async function resolveEditors(editors: string[]) {
+  const resolved = await Promise.all(
+    editors.map(async (editor) => {
+      if (editor.startsWith("did:")) return editor;
+      return graffiti.handleToActor(editor);
+    }),
+  );
+
+  return [...new Set(resolved)];
+}
+
+initLens(async (pageAddress, lensParams) => {
+  const address = pageAddress;
+  const url = new URL(address, "http://example.com");
+  const requestedVersion = lensParams.get("version") ?? "";
+  const requestedEditors = normalizeEditorParams(lensParams);
+  const pageName = url.pathname.slice(1);
+  const contentKey = requestedVersion || `${pageName}|${requestedEditors.join("|")}`;
+
+  if (address === currentAddress && contentKey === currentContentKey) return;
   currentAddress = address;
 
-  const url = new URL(address, "http://example.com");
-  const pageName = url.pathname.slice(1);
-  if (pageName === currentPageName) {
-    // If the page name hasn't changed, we can just update the hash
+  if (contentKey === currentContentKey) {
+    // If the rendered content target hasn't changed, only update the hash.
     transclude?.setAttribute("hash", url.hash);
     return;
   }
-  currentPageName = pageName;
+  currentContentKey = contentKey;
+  const renderVersion = ++activeRenderVersion;
 
-  transclude?.setAttribute("srcdoc", LoadingPage);
+  setTranscludeSrcDoc(LoadingPage, "loading");
 
   try {
-    const pageVersions = await getPageVersions(graffiti, pageName);
-    if (pageName !== currentPageName) return;
+    let mediaAddress = requestedVersion;
+    if (!mediaAddress.length) {
+      const editors = await resolveEditors(requestedEditors);
+      if (renderVersion !== activeRenderVersion) return;
 
-    const potentialPageVersion = pageVersions.at(0);
-    if (!potentialPageVersion) {
-      outputLensStatus("not-found");
-      transclude?.setAttribute(
-        "srcdoc",
-        PageNotFound(address, window.topOrigin),
-      );
-      return;
+      const pageVersions = await getPageVersions(graffiti, pageName, editors);
+      if (renderVersion !== activeRenderVersion) return;
+
+      const potentialPageVersion = pageVersions.at(0);
+      if (!potentialPageVersion) {
+        outputLensStatus("not-found");
+        setTranscludeSrcDoc(PageNotFound(address, window.topOrigin), "not-found");
+        return;
+      }
+
+      mediaAddress = potentialPageVersion.value.result.media;
     }
 
     const media = await graffiti.getMedia(
-      potentialPageVersion.value.result.media,
+      mediaAddress,
       {
         types: ["text/html"],
       },
     );
-    if (pageName !== currentPageName) return;
+    if (renderVersion !== activeRenderVersion) return;
 
     const html = await media.data.text();
-    if (pageName !== currentPageName) return;
+    if (renderVersion !== activeRenderVersion) return;
 
     outputLensStatus("ok", html);
-    transclude?.setAttribute("srcdoc", html);
+    setTranscludeSrcDoc(html, "ok");
 
-    if (address === currentAddress) {
-      transclude?.setAttribute("hash", url.hash);
-    }
+    const currentUrl = new URL(currentAddress, "http://example.com");
+    transclude?.setAttribute("hash", currentUrl.hash);
   } catch (e) {
+    if (renderVersion !== activeRenderVersion) return;
     outputLensStatus("error");
-    transclude?.setAttribute(
-      "srcdoc",
+    setTranscludeSrcDoc(
       ErrorPage(e instanceof Error ? e.message : String(e)),
+      "error",
     );
   }
 });

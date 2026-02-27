@@ -24,11 +24,17 @@ export function serveLens(
   return () => window.removeEventListener("message", onMessage);
 }
 
-export function inputLensAddress(iframe: HTMLIFrameElement, address: string) {
+export function inputLensAddress(
+  iframe: HTMLIFrameElement,
+  pageAddress: string,
+  lensParams: URLSearchParams = new URLSearchParams(),
+) {
+  const serializedLensParams = lensParams.toString();
   iframe.contentWindow?.postMessage(
     {
       type: "sw-lens-input",
-      address,
+      pageAddress,
+      lensParams: serializedLensParams.length ? serializedLensParams : undefined,
     },
     "*",
   );

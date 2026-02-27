@@ -4,40 +4,26 @@
             <template #left-controls>
                 <nav>
                     <ul role="menubar">
-                        <li>
-                            <details>
-                                <summary role="menuitem">File</summary>
-
+                        <li
+                            class="split-button-menu"
+                            :class="{ 'publish-shake': shouldShakePublish }"
+                        >
+                            <button :disabled="publishing" @click="publish()">
+                                Publish
+                            </button>
+                            <details
+                                ref="publishMenuDetails"
+                                :class="{ disabled: publishing }"
+                            >
+                                <summary :aria-disabled="publishing">▾</summary>
                                 <ul role="menu">
                                     <li>
                                         <button
+                                            :disabled="publishing"
                                             role="menuitem"
-                                            type="button"
-                                            @click="publish()"
-                                        >
-                                            Publish
-                                        </button>
-                                    </li>
-
-                                    <li>
-                                        <button
-                                            role="menuitem"
-                                            type="button"
                                             @click="publish(true)"
                                         >
                                             Publish as…
-                                        </button>
-                                    </li>
-
-                                    <li role="separator"></li>
-
-                                    <li role="none">
-                                        <button
-                                            role="menuitem"
-                                            type="button"
-                                            @click="download()"
-                                        >
-                                            Download
                                         </button>
                                     </li>
                                 </ul>
@@ -45,40 +31,76 @@
                         </li>
 
                         <li role="none">
-                            <details>
-                                <summary role="menuitem">View</summary>
+                            <button type="button" @click="download()">
+                                Download
+                            </button>
+                        </li>
+
+                        <li role="none">
+                            <details ref="viewMenuDetails">
+                                <summary role="menuitem">▾ View</summary>
 
                                 <ul role="menu">
                                     <li>
-                                        <button
-                                            role="menuitem"
-                                            type="button"
-                                            @click="showDiff = !showDiff"
-                                        >
-                                            {{
-                                                showDiff
-                                                    ? "Hide changes"
-                                                    : "Show changes"
-                                            }}
-                                        </button>
+                                        <label class="menu-checkbox">
+                                            <input
+                                                type="checkbox"
+                                                v-model="showDiff"
+                                            />
+                                            Show changes
+                                        </label>
                                     </li>
 
                                     <li role="separator"></li>
 
                                     <li>
-                                        <button
-                                            role="menuitem"
-                                            type="button"
-                                            @click="
-                                                showSettings = !showSettings
-                                            "
-                                        >
-                                            {{
-                                                showSettings
-                                                    ? "Hide editor settings"
-                                                    : "Show editor settings"
-                                            }}
-                                        </button>
+                                        <label class="menu-checkbox">
+                                            <input
+                                                type="checkbox"
+                                                v-model="darkMode"
+                                            />
+                                            Dark mode
+                                        </label>
+                                    </li>
+
+                                    <li>
+                                        <label class="menu-checkbox">
+                                            <input
+                                                type="checkbox"
+                                                v-model="wordWrap"
+                                            />
+                                            Word wrap
+                                        </label>
+                                    </li>
+
+                                    <li>
+                                        <label class="menu-checkbox">
+                                            <input
+                                                type="checkbox"
+                                                v-model="minimapEnabled"
+                                            />
+                                            Show minimap
+                                        </label>
+                                    </li>
+
+                                    <li>
+                                        <label class="menu-checkbox">
+                                            <input
+                                                type="checkbox"
+                                                v-model="renderWhitespace"
+                                            />
+                                            Show whitespace
+                                        </label>
+                                    </li>
+
+                                    <li>
+                                        <label class="menu-checkbox">
+                                            <input
+                                                type="checkbox"
+                                                v-model="vimModeEnabled"
+                                            />
+                                            Vim mode
+                                        </label>
                                     </li>
                                 </ul>
                             </details>
@@ -92,20 +114,23 @@
                     <ul>
                         <li>
                             <button
+                                class="refresh-button"
                                 title="Refresh the preview"
                                 @click="refreshPreview"
                             >
-                                {{ debouncing ? "Refreshing…" : "Refresh" }}
+                                Refresh
+                                <span
+                                    v-if="debouncing"
+                                    class="refresh-spinner"
+                                    aria-hidden="true"
+                                ></span>
                             </button>
                         </li>
                         <li>
-                            <button
-                                @click="showPreviewMenu = !showPreviewMenu"
-                                :class="{ selected: showPreviewMenu }"
-                                title="Preview settings"
-                            >
-                                ⚙️▼
-                            </button>
+                            <label class="top-level-checkbox">
+                                <input type="checkbox" v-model="livePreview" />
+                                Auto-refresh
+                            </label>
                         </li>
                     </ul>
                 </nav>
@@ -114,77 +139,20 @@
             <!-- Left pane body (Editor) -->
             <template #left-pane>
                 <div class="pane">
-                    <section v-if="showSettings" class="settings-panel">
-                        <div class="settings-group">
-                            <h3>Appearance</h3>
-                            <label>
-                                Theme
-                                <select v-model="editorTheme">
-                                    <option value="vs-dark">Dark</option>
-                                    <option value="vs">Light</option>
-                                    <option value="hc-black">
-                                        High contrast
-                                    </option>
-                                </select>
-                            </label>
-                            <label>
-                                Font size
-                                <input
-                                    type="number"
-                                    min="10"
-                                    max="24"
-                                    v-model.number="fontSize"
-                                />
-                            </label>
-                            <label>
-                                Line height
-                                <input
-                                    type="number"
-                                    min="1"
-                                    max="5"
-                                    step="0.1"
-                                    v-model.number="lineHeight"
-                                />
-                            </label>
-                        </div>
-
-                        <div class="settings-group">
-                            <h3>Editor UI</h3>
-                            <label class="checkbox-inline">
-                                <input type="checkbox" v-model="wordWrap" />
-                                Word wrap
-                            </label>
-                            <label class="checkbox-inline">
-                                <input
-                                    type="checkbox"
-                                    v-model="minimapEnabled"
-                                />
-                                Show minimap
-                            </label>
-                            <label class="checkbox-inline">
-                                <input
-                                    type="checkbox"
-                                    v-model="renderWhitespace"
-                                />
-                                Show whitespace
-                            </label>
-                        </div>
-                    </section>
-
                     <CodeEditor
                         v-if="!showDiff"
                         v-model:value="editorHtml"
                         language="html"
                         :theme="editorTheme"
                         :options="monacoOptions"
+                        @editorDidMount="onEditorDidMount"
                         class="code-editor"
                     />
-                    <!-- @editorDidMount="onEditorDidMount" -->
 
                     <DiffEditor
                         v-else
                         :value="diffHtml"
-                        :original="draftHtml"
+                        :original="publishedHtml"
                         language="html"
                         :theme="editorTheme"
                         :options="diffOptions"
@@ -198,13 +166,8 @@
             <!-- Right pane body (Preview) -->
             <template #right-pane>
                 <div class="pane">
-                    <section v-if="showPreviewMenu" class="settings-panel">
-                        <label class="checkbox-inline">
-                            <input type="checkbox" v-model="livePreview" />
-                            Auto-Refresh
-                        </label>
-                    </section>
                     <sw-transclude
+                        :id="previewTranscludeId"
                         :hash="pageHash"
                         :key="refreshKey"
                         :srcdoc="previewHtml"
@@ -220,14 +183,26 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed, onBeforeUnmount, onMounted } from "vue";
+import {
+    ref,
+    shallowRef,
+    watch,
+    computed,
+    onBeforeUnmount,
+    onMounted,
+} from "vue";
 import * as monaco from "monaco-editor";
 import { CodeEditor, DiffEditor } from "monaco-editor-vue3";
 import TwoPaneLayout from "../TwoPaneLayout.vue";
 import { useGraffiti, useGraffitiSession } from "@graffiti-garden/wrapper-vue";
 import { createPageVersion } from "../../backend/page-versions";
-import { initVimMode } from "monaco-vim";
+import { initVimMode, type VimAdapterInstance } from "monaco-vim";
 import { initLens } from "../../backend/lens-client";
+import { composeRoute } from "../../backend/route";
+
+const previewTranscludeId = `e-${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`;
 
 const template = (pageName: string) => `<!doctype html>
 <head>
@@ -305,7 +280,7 @@ const template = (pageName: string) => `<!doctype html>
                 channels: [ '${pageName}' ],
               },
               $graffitiSession.value
-            ).then(() => {
+            ).finally(() => {
               processingWave = false;
             });
           "
@@ -326,7 +301,7 @@ const template = (pageName: string) => `<!doctype html>
                 $graffiti.delete(
                   wave,
                   $graffitiSession.value
-                ).then(() => {
+                ).finally(() => {
                   processingWave = false;
                 });
               });
@@ -344,11 +319,18 @@ const template = (pageName: string) => `<!doctype html>
 </body>`;
 
 const draftHtml = ref("");
+const publishedHtml = ref<string | null>(null);
 
 // Initialize the editor, diff and preview with the existing HTML
 const editorHtml = ref("");
 const previewHtml = ref("");
 const diffHtml = ref("");
+const hasUnsavedChanges = computed(
+    () => editorHtml.value !== publishedHtml.value,
+);
+const hasShownPublishReminder = ref(false);
+const shouldShakePublish = ref(false);
+let publishShakeTimeout: number | null = null;
 watch(
     draftHtml,
     (newHtml) => {
@@ -358,40 +340,44 @@ watch(
     },
     { immediate: true },
 );
+watch(hasUnsavedChanges, (isDirty, wasDirty) => {
+    if (!isDirty || wasDirty || hasShownPublishReminder.value) return;
+    hasShownPublishReminder.value = true;
+    shouldShakePublish.value = true;
+    if (publishShakeTimeout !== null) clearTimeout(publishShakeTimeout);
+    publishShakeTimeout = window.setTimeout(() => {
+        shouldShakePublish.value = false;
+        publishShakeTimeout = null;
+    }, 320);
+});
 
 const navigate = window.navigate;
 
-const address = ref("");
 const pageName = ref("");
 const pageHash = ref("");
 const session = useGraffitiSession();
-initLens(async (a: string) => {
-    address.value = a;
-    const url = new URL(a, "https://example.com");
+const graffiti = useGraffiti();
+initLens(async (pageAddress, lensParams) => {
+    const url = new URL(pageAddress, "https://example.com");
     pageName.value = url.pathname.slice(1);
     pageHash.value = url.hash;
 
-    const login = url.searchParams.get("login");
-    if (login !== null && !session.value) {
-        graffiti.login();
-        return;
-    }
-
-    const searchDraft = url.searchParams.get("draft");
-    if (searchDraft) {
+    const searchDraft = lensParams.get("draft");
+    if (searchDraft !== null) {
         draftHtml.value = searchDraft;
     } else if (!draftHtml.value.length) {
         // If there's no draft HTML, initialize it with the template
         draftHtml.value = template(pageName.value);
     }
 
-    if (searchDraft !== null || login !== null) {
-        // Strip the draft and login state from the URL
-        // and navigate to the clean URL
-        url.searchParams.delete("draft");
-        url.searchParams.delete("login");
-        const cleanAddress = pageName.value + url.search + url.hash;
-        navigate(`#/e/${cleanAddress}`);
+    if (publishedHtml.value === null) {
+        publishedHtml.value = draftHtml.value;
+        hasShownPublishReminder.value = false;
+        shouldShakePublish.value = false;
+        if (publishShakeTimeout !== null) {
+            clearTimeout(publishShakeTimeout);
+            publishShakeTimeout = null;
+        }
     }
 });
 
@@ -408,16 +394,19 @@ function download() {
 }
 
 // --- Editor Settings ------------------------------------
-const showSettings = ref(false);
-
-type MonacoTheme = "vs-dark" | "vs" | "hc-black";
+type MonacoTheme = "vs-dark" | "vs";
 const editorTheme = ref<MonacoTheme>("vs-dark");
+const darkMode = computed({
+    get: () => editorTheme.value === "vs-dark",
+    set: (enabled: boolean) => {
+        editorTheme.value = enabled ? "vs-dark" : "vs";
+    },
+});
 
 const wordWrap = ref(true);
 const minimapEnabled = ref(true);
 const renderWhitespace = ref(false);
-const fontSize = ref(14);
-const lineHeight = ref(1.5);
+const vimModeEnabled = ref(false);
 
 // Apply Monaco theme globally when selection changes
 watch(editorTheme, (theme) => monaco.editor.setTheme(theme), {
@@ -429,8 +418,6 @@ const monacoOptions = computed(() => ({
     automaticLayout: true,
     wordWrap: wordWrap.value ? "on" : "off",
     minimap: { enabled: minimapEnabled.value },
-    fontSize: fontSize.value,
-    lineHeight: lineHeight.value,
     renderWhitespace: renderWhitespace.value ? "all" : "none",
     smoothScrolling: true,
     scrollBeyondLastLine: true,
@@ -442,10 +429,31 @@ const monacoOptions = computed(() => ({
     lineNumbersMinChars: 3,
 }));
 
-// TODO: add toggle for VIM
-// function onEditorDidMount(editor: any) {
-//     const vimMode = initVimMode(editor, null);
-// }
+const codeEditorInstance =
+    shallowRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+const vimAdapter = shallowRef<VimAdapterInstance | null>(null);
+
+const disposeVimMode = () => {
+    vimAdapter.value?.dispose();
+    vimAdapter.value = null;
+};
+
+const syncVimMode = () => {
+    disposeVimMode();
+    if (!vimModeEnabled.value) return;
+
+    const activeEditor = showDiff.value
+        ? (diffEditorInstance.value?.getModifiedEditor() ?? null)
+        : codeEditorInstance.value;
+
+    if (!activeEditor) return;
+    vimAdapter.value = initVimMode(activeEditor, null);
+};
+
+const onEditorDidMount = (editor: monaco.editor.IStandaloneCodeEditor) => {
+    codeEditorInstance.value = editor;
+    syncVimMode();
+};
 
 // --- Diff settings ------------------------------------
 
@@ -453,11 +461,31 @@ const monacoOptions = computed(() => ({
 const showDiff = ref(false);
 watch(showDiff, (enabled) => {
     if (enabled) {
+        codeEditorInstance.value = null;
         diffHtml.value = editorHtml.value;
+    } else {
+        diffEditorInstance.value = null;
     }
 });
 const onDiffChange = (value: string) => {
     editorHtml.value = value;
+};
+
+const publishMenuDetails = ref<HTMLDetailsElement | null>(null);
+const viewMenuDetails = ref<HTMLDetailsElement | null>(null);
+const onMenuPointerDown = (event: PointerEvent) => {
+    const target = event.target;
+    if (!(target instanceof Node)) return;
+
+    const publishMenu = publishMenuDetails.value;
+    if (publishMenu?.open && !publishMenu.contains(target)) {
+        publishMenu.open = false;
+    }
+
+    const viewMenu = viewMenuDetails.value;
+    if (viewMenu?.open && !viewMenu.contains(target)) {
+        viewMenu.open = false;
+    }
 };
 
 // Keep diff editor options in sync reactively
@@ -465,12 +493,13 @@ const diffOptions = computed(() => ({
     ...monacoOptions.value,
     renderSideBySide: false,
 }));
-const diffEditorInstance = ref<monaco.editor.IStandaloneDiffEditor | null>(
-    null,
-);
+const diffEditorInstance =
+    shallowRef<monaco.editor.IStandaloneDiffEditor | null>(null);
 const onDiffDidMount = (editor: monaco.editor.IStandaloneDiffEditor) => {
     diffEditorInstance.value = editor;
+    syncVimMode();
 };
+watch([vimModeEnabled, showDiff], syncVimMode);
 watch(
     monacoOptions,
     (opts) => {
@@ -495,8 +524,7 @@ function refreshPreview() {
     refreshKey.value++;
 }
 
-// Preview menu state and option
-const showPreviewMenu = ref(false);
+// Preview option
 const livePreview = ref(true);
 
 // Auto-refresh the preview
@@ -504,6 +532,7 @@ const DEBOUNCE_DELAY = 500;
 let timeout: number | null = null;
 onBeforeUnmount(() => {
     if (timeout !== null) clearTimeout(timeout);
+    if (publishShakeTimeout !== null) clearTimeout(publishShakeTimeout);
 });
 const debouncing = ref(false);
 const schedulePreviewUpdate = (newHtml: string) => {
@@ -511,12 +540,23 @@ const schedulePreviewUpdate = (newHtml: string) => {
     if (timeout !== null) clearTimeout(timeout);
     timeout = window.setTimeout(() => {
         previewHtml.value = newHtml;
+
+        // Set the draft HTML
+        navigate(
+            `#${composeRoute({
+                lens: "e",
+                lensParams: new URLSearchParams({ draft: newHtml }),
+                pageAddress: `${pageName.value}${pageHash.value}`,
+            })}`,
+        );
+
         debouncing.value = false;
         timeout = null;
     }, DEBOUNCE_DELAY);
 };
 watch(editorHtml, (newHtml) => {
     if (!livePreview.value) return;
+    if (newHtml === previewHtml.value) return;
     schedulePreviewUpdate(newHtml);
 });
 
@@ -526,64 +566,87 @@ watch(livePreview, (enabled, oldVal) => {
 });
 
 // --- Publishing ----------------------------------------------
+const bypassBeforeUnload = ref(false);
 const beforeUnload = (event: BeforeUnloadEvent) => {
-    if (editorHtml.value === draftHtml.value) return;
+    if (bypassBeforeUnload.value || !hasUnsavedChanges.value) return;
 
     event.preventDefault();
     event.returnValue = "";
 };
 onMounted(() => {
     window.addEventListener("beforeunload", beforeUnload);
+    document.addEventListener("pointerdown", onMenuPointerDown);
 });
 onBeforeUnmount(() => {
     window.removeEventListener("beforeunload", beforeUnload);
+    document.removeEventListener("pointerdown", onMenuPointerDown);
+    disposeVimMode();
+    clearLoginBypassListener();
 });
 
 const publishing = ref(false);
-async function publish(as?: boolean) {
-    if (!session.value) {
-        // Save the current draft in the URL
-        // along with "login"
-        navigate(
-            `#/e/${pageName.value}?draft=${encodeURIComponent(editorHtml.value)}&login=true`,
-        );
-        return;
-    }
-
-    publishing.value = true;
-    const publishName = as
-        ? prompt("What page name do you want to publish to?", pageName.value)
-        : pageName.value;
-    if (publishName === null) {
-        publishing.value = false;
-        return;
-    }
-    const summary = prompt("Edit summary (Briefly describe your changes)");
-    if (summary === null) {
-        publishing.value = false;
-        return;
-    }
-    const publishedHtml = editorHtml.value;
-    await createPageVersion(
-        graffiti,
-        publishName,
-        publishedHtml,
-        [],
-        summary,
-        session.value,
-    );
-
-    draftHtml.value = publishedHtml;
-    navigate(`#/v/${publishName}`);
+let loginBypassListener: ((event: Event) => void) | null = null;
+function clearLoginBypassListener() {
+    if (!loginBypassListener) return;
+    graffiti.sessionEvents.removeEventListener("login", loginBypassListener);
+    loginBypassListener = null;
 }
+function setupLoginBypassListener() {
+    clearLoginBypassListener();
+    loginBypassListener = () => {
+        bypassBeforeUnload.value = false;
+        clearLoginBypassListener();
+    };
+    graffiti.sessionEvents.addEventListener("login", loginBypassListener);
+}
+async function publish(as?: boolean) {
+    if (publishing.value) return;
+    publishing.value = true;
+    try {
+        if (!session.value) {
+            bypassBeforeUnload.value = true;
+            setupLoginBypassListener();
+            try {
+                await graffiti.login();
+            } catch (error) {
+                clearLoginBypassListener();
+                bypassBeforeUnload.value = false;
+                throw error;
+            }
+            return;
+        }
 
-const loggingIn = ref(false);
-const graffiti = useGraffiti();
-function login() {
-    loggingIn.value = true;
-    graffiti.login().finally(() => {
-        loggingIn.value = false;
-    });
+        const publishName = as
+            ? prompt(
+                  "What page name do you want to publish to?",
+                  pageName.value,
+              )
+            : pageName.value;
+        if (publishName === null) return;
+        const summary = prompt("Edit summary (Briefly describe your changes)");
+        if (summary === null) return;
+        const nextPublishedHtml = editorHtml.value;
+        await createPageVersion(
+            graffiti,
+            publishName,
+            nextPublishedHtml,
+            [],
+            summary,
+            session.value,
+        );
+
+        draftHtml.value = nextPublishedHtml;
+        publishedHtml.value = nextPublishedHtml;
+        hasShownPublishReminder.value = false;
+        shouldShakePublish.value = false;
+        if (publishShakeTimeout !== null) {
+            clearTimeout(publishShakeTimeout);
+            publishShakeTimeout = null;
+        }
+        navigate(`#/v/${publishName}${pageHash.value}`);
+    } finally {
+        publishing.value = false;
+    }
 }
 </script>
 
@@ -597,53 +660,6 @@ function login() {
 .code-editor {
     flex: 1;
     min-height: 0;
-}
-
-/* Settings panel (in editor pane) */
-.settings-panel {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 0.75rem 1.25rem;
-    padding: 0.6rem 0.9rem 0.8rem;
-    border-top: 1px solid var(--border-color);
-    font-size: 0.83rem;
-    border-bottom: 1px solid var(--border-color);
-
-    h3 {
-        font-size: 0.8rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        opacity: 0.8;
-    }
-
-    label {
-        display: inline-flex;
-        flex-direction: column;
-        gap: 0.2rem;
-    }
-
-    label.checkbox-inline {
-        flex-direction: row;
-        align-items: center;
-        gap: 0.35rem;
-        cursor: pointer;
-    }
-
-    input[type="number"],
-    select {
-        border-radius: 6px;
-        border: 1px solid var(--border-color);
-        padding: 0.2rem 0.4rem;
-        color: inherit;
-        font-size: inherit;
-    }
-
-    .settings-group {
-        display: flex;
-        flex-direction: column;
-        gap: 0.35rem;
-    }
 }
 
 .backdrop {
@@ -664,7 +680,11 @@ nav > ul[role="menubar"] > li {
     position: relative;
 }
 
-:is(nav summary[role="menuitem"], nav > ul > li > button) {
+:is(
+    nav summary[role="menuitem"],
+    nav > ul > li:not(.split-button-menu) > button,
+    nav > ul > li > :where(label.top-level-checkbox)
+) {
     list-style: none; /* remove default marker in some browsers */
     cursor: pointer;
     color: var(--link-color);
@@ -709,10 +729,48 @@ nav ul[role="menu"] > li > button[role="menuitem"] {
 
 nav ul[role="menu"] > li > button[role="menuitem"]:hover {
     background: var(--background-color-interactive);
+    text-decoration: none;
 }
 
 nav ul[role="menu"] > li > button[role="menuitem"]:focus-visible {
     outline: 2px solid var(--border-color-hover);
+}
+
+nav ul[role="menu"] > li > label.menu-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.25rem 0.4rem;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+nav ul[role="menu"] > li > label.menu-checkbox:hover {
+    background: var(--background-color-interactive);
+}
+
+nav .top-level-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+nav .refresh-button {
+    position: relative;
+}
+
+nav .refresh-spinner {
+    position: absolute;
+    top: -0.1rem;
+    right: -0.1rem;
+    width: 0.7rem;
+    height: 0.7rem;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: refresh-spin 1s linear infinite;
+    pointer-events: none;
 }
 
 /* separators */
@@ -720,5 +778,33 @@ nav ul[role="menu"] > li[role="separator"] {
     height: 1px;
     background: var(--border-color);
     margin: 0.25rem 0.25rem;
+}
+
+.split-button-menu.publish-shake {
+    animation: publish-shake 0.3s ease-in-out;
+}
+
+@keyframes publish-shake {
+    0% {
+        transform: translateX(0);
+    }
+    25% {
+        transform: translateX(-4px);
+    }
+    50% {
+        transform: translateX(4px);
+    }
+    75% {
+        transform: translateX(-2px);
+    }
+    100% {
+        transform: translateX(0);
+    }
+}
+
+@keyframes refresh-spin {
+    to {
+        transform: rotate(360deg);
+    }
 }
 </style>

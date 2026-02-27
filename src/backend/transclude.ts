@@ -2,12 +2,14 @@ import type { Graffiti } from "@graffiti-garden/api";
 import { inputLensAddress, serveLens } from "./lens-server";
 import { ErrorPage, LoadingPage } from "./status-pages";
 import { serveNavigation } from "./navigation-server";
+import { parseRoute } from "./route";
+import { createTranscludeIdTracker } from "./transclude-ids";
+export { getTranscludeId } from "./transclude-ids";
 
 const lenses = {
   v: "src/lenses/view/index.html",
   e: "src/lenses/edit/index.html",
   h: "src/lenses/history/index.html",
-  version: "src/lenses/version/index.html",
 };
 type Lens = keyof typeof lenses;
 function assertLens(x: string): asserts x is Lens {
@@ -17,6 +19,8 @@ function assertLens(x: string): asserts x is Lens {
 }
 
 export function installTransclude(graffiti: Graffiti, origin: string) {
+  const transcludeIdTracker = createTranscludeIdTracker();
+
   class SocialWikiTransclude extends HTMLElement {
     protected iframe: HTMLIFrameElement;
     protected renderVersion = 0;
@@ -24,6 +28,13 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
     protected destroyNavigation = () => {};
     protected setHash = (hash: string) => {};
     protected currentBlobUrl: string | null = null;
+    // We intentionally use both srcdoc and blob URLs:
+    // - Top-level, non-opaque contexts use blob URLs because Chrome can behave
+    //   incorrectly with sandboxed srcdoc updates.
+    // - Nested sandboxed contexts use srcdoc because Firefox blocks loading
+    //   parent-created blob:null URLs across partition keys.
+    protected readonly useBlobForSrcDoc =
+      window.top === window && window.origin !== "null";
 
     constructor() {
       super();
@@ -46,13 +57,13 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         "camera *",
         "microphone *",
         "geolocation *",
+        "fullscreen *",
         "clipboard-read *",
         "clipboard-write *",
-        "fullscreen *",
-        "picture-in-picture *",
-        "autoplay *",
-        "screen-wake-lock *",
       ].join("; ");
+      this.iframe.addEventListener("load", () =>
+        transcludeIdTracker.syncIframeWindow(this),
+      );
 
       this.destroyLens = serveLens(this.iframe, (status, srcdoc) => {
         this.setAttribute("status", status);
@@ -150,6 +161,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
     protected alive = true;
     disconnectedCallback() {
       this.alive = false;
+      transcludeIdTracker.untrack(this);
       this.destroyLens();
       this.destroyNavigation();
       if (this.currentBlobUrl) {
@@ -167,6 +179,12 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
 
       const src = this.getAttribute("src");
       if (src === null) {
+        // srcdoc mode renders raw HTML directly in the iframe.
+        // Reset lens/route state so returning to src mode reloads the lens page.
+        this.currentRoute = "";
+        this.currentLens = "";
+        this.lensReadyPromise = null;
+
         // If no source, then a lens is using transclude
         // to manually set page contents. Just pay attention
         // to the srcdoc and the hash in this case.
@@ -209,16 +227,14 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
       if (this.currentRoute === route) return;
       this.currentRoute = route;
 
-      // The "lens" is everything before the first "/"
-      // The "address" is everything after the first "/"
-      const [lens, address] = route.split(/\/(.+)/).filter(Boolean);
+      const { lens, lensParams, pageAddress } = parseRoute(route);
 
       const token = ++this.renderVersion;
 
       if (this.currentLens === lens) {
         await this.lensReadyPromise;
         if (!this.alive || token !== this.renderVersion) return;
-        inputLensAddress(this.iframe, address);
+        inputLensAddress(this.iframe, pageAddress, lensParams);
         return;
       }
       this.currentLens = lens;
@@ -239,7 +255,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         await this.lensReadyPromise;
         if (!this.alive || token !== this.renderVersion) return;
 
-        inputLensAddress(this.iframe, address);
+        inputLensAddress(this.iframe, pageAddress, lensParams);
       } catch (e) {
         if (!this.alive || token !== this.renderVersion) return;
         return this.setSrcDoc(
@@ -252,29 +268,53 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
     setSrcDoc(srcdoc: string, status: string) {
       if (this.currentSrcDoc === srcdoc) return;
       this.currentSrcDoc = srcdoc;
+
+      if (!this.useBlobForSrcDoc) {
+        // In nested sandboxed frames (opaque/null origin), prefer srcdoc.
+        // Firefox enforces storage partition keys for blob:null URLs and can
+        // reject cross-partition blob access during nested transclusion.
+        if (this.currentBlobUrl) {
+          URL.revokeObjectURL(this.currentBlobUrl);
+          this.currentBlobUrl = null;
+        }
+        this.iframe.srcdoc = srcdoc;
+        this.setAttribute("status", status);
+        return;
+      }
+
       if (this.currentBlobUrl) {
         URL.revokeObjectURL(this.currentBlobUrl);
       }
+      // In top-level, non-opaque contexts, use blob URLs to avoid Chrome
+      // sandbox/srcdoc rendering issues.
       const blob = new Blob([srcdoc], { type: "text/html" });
       this.currentBlobUrl = URL.createObjectURL(blob);
       this.setUrl(this.currentBlobUrl, status);
     }
     setUrl(url: string, status: string) {
+      // If srcdoc is set, it wins over src; clear it before URL navigation.
+      this.iframe.removeAttribute("srcdoc");
       this.iframe.src = url;
       this.setAttribute("status", status);
     }
 
     // Rerender on initialization or src/srcdoc changes
     static get observedAttributes(): string[] {
-      return ["src", "srcdoc", "hash"];
+      return ["src", "srcdoc", "hash", "id"];
     }
     connectedCallback() {
+      transcludeIdTracker.track(this, this.iframe);
       this.renderPage();
     }
-    attributeChangedCallback() {
+    attributeChangedCallback(name: string) {
+      if (name === "id") {
+        transcludeIdTracker.notifyIdChanged(this);
+        return;
+      }
       this.renderPage();
     }
     adoptedCallback() {
+      transcludeIdTracker.syncIframeWindow(this);
       this.renderPage();
     }
   }

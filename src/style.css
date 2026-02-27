@@ -19,6 +19,9 @@
     --warning-hover-color: #9f3526;
     --background-color-interactive: #eaecf0;
     --background-color-interactive-hover: #dadde3;
+    --accent-button-background: #36c;
+    --accent-button-background-hover: #3056a9;
+    --accent-button-text: #fff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -110,6 +113,72 @@ button {
 
 :is(a, button).secondary:hover {
     color: var(--secondary-hover-color);
+}
+
+/* Reusable split button (primary action + dropdown trigger) */
+.split-button-menu {
+    display: inline-flex;
+    align-items: stretch;
+    gap: 0;
+}
+
+.split-button-menu > button,
+.split-button-menu > details > summary {
+    border: 1px solid var(--border-color);
+    background: var(--accent-button-background);
+    color: var(--accent-button-text);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.25rem 0.5rem;
+    cursor: pointer;
+    user-select: none;
+    text-decoration: none;
+}
+
+.split-button-menu > button {
+    border-radius: 0.5rem 0 0 0.5rem;
+}
+
+.split-button-menu > details > summary {
+    display: inline-flex; /* override global/other summary rules */
+    list-style: none;
+    border-left: none;
+    border-radius: 0 0.5rem 0.5rem 0;
+    width: 1.5rem;
+    padding-inline: 0;
+    height: 100%;
+}
+
+.split-button-menu > details > summary::marker {
+    content: "";
+}
+
+.split-button-menu > button:not(:disabled):hover,
+.split-button-menu > details > summary:not([aria-disabled="true"]):hover {
+    background: var(--accent-button-background-hover);
+    color: var(--accent-button-text);
+    border-color: var(--border-color-hover);
+    text-decoration: none;
+}
+
+.split-button-menu > button:disabled,
+.split-button-menu > details > summary[aria-disabled="true"] {
+    background: var(--background-color-interactive);
+    color: var(--text-color);
+    cursor: not-allowed;
+}
+
+.split-button-menu > details.disabled > summary {
+    pointer-events: none;
+}
+
+.split-button-menu > button:disabled:hover {
+    background: var(--background-color-interactive);
+    border-color: var(--border-color);
+    color: var(--text-color);
+    text-decoration: none;
+    cursor: not-allowed;
 }
 
 h1 {

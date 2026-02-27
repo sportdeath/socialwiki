@@ -1,0 +1,250 @@
+<template>
+    <aside v-if="activeGuardRequest" @click.self="rejectActive">
+        <dialog open>
+            <template v-if="activeGuardRequest.method === 'post'">
+                <h2>Allow this page to post data?</h2>
+
+                <ObjectDetails :object="activeGuardRequest.args[0] as any" />
+            </template>
+            <template v-else-if="activeGuardRequest.method === 'delete'">
+                <h2>Allow this page to delete data?</h2>
+                <GraffitiGet
+                    :url="activeGuardRequest.args[0] as any"
+                    :schema="{}"
+                    :session="activeGuardRequest.args[1] as any"
+                    v-slot="{ object }"
+                >
+                    <ObjectDetails :object="object" />
+                </GraffitiGet>
+            </template>
+            <template v-else-if="activeGuardRequest.method === 'get'">
+                <h2>Allow this page to get private data?</h2>
+
+                <GraffitiGet
+                    :url="activeGuardRequest.args[0] as any"
+                    :schema="activeGuardRequest.args[1] as any"
+                    :session="activeGuardRequest.args[2] as any"
+                    v-slot="{ object }"
+                >
+                    <ObjectDetails :object="object" />
+                </GraffitiGet>
+            </template>
+            <template v-else-if="activeGuardRequest.method === 'postMedia'">
+                <h2>Allow this page to post a file?</h2>
+
+                <MediaDetails :media="activeGuardRequest.args[0] as any" />
+            </template>
+            <template v-else-if="activeGuardRequest.method === 'deleteMedia'">
+                <h2>Allow this page to delete a file?</h2>
+
+                <GraffitiGetMedia
+                    :url="activeGuardRequest.args[0] as any"
+                    :accept="{}"
+                    :session="activeGuardRequest.args[1] as any"
+                    v-slot="{ media }"
+                >
+                    <MediaDetails :media="media" />
+                </GraffitiGetMedia>
+            </template>
+            <template v-else-if="activeGuardRequest.method === 'getMedia'">
+                <h2>Allow this page to access a private file?</h2>
+
+                <GraffitiGetMedia
+                    :url="activeGuardRequest.args[0] as any"
+                    :accept="activeGuardRequest.args[1] as any"
+                    :session="activeGuardRequest.args[2] as any"
+                    v-slot="{ media }"
+                >
+                    <MediaDetails :media="media" />
+                </GraffitiGetMedia>
+            </template>
+            <template v-else-if="activeGuardRequest.method === 'discover'">
+                <h2>Allow this page to discover private data?</h2>
+
+                <DiscoverDetails
+                    :channels="activeGuardRequest.args[0] as any"
+                    :schema="activeGuardRequest.args[1] as any"
+                />
+            </template>
+            <template v-else-if="activeGuardRequest.method === 'logout'">
+                <h2>Allow this page to log you out?</h2>
+            </template>
+            <footer>
+                <button @click="rejectActive" class="secondary">Cancel</button>
+                <div class="split-button-menu">
+                    <button @click="approveActive">Allow Once</button>
+                    <details>
+                        <summary>▾</summary>
+                        <ul role="menu">
+                            <!-- <li>
+                                <button
+                                    @click.prevent="approveActiveSimilar"
+                                    role="menuitem"
+                                    type="button"
+                                >
+                                    Allow All <em>Similar</em> Requests
+                                </button>
+                            </li> -->
+                            <li>
+                                <button
+                                    @click.prevent="approveActiveAlways"
+                                    role="menuitem"
+                                    type="button"
+                                >
+                                    Allow Forever (This Page Version Only)
+                                </button>
+                            </li>
+                        </ul>
+                    </details>
+                </div>
+            </footer>
+        </dialog>
+    </aside>
+</template>
+
+<script setup lang="ts">
+import { computed } from "vue";
+import {
+    allowAlwaysGraffitiGuardRequest,
+    allowGraffitiGuardRequest,
+    allowSimilarGraffitiGuardRequest,
+    denyGraffitiGuardRequest,
+    graffitiGuardState,
+} from "./graffiti-guard";
+import MediaDetails from "./MediaDetails.vue";
+import ObjectDetails from "./ObjectDetails.vue";
+import DiscoverDetails from "./DiscoverDetails.vue";
+
+const activeGuardRequest = computed(
+    () => graffitiGuardState.pending[0] ?? null,
+);
+
+function approveActive() {
+    const request = activeGuardRequest.value;
+    if (!request) return;
+    allowGraffitiGuardRequest(request.id);
+}
+
+function rejectActive() {
+    const request = activeGuardRequest.value;
+    if (!request) return;
+    denyGraffitiGuardRequest(request.id);
+}
+
+function approveActiveSimilar() {
+    const request = activeGuardRequest.value;
+    if (!request) return;
+    void allowSimilarGraffitiGuardRequest(request.id);
+}
+
+function approveActiveAlways() {
+    const request = activeGuardRequest.value;
+    if (!request) return;
+    void allowAlwaysGraffitiGuardRequest(request.id);
+}
+</script>
+
+<style scoped>
+dialog {
+    position: static;
+    inset: auto;
+    margin: 0;
+    width: min(42rem, calc(100vw - 2rem));
+    overflow: visible;
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    background: var(--background-color);
+    color: var(--text-color);
+    box-shadow: 0 0rem 2.5rem rgb(0 0 0 / 0.9);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    font-size: 1.5rem;
+
+    h2 {
+        font-size: 2rem;
+    }
+
+    & h2,
+    & p {
+        margin: 0;
+    }
+
+    & footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+
+        & .split-button-menu > details[open] > ul {
+            position: absolute;
+            right: 0;
+            top: calc(100% + 0.25rem);
+            z-index: 1;
+            margin: 0;
+            padding: 0.25rem;
+            width: max-content;
+            list-style: none;
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            background: var(--background-color);
+            box-shadow: 0 0.5rem 1.5rem rgb(0 0 0 / 0.2);
+            font-size: inherit;
+        }
+
+        & .split-button-menu > details {
+            position: relative;
+        }
+
+        & .split-button-menu details li {
+            margin: 0;
+        }
+
+        & .split-button-menu details li button {
+            width: 100%;
+            text-align: left;
+        }
+
+        & .split-button-menu ul[role="menu"] > li > button[role="menuitem"] {
+            color: inherit;
+            padding: 0.25rem 0.35rem;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            text-decoration: none;
+            white-space: nowrap;
+            max-width: 70dvw;
+            text-wrap: wrap;
+        }
+
+        &
+            .split-button-menu
+            ul[role="menu"]
+            > li
+            > button[role="menuitem"]:hover {
+            background: var(--background-color-interactive);
+            text-decoration: none;
+        }
+
+        &
+            .split-button-menu
+            ul[role="menu"]
+            > li
+            > button[role="menuitem"]:focus-visible {
+            outline: 2px solid var(--border-color-hover);
+            outline-offset: 0;
+        }
+    }
+}
+
+aside {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: grid;
+    justify-items: center;
+    align-items: start;
+    overflow: auto;
+    padding: 1rem;
+    background: rgb(0 0 0 / 0.2);
+}
+</style>

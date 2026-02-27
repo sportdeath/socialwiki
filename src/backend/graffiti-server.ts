@@ -8,8 +8,56 @@ import type {
   GraffitiSessionInitializedEvent,
 } from "@graffiti-garden/api";
 import { GraffitiDecentralized } from "@graffiti-garden/implementation-decentralized";
+import { getTranscludeId } from "./transclude-ids";
 
-export function serveGraffiti(): Graffiti {
+const simpleMethods = [
+  "post",
+  "get",
+  "delete",
+  "deleteMedia",
+  "login",
+  "logout",
+  "actorToHandle",
+  "handleToActor",
+] as const;
+
+type GuardedGraffitiMethod =
+  | (typeof simpleMethods)[number]
+  | "postMedia"
+  | "getMedia"
+  | "discover";
+
+export interface GraffitiGuardRequest {
+  method: GuardedGraffitiMethod;
+  args: unknown[];
+  transcludeId: string | null;
+  createdAtMs: number;
+}
+
+export type GraffitiGuardRequestHandler = (
+  request: GraffitiGuardRequest,
+) => void | Promise<void>;
+
+function hasSession(args: unknown[]): boolean {
+  const session = args[2];
+  return (
+    typeof session === "object" &&
+    session !== null &&
+    !Array.isArray(session) &&
+    typeof (session as { actor?: unknown }).actor === "string"
+  );
+}
+
+function shouldGuard(method: GuardedGraffitiMethod, args: unknown[]): Boolean {
+  return (
+    ["post", "postMedia", "delete", "deleteMedia", "logout"].includes(method) ||
+    (["get", "discover", "getMedia"].includes(method) && hasSession(args))
+  );
+}
+
+export function serveGraffiti(
+  onGuardRequest?: GraffitiGuardRequestHandler,
+): Graffiti {
   const graffiti = new GraffitiDecentralized();
   const loggedInActors = new Set<string>();
   graffiti.sessionEvents.addEventListener("login", (e) => {
@@ -25,33 +73,107 @@ export function serveGraffiti(): Graffiti {
     loggedInActors.delete(detail.actor);
   });
 
-  const served = new Map<Window, () => void>();
+  const served = new Map<Window, () => Promise<void>>();
+  const initEpochByWindow = new Map<Window, number>();
   const iteratorsByWindow = new Map<
     Window,
     Map<string, GraffitiObjectStream<{}>>
   >();
+
+  async function maybeEmitGuardRequest(
+    sourceWindow: Window,
+    method: GuardedGraffitiMethod,
+    args: unknown[],
+  ) {
+    if (!shouldGuard(method, args) || !onGuardRequest) return;
+    const transcludeId = getTranscludeId(sourceWindow) ?? null;
+    await onGuardRequest({
+      method,
+      args,
+      transcludeId,
+      createdAtMs: Date.now(),
+    });
+  }
+
   async function serveGraffitiToWindow(window: Window) {
+    const epoch = (initEpochByWindow.get(window) ?? 0) + 1;
+    initEpochByWindow.set(window, epoch);
+
+    // Destroy an existing connection if it exists
+    const existing = served.get(window);
+    if (existing) await existing();
+    if (initEpochByWindow.get(window) !== epoch) return;
+
     const messenger = new WindowMessenger({
       remoteWindow: window,
       allowedOrigins: ["*"],
     });
 
-    const simpleMethods = [
-      "post",
-      "get",
-      "delete",
-      "deleteMedia",
-      "login",
-      "logout",
-      "actorToHandle",
-      "handleToActor",
-    ] as const;
-
     const iterators = new Map<string, GraffitiObjectStream<{}>>();
     iteratorsByWindow.set(window, iterators);
 
-    const heartbeatIntervalMs = 500;
-    const heartbeatTimeoutMs = 500;
+    const sessionEventTypes = ["login", "logout", "initialized"];
+    let remote:
+      | {
+          sessionEvent: (type: string, detail: any) => Promise<void>;
+          ping: () => Promise<void>;
+        }
+      | undefined;
+    const forward = (e: Event) => {
+      if (!(e instanceof CustomEvent)) return;
+      if (!remote) return;
+      remote.sessionEvent(e.type, e.detail);
+    };
+
+    let destroyPromise: Promise<void> | null = null;
+    let heartbeatTimer: number | undefined;
+    const destroy = async () => {
+      if (destroyPromise) return destroyPromise;
+      destroyPromise = (async () => {
+        // Destroy the connection to stop any requests
+        connection.destroy();
+
+        // Stop the heartbeat
+        if (heartbeatTimer !== undefined) {
+          clearInterval(heartbeatTimer);
+          heartbeatTimer = undefined;
+        }
+
+        // Remove all listeners
+        for (const type of sessionEventTypes) {
+          graffiti.sessionEvents.removeEventListener(type, forward);
+        }
+
+        // Return all iterators to prevent locked queries
+        const windowIterators = iteratorsByWindow.get(window);
+        if (windowIterators) {
+          const returns = [...windowIterators.values()].map((iterator) =>
+            iterator.return({ cursor: "" }),
+          );
+          await Promise.allSettled(returns);
+          windowIterators.clear();
+          iteratorsByWindow.delete(window);
+        }
+
+        // Remove the destroy function to allow for new connections
+        served.delete(window);
+      })();
+      return destroyPromise;
+    };
+    served.set(window, destroy);
+
+    const rpcSimpleMethods = Object.fromEntries(
+      simpleMethods.map((method) => [
+        method,
+        async (...args: unknown[]) => {
+          await maybeEmitGuardRequest(window, method, args);
+          const fn = graffiti[method] as (
+            ...methodArgs: unknown[]
+          ) => Promise<unknown>;
+          return fn.apply(graffiti, args);
+        },
+      ]),
+    );
 
     const connection = connect<{
       sessionEvent: (type: string, detail: any) => Promise<void>;
@@ -59,12 +181,7 @@ export function serveGraffiti(): Graffiti {
     }>({
       messenger,
       methods: {
-        ...Object.fromEntries(
-          simpleMethods.map((method) => [
-            method,
-            graffiti[method].bind(graffiti),
-          ]),
-        ),
+        ...rpcSimpleMethods,
         async postMedia(
           media: {
             data: { buffer: ArrayBuffer; type: string };
@@ -73,9 +190,13 @@ export function serveGraffiti(): Graffiti {
           session: GraffitiSession,
         ) {
           const data = new Blob([media.data.buffer], { type: media.data.type });
-          return await graffiti.postMedia({ ...media, data }, session);
+          const args = [{ ...media, data }, session] as const;
+          await maybeEmitGuardRequest(window, "postMedia", [...args]);
+          const mediaUrl = await graffiti.postMedia(...args);
+          return mediaUrl;
         },
         async getMedia(...args: Parameters<Graffiti["getMedia"]>) {
+          await maybeEmitGuardRequest(window, "getMedia", args);
           const result = await graffiti.getMedia(...args);
           const buffer = await result.data.arrayBuffer();
           const type = result.data.type;
@@ -89,6 +210,7 @@ export function serveGraffiti(): Graffiti {
           );
         },
         async discover(id: string, ...args: Parameters<Graffiti["discover"]>) {
+          await maybeEmitGuardRequest(window, "discover", args);
           const iterator = graffiti.discover<{}>(...args);
           iterators.set(id, iterator);
         },
@@ -102,7 +224,7 @@ export function serveGraffiti(): Graffiti {
         async streamNext(id: string) {
           const iterator = iterators.get(id);
           if (!iterator) return;
-          return await iterator.next();
+          return iterator.next();
         },
         async streamReturn(id: string) {
           const iterator = iterators.get(id);
@@ -124,78 +246,38 @@ export function serveGraffiti(): Graffiti {
       },
     });
 
+    try {
+      remote = await connection.promise;
+    } catch {
+      await destroy();
+      return;
+    }
+    if (destroyPromise || !remote || initEpochByWindow.get(window) !== epoch) {
+      await destroy();
+      return;
+    }
+
     // once connected, forward sessionEvents -> iframe sink
-    const sessionEventTypes = ["login", "logout", "initialized"];
-    const remote = await connection.promise;
-    const forward = (e: Event) => {
-      if (!(e instanceof CustomEvent)) return;
-      remote.sessionEvent(e.type, e.detail);
-    };
     for (const type of sessionEventTypes) {
       graffiti.sessionEvents.addEventListener(type, forward);
     }
 
-    let destroyed = false;
-    let heartbeatTimer: number | undefined;
-    const destroy = async () => {
-      if (destroyed) return;
-      destroyed = true;
-      if (heartbeatTimer !== undefined) {
-        clearInterval(heartbeatTimer);
-        heartbeatTimer = undefined;
-      }
-      // Remove all listeners
-      for (const type of sessionEventTypes) {
-        graffiti.sessionEvents.removeEventListener(type, forward);
-      }
-
-      // Return all iterators to prevent locked queries
-      const windowIterators = iteratorsByWindow.get(window);
-      if (windowIterators) {
-        const returns = [...windowIterators.values()].map((iterator) =>
-          iterator.return({ cursor: "" }),
-        );
-        await Promise.allSettled(returns);
-        windowIterators.clear();
-        iteratorsByWindow.delete(window);
-      }
-
-      // Destroy the connection
-      connection.destroy();
-      served.delete(window);
-    };
-
-    const pingOrDestroy = async () => {
-      try {
-        await Promise.race([
-          remote.ping(),
-          new Promise((_, reject) => {
-            setTimeout(
-              () => reject(new Error("heartbeat timeout")),
-              heartbeatTimeoutMs,
-            );
-          }),
-        ]);
-      } catch {
-        await destroy();
-      }
-    };
-
-    heartbeatTimer = setInterval(() => {
-      void pingOrDestroy();
+    // Set a heartbeat to destroy the connection,
+    // in case it can't be set up properly
+    const heartbeatIntervalMs = 100;
+    heartbeatTimer = setInterval(async () => {
+      if (window.closed) return destroy();
     }, heartbeatIntervalMs);
-    served.set(window, destroy);
   }
 
-  window.addEventListener("message", (event) => {
+  window.addEventListener("message", async (event) => {
     if (!event.source) return;
     const window = event.source as Window;
     const message = event.data;
     if (message === "sw-graffiti-init") {
-      serveGraffitiToWindow(window);
+      void serveGraffitiToWindow(window);
     } else if (message === "sw-graffiti-destroy") {
-      const existing = served.get(window);
-      void existing?.();
+      await served.get(window)?.();
     }
   });
 
