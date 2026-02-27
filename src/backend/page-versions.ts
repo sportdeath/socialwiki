@@ -88,7 +88,10 @@ export async function deletePageVersion(
   await graffiti.delete(object, session);
 }
 
-export async function getPageVersions(graffiti: Graffiti, pageName: string): Promise<PageVersionObject[]> {
+export async function getPageVersions(
+  graffiti: Graffiti,
+  pageName: string,
+): Promise<PageVersionObject[]> {
   const versions = new Map<string, PageVersionObject>();
   for await (const result of graffiti.discover(
     [pageName],
@@ -105,67 +108,81 @@ export async function getPageVersions(graffiti: Graffiti, pageName: string): Pro
     }
   }
 
-  return topoSortPageVersions([...versions.values()]);
+  return sortPageVersions([...versions.values()]);
 }
 
-export function topoSortPageVersions(versionsRaw: PageVersionObject[]): PageVersionObject[] {
-  // Topological sort via Kahn's algorithm: edge A->B when A's URL is in B's precededBy.
-  // Guaranteed acyclic.
-  // Ties broken by published (newest first).
+export function sortPageVersions(
+  versions: PageVersionObject[],
+): PageVersionObject[] {
+  // Topological sort via Kahn's algorithm:
+  // - versions URLs are content addressed so versions are guaranteed to be acyclic
+  // - edge A->B when A's URL is in B's precededBy.
+  // - ties broken by self-reported published
 
-  const versions = new Map<string, PageVersionObject>();
-  for (const version of versionsRaw) {
-    versions.set(version.url, version);
+  const nodes = new Map<
+    string,
+    {
+      version: PageVersionObject;
+      precededBy: string[];
+      followedBy: string[];
+    }
+  >();
+  for (const version of versions) {
+    nodes.set(version.url, {
+      version,
+      precededBy: version.value.precededBy,
+      followedBy: [],
+    });
   }
 
-  // Compute indegrees and adjacency list of outgoing edges.
-  const indegree = new Map<string, number>();
-  const adj = new Map<string, string[]>();
+  for (const [nodeUrl, node] of nodes) {
+    // Dedupe predecessors and make sure they all exist
+    node.precededBy = [...new Set(node.precededBy)].filter((p) => nodes.has(p));
 
-  for (const node of versions.values()) {
-    indegree.set(node.url, node.value.precededBy.length);
-    adj.set(node.url, []);
-  }
-
-  for (const target of versions.values()) {
-    for (const source of target.value.precededBy) {
-      // The source may have been deleted. In that case we ignore it.
-      adj.get(source)?.push(target.url);
+    for (const predecessorUrl of node.precededBy) {
+      const predecessor = nodes.get(predecessorUrl)!; // guaranteed to exist by above filter
+      predecessor.followedBy.push(nodeUrl);
     }
   }
+
+  // startNodes ← Set of all nodes with no incoming edge
+  const queue = [...nodes.values()].filter(
+    (node) => node.precededBy.length === 0,
+  );
 
   // sortedList ← Empty list that will contain the sorted elements. This is what we will return.
   const sortedList: PageVersionObject[] = [];
 
-  // startNodes ← Set of all nodes with no incoming edge
-  const urls = [...versions.keys()];
-  let startNodes = urls.filter((u) => indegree.get(u) === 0);
+  while (true) {
+    // Sort the queue to resolve ambiguity between parallel branches
+    queue.sort((a, b) => {
+      const timeDifference =
+        a.version.value.published - b.version.value.published;
+      if (timeDifference !== 0) return timeDifference;
 
-  // Tie-breaker: newest first.
-  startNodes.sort(
-    (a, b) =>
-      (versions.get(b)?.value.published ?? 0) -
-      (versions.get(a)?.value.published ?? 0),
-  );
+      // If the nodes have the timestamp, fallback to comparing
+      // URLs to have a deterministic tie breaker
+      return a.version.url < b.version.url ? -1 : 1;
+    });
 
-  while (startNodes.length > 0) {
-    const n = startNodes.shift();
-    const obj = versions.get(n); // We want the full PageVersionObject, not just the url.
-    sortedList.push(obj);
+    // Start with the oldest item
+    const current = queue.shift();
+    if (!current) break; // queue empty! all done
 
-    for (const m of adj.get(n)) {
-      const d = indegree.get(m) - 1;
-      indegree.set(m, d);
-      if (d === 0) startNodes.push(m);
+    sortedList.push(current.version);
+
+    for (const followerUrl of current.followedBy) {
+      const follower = nodes.get(followerUrl);
+      if (!follower) continue;
+      follower.precededBy = follower.precededBy.filter(
+        (url) => url !== current?.version.url,
+      );
+      if (follower.precededBy.length === 0) {
+        queue.push(follower);
+      }
     }
   }
 
-  const hasCycle = urls.some((u) => (indegree.get(u)! > 0));
-  if (hasCycle) {
-    // Should never happen.
-    console.error("Page version graph has a cycle; topological sort impossible");
-    return [];
-  }
-
-  return sortedList;
+  // Return in reverse chronological order
+  return sortedList.toReversed();
 }
