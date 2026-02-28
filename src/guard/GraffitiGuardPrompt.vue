@@ -1,13 +1,55 @@
 <template>
     <aside v-if="activeGuardRequest" @click.self="rejectActive">
         <dialog open>
+            <h2>{{ activeRequestTitle }}</h2>
+            <section class="request-origin">
+                <p class="request-page-name">
+                    <span class="request-page-label muted">Page:</span>
+                    <template v-if="activeRequestPageParts.length > 0">
+                        <span class="transclude-name-path">
+                            <template
+                                v-for="(
+                                    part, partIndex
+                                ) in activeRequestPageParts"
+                                :key="`${partIndex}:${part}`"
+                            >
+                                <span v-if="partIndex > 0" class="muted"
+                                    >/</span
+                                >
+                                <span>{{ part }}</span>
+                            </template>
+                        </span>
+                    </template>
+                    <template v-else>
+                        <span class="muted">(resolving transclude name)</span>
+                    </template>
+                </p>
+                <button
+                    v-if="
+                        activeGuardRequest.transcludeId && !isPageVersionVisible
+                    "
+                    type="button"
+                    class="secondary version-toggle"
+                    :aria-expanded="isPageVersionVisible"
+                    @click="togglePageVersion"
+                >
+                    Show page version
+                </button>
+                <p
+                    v-if="
+                        activeGuardRequest.transcludeId && isPageVersionVisible
+                    "
+                    class="transclude-version muted"
+                    :title="activeGuardRequest.transcludeId"
+                >
+                    Page version:
+                    {{ activeGuardRequest.transcludeId }}
+                </p>
+            </section>
             <template v-if="activeGuardRequest.method === 'post'">
-                <h2>Allow this page to post data?</h2>
-
                 <ObjectDetails :object="activeGuardRequest.args[0] as any" />
             </template>
             <template v-else-if="activeGuardRequest.method === 'delete'">
-                <h2>Allow this page to delete data?</h2>
                 <GraffitiGet
                     :url="activeGuardRequest.args[0] as any"
                     :schema="{}"
@@ -18,8 +60,6 @@
                 </GraffitiGet>
             </template>
             <template v-else-if="activeGuardRequest.method === 'get'">
-                <h2>Allow this page to get private data?</h2>
-
                 <GraffitiGet
                     :url="activeGuardRequest.args[0] as any"
                     :schema="activeGuardRequest.args[1] as any"
@@ -30,13 +70,9 @@
                 </GraffitiGet>
             </template>
             <template v-else-if="activeGuardRequest.method === 'postMedia'">
-                <h2>Allow this page to post a file?</h2>
-
                 <MediaDetails :media="activeGuardRequest.args[0] as any" />
             </template>
             <template v-else-if="activeGuardRequest.method === 'deleteMedia'">
-                <h2>Allow this page to delete a file?</h2>
-
                 <GraffitiGetMedia
                     :url="activeGuardRequest.args[0] as any"
                     :accept="{}"
@@ -47,8 +83,6 @@
                 </GraffitiGetMedia>
             </template>
             <template v-else-if="activeGuardRequest.method === 'getMedia'">
-                <h2>Allow this page to access a private file?</h2>
-
                 <GraffitiGetMedia
                     :url="activeGuardRequest.args[0] as any"
                     :accept="activeGuardRequest.args[1] as any"
@@ -59,15 +93,10 @@
                 </GraffitiGetMedia>
             </template>
             <template v-else-if="activeGuardRequest.method === 'discover'">
-                <h2>Allow this page to discover private data?</h2>
-
                 <DiscoverDetails
                     :channels="activeGuardRequest.args[0] as any"
                     :schema="activeGuardRequest.args[1] as any"
                 />
-            </template>
-            <template v-else-if="activeGuardRequest.method === 'logout'">
-                <h2>Allow this page to log you out?</h2>
             </template>
             <footer>
                 <button @click="rejectActive" class="secondary">Cancel</button>
@@ -103,7 +132,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref, watch } from "vue";
 import {
     allowAlwaysGraffitiGuardRequest,
     allowGraffitiGuardRequest,
@@ -118,6 +147,65 @@ import DiscoverDetails from "./DiscoverDetails.vue";
 const activeGuardRequest = computed(
     () => graffitiGuardState.pending[0] ?? null,
 );
+const isPageVersionVisible = ref(false);
+
+const activeRequestTitle = computed(() => {
+    const request = activeGuardRequest.value;
+    if (!request) return "";
+    switch (request.method) {
+        case "post":
+            return "Allow this page to post data?";
+        case "delete":
+            return "Allow this page to delete data?";
+        case "get":
+            return "Allow this page to get private data?";
+        case "postMedia":
+            return "Allow this page to post a file?";
+        case "deleteMedia":
+            return "Allow this page to delete a file?";
+        case "getMedia":
+            return "Allow this page to access a private file?";
+        case "discover":
+            return "Allow this page to discover private data?";
+        case "logout":
+            return "Allow this page to log you out?";
+        default:
+            return "Allow this page?";
+    }
+});
+
+function decodeTranscludeIdPath(path: string) {
+    return path.split("/").map((part) => {
+        try {
+            return decodeURIComponent(part);
+        } catch {
+            return part;
+        }
+    });
+}
+
+const activeRequestPageParts = computed(() => {
+    const request = activeGuardRequest.value;
+    if (!request) return [];
+    if (request.transcludeName && request.transcludeName.length > 0) {
+        return request.transcludeName;
+    }
+    if (request.transcludeId) {
+        return decodeTranscludeIdPath(request.transcludeId);
+    }
+    return [];
+});
+
+watch(
+    () => activeGuardRequest.value?.id,
+    () => {
+        isPageVersionVisible.value = false;
+    },
+);
+
+function togglePageVersion() {
+    isPageVersionVisible.value = !isPageVersionVisible.value;
+}
 
 function approveActive() {
     const request = activeGuardRequest.value;
@@ -169,6 +257,60 @@ dialog {
     & h2,
     & p {
         margin: 0;
+    }
+
+    .request-origin {
+        display: grid;
+        gap: 0.35rem;
+    }
+
+    .request-page-name {
+        display: flex;
+        align-items: baseline;
+        gap: 0.3rem;
+        flex-wrap: wrap;
+        font-size: 1rem;
+        line-height: 1.25;
+    }
+
+    .request-page-label {
+        font-weight: 400;
+    }
+
+    .transclude-name-path {
+        display: inline-flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 0.3rem;
+        min-width: 0;
+        font-weight: 700;
+    }
+
+    .transclude-name-path > span {
+        word-break: break-word;
+    }
+
+    .transclude-version {
+        margin: 0;
+        min-width: 0;
+        font-size: 0.85rem;
+        line-height: 1.2;
+        font-family:
+            ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+            "Liberation Mono", "Courier New", monospace;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .version-toggle {
+        justify-self: start;
+        font-size: 0.85rem;
+        line-height: 1.1;
+    }
+
+    .muted {
+        color: var(--secondary-color);
     }
 
     & footer {

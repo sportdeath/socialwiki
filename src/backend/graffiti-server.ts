@@ -8,7 +8,7 @@ import type {
   GraffitiSessionInitializedEvent,
 } from "@graffiti-garden/api";
 import { GraffitiDecentralized } from "@graffiti-garden/implementation-decentralized";
-import { getTranscludeId } from "./transclude-ids";
+import { getTranscludeId, getTranscludeName } from "./transclude-ids";
 
 const simpleMethods = [
   "post",
@@ -30,8 +30,9 @@ type GuardedGraffitiMethod =
 export interface GraffitiGuardRequest {
   method: GuardedGraffitiMethod;
   args: unknown[];
-  transcludeId: string | null;
   createdAtMs: number;
+  transcludeId: string;
+  transcludeName: string[];
 }
 
 export type GraffitiGuardRequestHandler = (
@@ -84,11 +85,16 @@ export function serveGraffiti(onGuardRequest?: GraffitiGuardRequestHandler) {
     args: unknown[],
   ) {
     if (!shouldGuard(method, args) || !onGuardRequest) return;
-    const transcludeId = getTranscludeId(sourceWindow) ?? null;
+    const transcludeId = getTranscludeId(sourceWindow);
+    const transcludeName = getTranscludeName(sourceWindow);
+    if (!transcludeId || !transcludeName) {
+      throw new Error("Request from a unknown window");
+    }
     await onGuardRequest({
       method,
       args,
       transcludeId,
+      transcludeName,
       createdAtMs: Date.now(),
     });
   }
