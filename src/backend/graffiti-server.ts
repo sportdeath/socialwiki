@@ -55,9 +55,7 @@ function shouldGuard(method: GuardedGraffitiMethod, args: unknown[]): Boolean {
   );
 }
 
-export function serveGraffiti(
-  onGuardRequest?: GraffitiGuardRequestHandler,
-): Graffiti {
+export function serveGraffiti(onGuardRequest?: GraffitiGuardRequestHandler) {
   const graffiti = new GraffitiDecentralized();
   const loggedInActors = new Set<string>();
   graffiti.sessionEvents.addEventListener("login", (e) => {
@@ -281,5 +279,8 @@ export function serveGraffiti(
     }
   });
 
-  return graffiti;
+  return {
+    graffiti,
+    listConnectedWindows: () => served.keys(),
+  };
 }

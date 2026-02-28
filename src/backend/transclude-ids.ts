@@ -1,6 +1,6 @@
-// Internal messages used only for propagating transclude ID metadata upward.
-// `token` identifies a window instance; actual path segments always come from
-// parent-assigned `<sw-transclude id="...">` values.
+// Internal messages used only for propagating transclude metadata upward.
+// `token` identifies a window instance; path segments come from parent-assigned
+// `<sw-transclude id="...">` / `<sw-transclude name="...">` values.
 type TranscludeTrackerMessage =
   | {
       type: "sw-transclude-self";
@@ -9,12 +9,25 @@ type TranscludeTrackerMessage =
   | {
       type: "sw-transclude-descendants";
       token: string;
-      descendants: [string, string[]][];
+      descendants: {
+        token: string;
+        id: string[];
+        name: string[];
+      }[];
     };
+
+type TranscludePaths = {
+  id: string[];
+  name: string[];
+};
 
 const transcludeIdLookups = new WeakMap<
   Window,
   (target: Window) => string | undefined
+>();
+const transcludeNameLookups = new WeakMap<
+  Window,
+  (target: Window) => string[] | undefined
 >();
 
 function encodeTranscludeIdPath(path: readonly string[]): string {
@@ -31,6 +44,13 @@ export function getTranscludeId(
   return transcludeIdLookups.get(root)?.(target);
 }
 
+export function getTranscludeName(
+  target: Window,
+  root: Window = window,
+): string[] | undefined {
+  return transcludeNameLookups.get(root)?.(target);
+}
+
 type TrackedTranscludeHost = HTMLElement;
 type TrackedTranscludeState = {
   // The iframe owned by a specific <sw-transclude> host.
@@ -40,7 +60,7 @@ type TrackedTranscludeState = {
   // Opaque token announced by the child window itself.
   childToken: string | null;
   // Descendant paths reported by the child, keyed by descendant window token.
-  childDescendants: Map<string, string[]>;
+  childDescendants: Map<string, TranscludePaths>;
 };
 
 export function createTranscludeIdTracker() {
@@ -63,7 +83,7 @@ export function createTranscludeIdTracker() {
   // Window token announcements learned from postMessage senders.
   const tokenByWindow = new WeakMap<Window, string>();
   // The current aggregate path table for this window, keyed by token.
-  const pathByToken = new Map<string, string[]>();
+  const pathsByToken = new Map<string, TranscludePaths>();
 
   const postTrackerMessage = (
     target: Window | null | undefined,
@@ -87,27 +107,30 @@ export function createTranscludeIdTracker() {
 
   const publishDescendants = () => {
     // Recompute from local transcludes + child-reported descendant paths.
-    const descendants = new Map<string, string[]>();
+    const descendants = new Map<string, TranscludePaths>();
 
     for (const host of trackedHosts) {
       const state = stateByHost.get(host);
       if (!state) continue;
 
-      const id = host.id;
-      if (!id) continue;
+      const id = host.id || `${Math.random().toString(36).slice(2, 10)}`;
+      const name = host.getAttribute("name") || "Unnamed";
 
       // Only the immediate parent contributes this ID segment.
       if (state.childToken) {
-        descendants.set(state.childToken, [id]);
+        descendants.set(state.childToken, { id: [id], name: [name] });
       }
-      for (const [token, childPath] of state.childDescendants) {
-        descendants.set(token, [id, ...childPath]);
+      for (const [token, childPaths] of state.childDescendants) {
+        descendants.set(token, {
+          id: [id, ...childPaths.id],
+          name: [name, ...childPaths.name],
+        });
       }
     }
 
-    pathByToken.clear();
-    for (const [token, path] of descendants) {
-      pathByToken.set(token, path);
+    pathsByToken.clear();
+    for (const [token, paths] of descendants) {
+      pathsByToken.set(token, paths);
     }
 
     if (window.top === window) return;
@@ -116,7 +139,11 @@ export function createTranscludeIdTracker() {
     postTrackerMessage(window.parent, {
       type: "sw-transclude-descendants",
       token: selfToken,
-      descendants: [...descendants],
+      descendants: [...descendants].map(([token, paths]) => ({
+        token,
+        id: paths.id,
+        name: paths.name,
+      })),
     });
   };
 
@@ -153,7 +180,7 @@ export function createTranscludeIdTracker() {
       iframe,
       childWindow: null,
       childToken: null,
-      childDescendants: new Map<string, string[]>(),
+      childDescendants: new Map<string, TranscludePaths>(),
     };
     state.iframe = iframe;
     stateByHost.set(host, state);
@@ -192,9 +219,17 @@ export function createTranscludeIdTracker() {
     if (target === window) return "";
     const token = tokenByWindow.get(target);
     if (!token) return;
-    const path = pathByToken.get(token);
-    if (!path) return;
-    return encodeTranscludeIdPath(path);
+    const paths = pathsByToken.get(token);
+    if (!paths) return;
+    return encodeTranscludeIdPath(paths.id);
+  });
+  transcludeNameLookups.set(window, (target) => {
+    if (target === window) return [];
+    const token = tokenByWindow.get(target);
+    if (!token) return;
+    const paths = pathsByToken.get(token);
+    if (!paths) return;
+    return [...paths.name];
   });
 
   window.addEventListener("message", (event: MessageEvent<unknown>) => {
@@ -236,11 +271,23 @@ export function createTranscludeIdTracker() {
     state.childToken = d.token;
     state.childDescendants.clear();
     for (const entry of d.descendants) {
-      if (!Array.isArray(entry) || entry.length !== 2) continue;
-      const [token, path] = entry;
-      if (typeof token !== "string" || !Array.isArray(path)) continue;
-      if (!path.every((part) => typeof part === "string")) continue;
-      state.childDescendants.set(token, [...path]);
+      if (typeof entry !== "object" || entry === null) continue;
+      const { token, id, name } = entry as {
+        token?: unknown;
+        id?: unknown;
+        name?: unknown;
+      };
+      if (typeof token !== "string") continue;
+      if (!Array.isArray(id) || !id.every((part) => typeof part === "string")) {
+        continue;
+      }
+      state.childDescendants.set(token, {
+        id: [...id],
+        name:
+          Array.isArray(name) && name.every((part) => typeof part === "string")
+            ? [...name]
+            : [...id],
+      });
     }
     publishDescendants();
   });

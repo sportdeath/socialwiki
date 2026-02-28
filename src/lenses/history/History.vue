@@ -100,6 +100,7 @@
         <template #right-pane>
             <sw-transclude
                 id="preview"
+                name="Preview"
                 ref="transclude"
                 :src="previewAddress"
             ></sw-transclude>
@@ -298,7 +299,10 @@ watch(pageVersions, (versions) => {
     }
 
     const selectedUrl = selectedPageVersion.value?.url;
-    if (selectedUrl && !versions.some((version) => version.url === selectedUrl)) {
+    if (
+        selectedUrl &&
+        !versions.some((version) => version.url === selectedUrl)
+    ) {
         selectedPageVersion.value = undefined;
     }
 });

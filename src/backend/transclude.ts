@@ -300,14 +300,14 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
 
     // Rerender on initialization or src/srcdoc changes
     static get observedAttributes(): string[] {
-      return ["src", "srcdoc", "hash", "id"];
+      return ["src", "srcdoc", "hash", "id", "name"];
     }
     connectedCallback() {
       transcludeIdTracker.track(this, this.iframe);
       this.renderPage();
     }
     attributeChangedCallback(name: string) {
-      if (name === "id") {
+      if (name === "id" || name === "name") {
         transcludeIdTracker.notifyIdChanged(this);
         return;
       }

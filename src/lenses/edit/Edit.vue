@@ -168,6 +168,7 @@
                 <div class="pane">
                     <sw-transclude
                         :id="previewTranscludeId"
+                        name="Preview"
                         :hash="pageHash"
                         :key="refreshKey"
                         :srcdoc="previewHtml"

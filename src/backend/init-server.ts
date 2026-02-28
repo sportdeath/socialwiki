@@ -8,7 +8,7 @@ const currentScriptSrc = isClassic
   : import.meta.url;
 const origin = new URL(currentScriptSrc).origin;
 
-const graffiti = serveGraffiti();
+const { graffiti } = serveGraffiti();
 installTransclude(graffiti, origin);
 serveNavigation((to) => {
   const url = new URL(to, origin).toString();

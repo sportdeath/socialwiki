@@ -70,7 +70,9 @@ initLens(async (pageAddress, lensParams) => {
   const requestedVersion = lensParams.get("version") ?? "";
   const requestedEditors = normalizeEditorParams(lensParams);
   const pageName = url.pathname.slice(1);
-  const contentKey = requestedVersion || `${pageName}|${requestedEditors.join("|")}`;
+  transclude.setAttribute("name", pageName);
+  const contentKey =
+    requestedVersion || `${pageName}|${requestedEditors.join("|")}`;
 
   if (address === currentAddress && contentKey === currentContentKey) return;
   currentAddress = address;
@@ -97,19 +99,19 @@ initLens(async (pageAddress, lensParams) => {
       const potentialPageVersion = pageVersions.at(0);
       if (!potentialPageVersion) {
         outputLensStatus("not-found");
-        setTranscludeSrcDoc(PageNotFound(address, window.topOrigin), "not-found");
+        setTranscludeSrcDoc(
+          PageNotFound(address, window.topOrigin),
+          "not-found",
+        );
         return;
       }
 
       mediaAddress = potentialPageVersion.value.result.media;
     }
 
-    const media = await graffiti.getMedia(
-      mediaAddress,
-      {
-        types: ["text/html"],
-      },
-    );
+    const media = await graffiti.getMedia(mediaAddress, {
+      types: ["text/html"],
+    });
     if (renderVersion !== activeRenderVersion) return;
 
     const html = await media.data.text();

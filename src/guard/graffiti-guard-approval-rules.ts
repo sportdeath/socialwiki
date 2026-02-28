@@ -131,3 +131,30 @@ export async function hasMatchingGraffitiGuardApprovalRule(
 
   return false;
 }
+
+export async function listGraffitiGuardApprovalRules() {
+  if (!canUseIndexedDb()) return [] as GraffitiGuardApprovalRule[];
+
+  const db = await getDb();
+  return db.getAll(RULES_STORE);
+}
+
+export async function clearGraffitiGuardApprovalRule(ruleId: number) {
+  if (!canUseIndexedDb()) return;
+
+  const db = await getDb();
+  await db.delete(RULES_STORE, ruleId);
+}
+
+export async function clearAllGraffitiGuardApprovalRulesForTranscludeId(
+  transcludeId: string | null,
+) {
+  if (!canUseIndexedDb()) return;
+
+  const db = await getDb();
+  const rules = await db.getAll(RULES_STORE);
+  const deletions = rules
+    .filter((rule) => rule.scope === "all" && rule.transcludeId === transcludeId)
+    .map((rule) => (rule.id == null ? null : db.delete(RULES_STORE, rule.id)));
+  await Promise.all(deletions.filter(Boolean));
+}

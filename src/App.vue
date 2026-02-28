@@ -10,10 +10,7 @@
 
         <form
             @submit.prevent="submitForm"
-            @focusin="
-                isDropdownOpen = true;
-                isSmall && (navOpen = false);
-            "
+            @focusin="onAddressFocusIn"
             ref="address-form"
             @focusout="onAddressLeave"
         >
@@ -21,10 +18,28 @@
                 type="text"
                 v-model="addressInput"
                 placeholder="Enter page name"
+                @focus="isGuardPermissionsOpen = false"
                 @mousedown="selectAddress"
                 @focusout="addressFocused = false"
                 @dragstart.prevent
             />
+            <details
+                v-if="showGuardPermissionsButton"
+                class="guard-permissions"
+                :open="isGuardPermissionsOpen"
+            >
+                <summary
+                    @click.prevent="
+                        isGuardPermissionsOpen = !isGuardPermissionsOpen;
+                        isDropdownOpen = false;
+                    "
+                    title="Show app permissions"
+                >
+                    <span class="permissions-shield-icon"></span>
+                    <span class="permissions-full">Permissions</span>
+                </summary>
+                <GraffitiGuardPermissionsPanel v-if="isGuardPermissionsOpen" />
+            </details>
             <ul
                 class="dropdown"
                 v-if="isDropdownOpen && addressInput !== pageAddress"
@@ -94,7 +109,9 @@
             </nav>
         </details>
         <div
-            v-if="isDropdownOpen || (navOpen && isSmall)"
+            v-if="
+                isDropdownOpen || isGuardPermissionsOpen || (navOpen && isSmall)
+            "
             class="backdrop"
             @pointerdown.prevent="onBackdropClick"
         ></div>
@@ -102,6 +119,15 @@
     <main>
         <sw-transclude
             :id="lens"
+            :name="
+                lens === 'v'
+                    ? 'View'
+                    : lens === 'e'
+                      ? 'Edit'
+                      : lens === 'h'
+                        ? 'History'
+                        : lens
+            "
             :src="`#${composeRoute({ lens, lensParams, pageAddress })}`"
             ref="transclude"
         ></sw-transclude>
@@ -111,6 +137,7 @@
 <script setup lang="ts">
 import {
     computed,
+    inject,
     onBeforeUnmount,
     onMounted,
     onUnmounted,
@@ -121,7 +148,10 @@ import { useRouter } from "vue-router";
 import { useGraffiti } from "@graffiti-garden/wrapper-vue";
 import type { GraffitiSession } from "@graffiti-garden/api";
 import { composeRoute, parseRoute } from "./backend/route";
+import { getTranscludeId } from "./backend/transclude-ids";
 import GraffitiGuardPrompt from "./guard/GraffitiGuardPrompt.vue";
+import GraffitiGuardPermissionsPanel from "./guard/GraffitiGuardPermissionsPanel.vue";
+import { listGraffitiGuardApprovalRules } from "./guard/graffiti-guard-approval-rules";
 
 const graffiti = useGraffiti();
 const router = useRouter();
@@ -225,6 +255,46 @@ const addressInput = ref(pageAddress.value);
 watch(pageAddress, (newVal) => (addressInput.value = newVal), {
     immediate: true,
 });
+
+const isGuardPermissionsOpen = ref(false);
+const showGuardPermissionsButton = ref(false);
+const listConnectedWindows =
+    (inject("listConnectedWindows") as
+        | (() => IterableIterator<Window>)
+        | null) ?? null;
+let guardPermissionsVisibilityTimer: number | undefined;
+
+async function syncGuardPermissionsButtonVisibility() {
+    if (!listConnectedWindows) {
+        showGuardPermissionsButton.value = false;
+        isGuardPermissionsOpen.value = false;
+        return;
+    }
+
+    const connectedTranscludeIds = new Set(
+        [...listConnectedWindows()]
+            .map((window) => getTranscludeId(window))
+            .filter((id): id is string => id != null),
+    );
+    if (connectedTranscludeIds.size === 0) {
+        showGuardPermissionsButton.value = false;
+        isGuardPermissionsOpen.value = false;
+        return;
+    }
+
+    const rules = await listGraffitiGuardApprovalRules();
+    const hasPermissions = rules.some(
+        (rule) =>
+            rule.scope === "all" &&
+            rule.transcludeId != null &&
+            connectedTranscludeIds.has(rule.transcludeId),
+    );
+    showGuardPermissionsButton.value = hasPermissions;
+    if (!hasPermissions) {
+        isGuardPermissionsOpen.value = false;
+    }
+}
+
 // When input is submitted, the route changes
 function submitForm() {
     router.push(
@@ -238,6 +308,15 @@ function submitForm() {
 }
 
 const isDropdownOpen = ref(false);
+function onAddressFocusIn(event: FocusEvent) {
+    if (isSmall.value) {
+        navOpen.value = false;
+    }
+
+    isDropdownOpen.value =
+        event.target instanceof HTMLInputElement &&
+        event.target.type === "text";
+}
 const addressForm = useTemplateRef("address-form");
 function onAddressLeave(event: FocusEvent) {
     const formEl = addressForm.value;
@@ -247,6 +326,7 @@ function onAddressLeave(event: FocusEvent) {
         !(nextFocusedEl instanceof Node && formEl.contains(nextFocusedEl))
     ) {
         isDropdownOpen.value = false;
+        isGuardPermissionsOpen.value = false;
     }
 }
 
@@ -262,9 +342,16 @@ const syncNav = () => {
 onMounted(() => {
     syncNav();
     mq.addEventListener("change", syncNav);
+    void syncGuardPermissionsButtonVisibility();
+    guardPermissionsVisibilityTimer = window.setInterval(() => {
+        void syncGuardPermissionsButtonVisibility();
+    }, 250);
 });
 onUnmounted(() => {
     mq.removeEventListener("change", syncNav);
+    if (guardPermissionsVisibilityTimer !== undefined) {
+        clearInterval(guardPermissionsVisibilityTimer);
+    }
 });
 router.afterEach(syncNav);
 
@@ -302,6 +389,7 @@ function selectAddress(event: MouseEvent) {
 }
 
 function onBackdropClick() {
+    isGuardPermissionsOpen.value = false;
     syncNav();
     (document.activeElement as HTMLElement | null)?.blur();
 }
@@ -326,23 +414,75 @@ header {
         border-bottom-right-radius: 0;
     }
 
-    form:not(:has(input[type="text"]:disabled)):not(:has(.dropdown)):hover {
+    form:hover:not(:has(input[type="text"]:disabled)):not(:has(.dropdown)):not(
+            :has(.guard-permissions:hover)
+        ) {
         background: var(--background-color-interactive-hover);
     }
 
     form {
         flex: 1;
+        min-width: 0;
         position: relative;
+        display: flex;
+        align-items: center;
         border-radius: 0.5rem;
         background: var(--background-color-interactive);
 
         input[type="text"] {
             background: transparent;
-            width: 100%;
+            width: auto;
+            flex: 1 1 auto;
+            min-width: 0;
             border: none;
             padding: 0.5rem;
             line-height: 1;
             outline: none;
+        }
+
+        .guard-permissions {
+            flex: 0 0 auto;
+            position: relative;
+            align-self: stretch;
+
+            summary {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 0.35rem;
+                height: 100%;
+                list-style: none;
+                cursor: pointer;
+                user-select: none;
+                color: var(--secondary-color);
+                background: var(--background-color-interactive);
+                padding: 0.5rem;
+                line-height: 1;
+                border-left: 1px solid var(--border-color);
+                border-top-right-radius: 0.5rem;
+                border-bottom-right-radius: 0.5rem;
+            }
+
+            .permissions-shield-icon {
+                display: inline-block;
+                width: 1rem;
+                height: 1rem;
+                color: inherit;
+                background-color: currentColor;
+                -webkit-mask: url("./assets/permissions-shield.svg") center /
+                    contain no-repeat;
+                mask: url("./assets/permissions-shield.svg") center / contain
+                    no-repeat;
+            }
+
+            summary::marker {
+                content: "";
+            }
+
+            summary:hover {
+                color: var(--secondary-hover-color);
+                background: var(--background-color-interactive-hover);
+            }
         }
 
         .dropdown {
@@ -381,10 +521,10 @@ header {
         font-size: 0.9rem;
     }
 
-    details {
+    > details {
         display: contents;
     }
-    details[open]::details-content {
+    > details[open]::details-content {
         display: contents;
     }
 }
@@ -411,7 +551,7 @@ nav .router-link-exact-active:hover {
 }
 
 @media (min-width: 700px) {
-    summary {
+    header > details > summary {
         display: none;
     }
 }
@@ -429,7 +569,7 @@ nav .router-link-exact-active:hover {
         display: grid;
         column-gap: 0.5rem;
         row-gap: 0;
-        grid-template-columns: auto 1fr auto;
+        grid-template-columns: auto minmax(0, 1fr) auto;
         grid-template-areas:
             "title address menu"
             "nav nav nav";
@@ -440,9 +580,16 @@ nav .router-link-exact-active:hover {
 
         form {
             grid-area: address;
+            min-width: 0;
         }
 
-        details summary {
+        form .guard-permissions {
+            .permissions-full {
+                display: none;
+            }
+        }
+
+        > details > summary {
             text-align: right;
             user-select: none;
             grid-area: menu;
@@ -450,12 +597,12 @@ nav .router-link-exact-active:hover {
             cursor: pointer;
         }
 
-        details summary:hover {
+        > details > summary:hover {
             text-decoration: underline;
             color: var(--link-hover-color);
         }
 
-        details nav {
+        > details > nav {
             font-size: inherit;
             grid-area: nav;
 

@@ -13,7 +13,7 @@ import { handleGraffitiGuardRequest } from "./guard/graffiti-guard";
 
 // Set up a graffiti "server" that is served
 // to all the "client" pages
-const graffiti = serveGraffiti(handleGraffitiGuardRequest);
+const { graffiti, listConnectedWindows } = serveGraffiti(handleGraffitiGuardRequest);
 
 const router = createRouter({
   // Use web hash history so that the page name
@@ -47,6 +47,7 @@ const origin = window.location.origin;
 installTransclude(graffiti, origin);
 
 createApp(RouterView)
+  .provide("listConnectedWindows", listConnectedWindows)
   .use(GraffitiPlugin, { graffiti })
   .use(router)
   .mount("#app");
