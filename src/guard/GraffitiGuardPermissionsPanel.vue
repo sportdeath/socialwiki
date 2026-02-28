@@ -24,6 +24,27 @@
                             </template>
                         </span>
                     </h3>
+                    <button
+                        v-if="
+                            page.transcludeId && !isPageVersionVisible(page.key)
+                        "
+                        type="button"
+                        class="secondary version-toggle"
+                        :aria-expanded="isPageVersionVisible(page.key)"
+                        @click="togglePageVersion(page.key)"
+                    >
+                        Show page version
+                    </button>
+                    <p
+                        v-if="
+                            page.transcludeId && isPageVersionVisible(page.key)
+                        "
+                        class="transclude-version muted"
+                        :title="page.transcludeId"
+                    >
+                        Page version:
+                        {{ page.transcludeId }}
+                    </p>
 
                     <section>
                         <header>
@@ -88,6 +109,7 @@ const listConnectedWindows =
         | null) ?? null;
 let refreshTimer: number | undefined;
 let isRefreshing = false;
+const visiblePageVersions = ref(new Set<string>());
 
 function syncPanelViewportBounds() {
     const panel = panelRoot.value;
@@ -117,6 +139,20 @@ function describePermissionMethod(method: GraffitiGuardApprovalRule["method"]) {
         default:
             return method;
     }
+}
+
+function togglePageVersion(pageKey: string) {
+    const next = new Set(visiblePageVersions.value);
+    if (next.has(pageKey)) {
+        next.delete(pageKey);
+    } else {
+        next.add(pageKey);
+    }
+    visiblePageVersions.value = next;
+}
+
+function isPageVersionVisible(pageKey: string) {
+    return visiblePageVersions.value.has(pageKey);
 }
 
 async function syncConnectedPages() {
@@ -269,6 +305,26 @@ onUnmounted(() => {
         min-width: 0;
         font-size: 1rem;
         font-weight: 700;
+    }
+
+    .transclude-version {
+        margin: -0.15rem 0 0.05rem;
+        min-width: 0;
+        font-size: 0.75rem;
+        line-height: 1.2;
+        font-family:
+            ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+            "Liberation Mono", "Courier New", monospace;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .version-toggle {
+        justify-self: start;
+        font-size: 0.75rem;
+        line-height: 1.1;
+        margin-top: -0.1rem;
     }
 
     .transclude-name-path {
