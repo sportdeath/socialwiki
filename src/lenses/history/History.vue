@@ -117,7 +117,7 @@ import {
     pageVersionSchema,
     type PageVersionObject,
     sortPageVersions,
-} from "../../backend/page-versions";
+} from "../page-versions";
 import {
     useGraffiti,
     GraffitiActorToHandle,

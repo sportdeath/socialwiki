@@ -1,5 +1,5 @@
 import { initLens, outputLensStatus } from "../../backend/lens-client";
-import { getPageVersions } from "../../backend/page-versions";
+import { getPageVersions } from "../page-versions";
 import {
   ErrorPage,
   LoadingPage,
