@@ -1,35 +1,35 @@
-export function serveNavigation(
+function bindNavigateEvent(
+  type: string,
+  top: boolean,
   onNavigate: (to: string, top?: boolean) => void,
-  iframe?: HTMLIFrameElement,
 ) {
-  const onMessage = (event: MessageEvent<unknown>) => {
-    if (iframe && iframe.contentWindow !== event.source) return;
-
-    const data = event.data;
-    if (typeof data !== "object" || data === null) return;
-    const d = data as Record<string, unknown>;
-    if (
-      d.type !== "sw-navigate" ||
-      typeof d.to !== "string" ||
-      (typeof d.top !== "boolean" && d.top !== undefined)
-    )
-      return;
-
-    onNavigate(d.to, d.top);
+  const handler = (event: Event) => {
+    if (!(event instanceof CustomEvent)) return;
+    if (typeof event.detail !== "string") return;
+    onNavigate(event.detail, top);
   };
 
-  window.addEventListener("message", onMessage);
+  window.addEventListener(type, handler as EventListener);
+  return () => {
+    window.removeEventListener(type, handler as EventListener);
+  };
+}
+
+export function serveNavigation(
+  onNavigate: (to: string, top?: boolean) => void,
+  _iframe?: HTMLIFrameElement,
+) {
+  const disposers = [
+    bindNavigateEvent("sw:event:navigate", false, onNavigate),
+    bindNavigateEvent("sw:lens-event:navigate", false, onNavigate),
+    bindNavigateEvent("sw:event:navigate-top", true, onNavigate),
+    bindNavigateEvent("sw:lens-event:navigate-top", true, onNavigate),
+  ];
+
   return {
-    destroy: () => window.removeEventListener("message", onMessage),
-    setHash: (hash: string) => {
-      if (iframe) {
-        iframe.contentWindow?.postMessage(
-          {
-            type: "sw-hash",
-            hash,
-          },
-          "*",
-        );
+    destroy: () => {
+      for (const dispose of disposers) {
+        dispose();
       }
     },
   };

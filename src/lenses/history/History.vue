@@ -424,13 +424,19 @@ initLens(async (pageAddress, _lensParams) => {
 const transclude = useTemplateRef<HTMLElement>("transclude");
 defineExpose({ transclude });
 let previewObserver: MutationObserver | undefined;
+const getPreviewHtml = () => {
+    return transclude.value?.getAttribute("data-sw-lens-out-srcdoc") ?? null;
+};
+const getPreviewStatus = () => {
+    return transclude.value?.getAttribute("data-sw-lens-out-status") ?? null;
+};
 
 const outputPreviewIfReady = () => {
     const preview = transclude.value;
     if (!preview) return;
 
-    const status = preview.getAttribute("status");
-    const html = preview.getAttribute("srcdoc");
+    const status = getPreviewStatus();
+    const html = getPreviewHtml();
     if (status === "ok" && html !== null) {
         outputLensStatus("ok", html);
     }
@@ -441,7 +447,7 @@ onMounted(() => {
     previewObserver = new MutationObserver(outputPreviewIfReady);
     previewObserver.observe(transclude.value, {
         attributes: true,
-        attributeFilter: ["srcdoc"],
+        attributeFilter: ["data-sw-lens-out-status", "data-sw-lens-out-srcdoc"],
     });
     outputPreviewIfReady();
 });
@@ -553,7 +559,7 @@ async function restorePageVersion(
     session: GraffitiSession,
 ) {
     if (hasPendingMutation.value) return;
-    const html = transclude.value?.getAttribute("srcdoc");
+    const html = getPreviewHtml();
     if (!html) {
         console.error("no HTML to restore");
         return;
@@ -580,7 +586,7 @@ async function endorsePageVersion(
     session: GraffitiSession,
 ) {
     if (hasPendingMutation.value) return;
-    const html = transclude.value?.getAttribute("srcdoc");
+    const html = getPreviewHtml();
     if (!html) {
         console.error("no HTML to endorse");
         return;
@@ -618,7 +624,7 @@ async function deleteSelectedPageVersion(
 }
 
 function openEditLens() {
-    const draft = transclude.value?.getAttribute("srcdoc") ?? "";
+    const draft = getPreviewHtml() ?? "";
     navigate(
         `#${composeRoute({
             lens: "e",

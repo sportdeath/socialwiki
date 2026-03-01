@@ -212,10 +212,18 @@ function logout(session: GraffitiSession) {
 const transclude = useTemplateRef<HTMLElement>("transclude");
 const srcdoc = ref("");
 let observer: MutationObserver | undefined;
+function getLensOutputString(
+    element: HTMLElement | undefined,
+    key: string,
+): string {
+    if (!element) return "";
+    const raw = element.getAttribute(`data-sw-lens-out-${key}`);
+    return raw ?? "";
+}
 onMounted(() => {
     if (!transclude.value) return;
     observer = new MutationObserver(() => {
-        srcdoc.value = transclude.value?.getAttribute("srcdoc") ?? "";
+        srcdoc.value = getLensOutputString(transclude.value, "srcdoc");
 
         const src = transclude.value?.getAttribute("src") ?? "";
 
@@ -229,10 +237,10 @@ onMounted(() => {
     });
     observer.observe(transclude.value, {
         attributes: true,
-        attributeFilter: ["srcdoc", "src"],
+        attributeFilter: ["data-sw-lens-out-srcdoc", "src"],
     });
     // initialize value
-    srcdoc.value = transclude.value?.getAttribute("srcdoc") ?? "";
+    srcdoc.value = getLensOutputString(transclude.value, "srcdoc");
 });
 onBeforeUnmount(() => {
     observer?.disconnect();

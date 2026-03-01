@@ -4,7 +4,6 @@ import type {
   GraffitiSession,
   GraffitiSessionInitializedEvent,
 } from "@graffiti-garden/api";
-import { initLens, outputLensStatus } from "../../backend/lens-client";
 import {
   pageVersionSchema,
   sortPageVersions,
@@ -21,9 +20,11 @@ import { defaultTrustedEditors } from "../utils/default-trusted-editors";
 import { sortProtectionHistory } from "../utils/protection";
 
 const graffiti = new window.graffiti();
+const socialwiki = window.socialwiki;
 
-let requestedAddress = "";
-let requestedLensParams = new URLSearchParams();
+let requestedPageName = "";
+let requestedPageHash = "";
+let requestedVersion = "";
 let renderedAddress = "";
 let currentContentKey = "";
 let activeRenderVersion = 0;
@@ -48,23 +49,25 @@ function setTranscludeSrcDoc(
   transclude.setAttribute("srcdoc", html);
 }
 
+function setLensOutputs(status: string, srcdoc?: string) {
+  socialwiki.setOutput("status", status, "lens");
+  socialwiki.setOutput("srcdoc", srcdoc, "lens");
+}
+
 setTranscludeSrcDoc(LoadingPage, "loading");
 
-// Watch the transclude src attribute.
-// If it changes, forward the navigation to the parent
-const observer = new MutationObserver(() => {
-  const to = transclude.getAttribute("src");
-  if (to) window.navigate(to);
-  // Delete it to avoid loops
-  transclude.removeAttribute("src");
+socialwiki.onReceive("navigate", (payload) => {
+  if (typeof payload !== "string") return;
+  window.navigate(payload);
 });
-observer.observe(transclude, {
-  attributes: true,
-  attributeFilter: ["src"],
+
+socialwiki.onReceive("navigate-top", (payload) => {
+  if (typeof payload !== "string") return;
+  window.navigate(payload, true);
 });
 
 function maybeRenderForSessionChange() {
-  if (!requestedAddress.length) return;
+  if (!requestedPageName.length) return;
   void renderLens({ force: true });
 }
 
@@ -181,20 +184,20 @@ function pickVersion(
 ) {
   if (!isProtected) return pageVersions.at(0) || null;
   return (
-    pageVersions.find((version) => trustedEditors.includes(version.actor)) ||
-    null
+    pageVersions.find((version) => trustedEditors.includes(version.actor)) || null
   );
 }
 
-async function renderLens(options?: { force?: boolean }) {
-  const address = requestedAddress;
-  if (!address.length) return;
+function requestedAddress(): string {
+  return `${requestedPageName}${requestedPageHash}`;
+}
 
-  const lensParams = requestedLensParams;
-  const url = new URL(address, "http://example.com");
-  const requestedVersion = lensParams.get("version") ?? "";
-  const pageName = url.pathname.slice(1);
+async function renderLens(options?: { force?: boolean }) {
+  const pageName = requestedPageName;
+  if (!pageName.length) return;
+
   transclude.setAttribute("name", pageName);
+  const address = requestedAddress();
   const contentKey = requestedVersion || pageName;
 
   if (
@@ -206,9 +209,8 @@ async function renderLens(options?: { force?: boolean }) {
   }
 
   if (!options?.force && contentKey === currentContentKey) {
-    // If the rendered content target hasn't changed, only update the hash.
     renderedAddress = address;
-    transclude?.setAttribute("hash", url.hash);
+    transclude.setAttribute("data-sw-in-hash", requestedPageHash);
     return;
   }
 
@@ -223,6 +225,7 @@ async function renderLens(options?: { force?: boolean }) {
 
   const renderVersion = ++activeRenderVersion;
   setTranscludeSrcDoc(LoadingPage, "loading");
+  setLensOutputs("loading");
 
   try {
     let mediaAddress = requestedVersion;
@@ -246,7 +249,7 @@ async function renderLens(options?: { force?: boolean }) {
         isProtected,
       );
       if (!selectedVersion) {
-        outputLensStatus("not-found");
+        setLensOutputs("not-found");
         setTranscludeSrcDoc(
           PageNotFound(address, window.topOrigin),
           "not-found",
@@ -265,14 +268,13 @@ async function renderLens(options?: { force?: boolean }) {
     const html = await media.data.text();
     if (renderVersion !== activeRenderVersion) return;
 
-    outputLensStatus("ok", html);
+    setLensOutputs("ok", html);
     setTranscludeSrcDoc(html, "ok");
 
-    const currentUrl = new URL(renderedAddress, "http://example.com");
-    transclude?.setAttribute("hash", currentUrl.hash);
+    transclude.setAttribute("data-sw-in-hash", requestedPageHash);
   } catch (e) {
     if (renderVersion !== activeRenderVersion) return;
-    outputLensStatus("error");
+    setLensOutputs("error");
     setTranscludeSrcDoc(
       ErrorPage(e instanceof Error ? e.message : String(e)),
       "error",
@@ -280,8 +282,24 @@ async function renderLens(options?: { force?: boolean }) {
   }
 }
 
-initLens(async (pageAddress, lensParams) => {
-  requestedAddress = pageAddress;
-  requestedLensParams = new URLSearchParams(lensParams);
-  await renderLens();
-});
+function updateLensInputs() {
+  const nextPageName = socialwiki.getInput("name", "lens") ?? "";
+  const hashValue = socialwiki.getInput("hash");
+  const nextPageHash = hashValue ?? "";
+  const versionValue = socialwiki.getInput("version", "lens");
+  const nextVersion = versionValue ?? "";
+
+  const didChange =
+    nextPageName !== requestedPageName ||
+    nextPageHash !== requestedPageHash ||
+    nextVersion !== requestedVersion;
+
+  requestedPageName = nextPageName;
+  requestedPageHash = nextPageHash;
+  requestedVersion = nextVersion;
+
+  if (!didChange) return;
+  void renderLens();
+}
+
+socialwiki.onInputsChange(updateLensInputs);

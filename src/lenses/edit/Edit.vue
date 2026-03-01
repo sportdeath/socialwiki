@@ -169,7 +169,7 @@
                     <sw-transclude
                         :id="previewTranscludeId"
                         name="Preview"
-                        :hash="pageHash"
+                        :data-sw-in-hash="pageHash"
                         :key="refreshKey"
                         :srcdoc="previewHtml"
                     ></sw-transclude>

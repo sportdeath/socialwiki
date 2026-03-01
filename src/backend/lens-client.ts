@@ -1,29 +1,42 @@
+function buildLensParams(): URLSearchParams {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(window.socialwiki.listInputs("lens"))) {
+    if (key === "name") continue;
+    params.set(key, value);
+  }
+  return params;
+}
+
+function buildPageAddress(): string {
+  const pageName = window.socialwiki.getInput("name", "lens") ?? "";
+  const pageInputs = window.socialwiki.listInputs("page");
+
+  const query = new URLSearchParams();
+  let hash = "";
+
+  for (const [key, value] of Object.entries(pageInputs)) {
+    if (key === "hash") {
+      hash = value;
+      continue;
+    }
+    query.set(key, value);
+  }
+
+  const queryString = query.toString();
+  return `${pageName}${queryString.length ? `?${queryString}` : ""}${hash}`;
+}
+
 export function initLens(
   onLensInput: (pageAddress: string, lensParams: URLSearchParams) => void,
 ) {
-  window.addEventListener("message", (event: MessageEvent<unknown>) => {
-    if (event.source !== window.parent) return;
+  const onUpdate = () => {
+    onLensInput(buildPageAddress(), buildLensParams());
+  };
 
-    const data = event.data;
-    if (typeof data !== "object" || data === null) return;
-    const d = data as Record<string, unknown>;
-    if (
-      d.type !== "sw-lens-input" ||
-      (typeof d.lensParams !== "string" && d.lensParams !== undefined) ||
-      typeof d.pageAddress !== "string"
-    )
-      return;
-    onLensInput(d.pageAddress, new URLSearchParams(d.lensParams));
-  });
+  window.socialwiki.onInputsChange(onUpdate);
 }
 
 export function outputLensStatus(status: string, srcdoc?: string) {
-  window.parent.postMessage(
-    {
-      type: "sw-lens-output",
-      status,
-      srcdoc,
-    },
-    "*",
-  );
+  window.socialwiki.setOutput("status", status, "lens");
+  window.socialwiki.setOutput("srcdoc", srcdoc, "lens");
 }
