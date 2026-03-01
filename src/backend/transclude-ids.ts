@@ -1,24 +1,16 @@
-// Internal messages used only for propagating transclude metadata upward.
-// `token` identifies a window instance; path segments come from parent-assigned
-// `<sw-transclude id="...">` / `<sw-transclude name="...">` values.
+type TranscludePath = { id: string[]; name: string[] };
 type TranscludeTrackerMessage =
-  | {
-      type: "sw-transclude-self";
-      token: string;
-    }
+  | { type: "sw-transclude-self"; token: string }
   | {
       type: "sw-transclude-descendants";
       token: string;
-      descendants: {
-        token: string;
-        id: string[];
-        name: string[];
-      }[];
+      descendants: ({ token: string } & TranscludePath)[];
     };
-
-type TranscludePaths = {
-  id: string[];
-  name: string[];
+type TrackedHostState = {
+  iframe: HTMLIFrameElement;
+  childWindow: Window | null;
+  childToken: string | null;
+  childDescendants: Map<string, TranscludePath>;
 };
 
 const transcludeIdLookups = new WeakMap<
@@ -30,13 +22,14 @@ const transcludeNameLookups = new WeakMap<
   (target: Window) => string[] | undefined
 >();
 
-function encodeTranscludeIdPath(path: readonly string[]): string {
-  // Encode each segment, then join with "/" so segment boundaries are preserved.
-  return path.map((segment) => encodeURIComponent(segment)).join("/");
-}
+const randomString = () => Math.random().toString(36).slice(2, 10);
+const encodeTranscludeIdPath = (path: readonly string[]) =>
+  path.map((segment) => encodeURIComponent(segment)).join("/");
+const asStringArray = (value: unknown): string[] | undefined =>
+  Array.isArray(value) && value.every((x) => typeof x === "string")
+    ? value
+    : undefined;
 
-// Root-facing lookup helper: given a target window, return the encoded
-// transclude ID path ("parentId/childId/...") known by the specified root.
 export function getTranscludeId(
   target: Window,
   root: Window = window,
@@ -51,77 +44,49 @@ export function getTranscludeName(
   return transcludeNameLookups.get(root)?.(target);
 }
 
-type TrackedTranscludeHost = HTMLElement;
-type TrackedTranscludeState = {
-  // The iframe owned by a specific <sw-transclude> host.
-  iframe: HTMLIFrameElement;
-  // The current child window loaded in that iframe (if available).
-  childWindow: Window | null;
-  // Opaque token announced by the child window itself.
-  childToken: string | null;
-  // Descendant paths reported by the child, keyed by descendant window token.
-  childDescendants: Map<string, TranscludePaths>;
-};
-
 export function createTranscludeIdTracker() {
-  // Each window chooses a local token for itself. Descendant ID paths are
-  // propagated upward keyed by these tokens, and the root joins tokens back to
-  // actual Window objects from direct postMessage senders.
-  const selfToken = `swt-${Date.now().toString(36)}-${Math.random()
-    .toString(36)
-    .slice(2, 10)}`;
-
-  // All transclude hosts in this window that currently participate in tracking.
-  const trackedHosts = new Set<TrackedTranscludeHost>();
-  // Per-host runtime state; keyed by host element so GC can clean up naturally.
-  const stateByHost = new WeakMap<
-    TrackedTranscludeHost,
-    TrackedTranscludeState
-  >();
-  // Reverse lookup from direct child iframe window -> owning transclude host.
-  const hostByChildWindow = new WeakMap<Window, TrackedTranscludeHost>();
-  // Window token announcements learned from postMessage senders.
+  const selfToken = randomString();
+  // Local runtime state for each <sw-transclude> in this window.
+  const hostStates = new Map<HTMLElement, TrackedHostState>();
+  // Stable random segment when a host has no explicit `id`.
+  const fallbackIdByHost = new WeakMap<HTMLElement, string>();
+  // Reverse lookup: immediate child window -> owning host element.
+  const hostByChildWindow = new WeakMap<Window, HTMLElement>();
+  // Token announcements learned from message source windows.
   const tokenByWindow = new WeakMap<Window, string>();
-  // The current aggregate path table for this window, keyed by token.
-  const pathsByToken = new Map<string, TranscludePaths>();
+  // Current aggregate token -> path table for this window's subtree.
+  const pathsByToken = new Map<string, TranscludePath>();
 
-  const postTrackerMessage = (
+  const getHostId = (host: HTMLElement) => {
+    if (host.id) return host.id;
+    let fallbackId = fallbackIdByHost.get(host);
+    if (!fallbackId) {
+      fallbackId = randomString();
+      fallbackIdByHost.set(host, fallbackId);
+    }
+    return fallbackId;
+  };
+
+  const post = (
     target: Window | null | undefined,
     message: TranscludeTrackerMessage,
   ) => {
-    if (!target || target === window) return;
-    target.postMessage(message, "*");
+    if (target && target !== window) target.postMessage(message, "*");
   };
 
-  const announceSelf = () => {
-    // Direct parents (and optionally top) learn this window's token by sourceWindow.
-    const message: TranscludeTrackerMessage = {
-      type: "sw-transclude-self",
-      token: selfToken,
-    };
-    postTrackerMessage(window.parent, message);
-    if (window.top && window.top !== window.parent) {
-      postTrackerMessage(window.top, message);
-    }
-  };
+  const publish = () => {
+    // Recompute subtree paths by prefixing each child subtree with the
+    // current host's own id/name segment.
+    const nextPaths = new Map<string, TranscludePath>();
 
-  const publishDescendants = () => {
-    // Recompute from local transcludes + child-reported descendant paths.
-    const descendants = new Map<string, TranscludePaths>();
-
-    for (const host of trackedHosts) {
-      const state = stateByHost.get(host);
-      if (!state) continue;
-
-      const id = host.id || `${Math.random().toString(36).slice(2, 10)}`;
+    for (const [host, state] of hostStates) {
+      const id = getHostId(host);
       const name = host.getAttribute("name") || "Unnamed";
-
-      // Only the immediate parent contributes this ID segment.
       if (state.childToken) {
-        descendants.set(state.childToken, { id: [id], name: [name] });
+        nextPaths.set(state.childToken, { id: [id], name: [name] });
       }
       for (const [token, childPaths] of state.childDescendants) {
-        descendants.set(token, {
+        nextPaths.set(token, {
           id: [id, ...childPaths.id],
           name: [name, ...childPaths.name],
         });
@@ -129,177 +94,141 @@ export function createTranscludeIdTracker() {
     }
 
     pathsByToken.clear();
-    for (const [token, paths] of descendants) {
-      pathsByToken.set(token, paths);
-    }
+    for (const [token, paths] of nextPaths) pathsByToken.set(token, paths);
 
-    if (window.top === window) return;
-    // Forward only to the parent. Each level prefixes its own IDs before
-    // forwarding again, so IDs flow up rather than down.
-    postTrackerMessage(window.parent, {
-      type: "sw-transclude-descendants",
-      token: selfToken,
-      descendants: [...descendants].map(([token, paths]) => ({
-        token,
-        id: paths.id,
-        name: paths.name,
-      })),
-    });
+    if (window.top !== window) {
+      // Push only upward; parents will prefix and forward again.
+      post(window.parent, {
+        type: "sw-transclude-descendants",
+        token: selfToken,
+        descendants: [...nextPaths].map(([token, paths]) => ({
+          token,
+          id: paths.id,
+          name: paths.name,
+        })),
+      });
+    }
   };
 
-  const syncIframeWindow = (host: TrackedTranscludeHost) => {
-    // Refresh bindings when an iframe loads/reloads and gets a new Window object.
-    const state = stateByHost.get(host);
+  const bindChildWindow = (host: HTMLElement) => {
+    const state = hostStates.get(host);
     if (!state) return;
 
-    const nextChildWindow = state.iframe.contentWindow;
-    if (state.childWindow === nextChildWindow) return;
+    const nextWindow = state.iframe.contentWindow;
+    if (state.childWindow === nextWindow) return;
+    if (state.childWindow) hostByChildWindow.delete(state.childWindow);
 
-    if (state.childWindow) {
-      hostByChildWindow.delete(state.childWindow);
-    }
-
-    state.childWindow = nextChildWindow;
-    state.childToken = nextChildWindow
-      ? (tokenByWindow.get(nextChildWindow) ?? null)
+    state.childWindow = nextWindow;
+    // Keep previously learned token when possible; otherwise wait for child
+    // self-announcement.
+    state.childToken = nextWindow
+      ? (tokenByWindow.get(nextWindow) ?? null)
       : null;
     state.childDescendants.clear();
-
-    if (nextChildWindow) {
-      hostByChildWindow.set(nextChildWindow, host);
-    }
-
-    publishDescendants();
+    if (nextWindow) hostByChildWindow.set(nextWindow, host);
   };
 
-  const track = (host: TrackedTranscludeHost, iframe: HTMLIFrameElement) => {
-    // Called from <sw-transclude>.connectedCallback.
-    trackedHosts.add(host);
-
-    const state = stateByHost.get(host) ?? {
+  const track = (host: HTMLElement, iframe: HTMLIFrameElement) => {
+    const state = hostStates.get(host) ?? {
       iframe,
       childWindow: null,
       childToken: null,
-      childDescendants: new Map<string, TranscludePaths>(),
+      childDescendants: new Map<string, TranscludePath>(),
     };
     state.iframe = iframe;
-    stateByHost.set(host, state);
-
-    syncIframeWindow(host);
-    publishDescendants();
+    hostStates.set(host, state);
+    bindChildWindow(host);
+    publish();
   };
 
-  const untrack = (host: TrackedTranscludeHost) => {
-    // Called from <sw-transclude>.disconnectedCallback.
-    trackedHosts.delete(host);
-    const state = stateByHost.get(host);
-    if (!state) {
-      publishDescendants();
-      return;
-    }
-
-    if (state.childWindow) {
-      hostByChildWindow.delete(state.childWindow);
-    }
-    state.childWindow = null;
-    state.childToken = null;
-    state.childDescendants.clear();
-    publishDescendants();
+  const untrack = (host: HTMLElement) => {
+    const state = hostStates.get(host);
+    if (state?.childWindow) hostByChildWindow.delete(state.childWindow);
+    hostStates.delete(host);
+    publish();
   };
 
-  const notifyIdChanged = (host: TrackedTranscludeHost) => {
-    // Host IDs are the actual user-assigned path segments; republish on change.
-    if (!trackedHosts.has(host)) return;
-    publishDescendants();
+  const syncIframeWindow = (host: HTMLElement) => {
+    bindChildWindow(host);
+    publish();
   };
 
-  // Install a local lookup for callers (typically the root) to map a real
-  // `Window` object to the currently known encoded transclude ID path.
+  const notifyIdChanged = (host: HTMLElement) => {
+    if (hostStates.has(host)) publish();
+  };
+
   transcludeIdLookups.set(window, (target) => {
     if (target === window) return "";
     const token = tokenByWindow.get(target);
-    if (!token) return;
-    const paths = pathsByToken.get(token);
-    if (!paths) return;
-    return encodeTranscludeIdPath(paths.id);
+    const paths = token ? pathsByToken.get(token) : undefined;
+    return paths ? encodeTranscludeIdPath(paths.id) : undefined;
   });
+
   transcludeNameLookups.set(window, (target) => {
     if (target === window) return [];
     const token = tokenByWindow.get(target);
-    if (!token) return;
-    const paths = pathsByToken.get(token);
-    if (!paths) return;
-    return [...paths.name];
+    const paths = token ? pathsByToken.get(token) : undefined;
+    return paths ? [...paths.name] : undefined;
   });
 
   window.addEventListener("message", (event: MessageEvent<unknown>) => {
     if (!event.source) return;
+    if (typeof event.data !== "object" || event.data === null) return;
+
     const sourceWindow = event.source as Window;
-    const data = event.data;
-    if (typeof data !== "object" || data === null) return;
+    const data = event.data as Partial<TranscludeTrackerMessage>;
 
-    const d = data as Partial<TranscludeTrackerMessage>;
-    if (d.type === "sw-transclude-self" && typeof d.token === "string") {
-      // Child announces its token; we can now associate future reports and guard
-      // requests (which contain sourceWindow) with the same logical window.
-      tokenByWindow.set(sourceWindow, d.token);
-
+    if (data.type === "sw-transclude-self" && typeof data.token === "string") {
+      // Child announces its own token.
+      tokenByWindow.set(sourceWindow, data.token);
       const host = hostByChildWindow.get(sourceWindow);
-      const state = host ? stateByHost.get(host) : undefined;
-      if (state && state.childToken !== d.token) {
-        state.childToken = d.token;
-        publishDescendants();
+      const state = host ? hostStates.get(host) : undefined;
+      if (state && state.childToken !== data.token) {
+        state.childToken = data.token;
+        publish();
       }
       return;
     }
 
     if (
-      d.type !== "sw-transclude-descendants" ||
-      typeof d.token !== "string" ||
-      !Array.isArray(d.descendants)
+      data.type !== "sw-transclude-descendants" ||
+      typeof data.token !== "string" ||
+      !Array.isArray(data.descendants)
     ) {
       return;
     }
 
     const host = hostByChildWindow.get(sourceWindow);
-    const state = host ? stateByHost.get(host) : undefined;
+    const state = host ? hostStates.get(host) : undefined;
     if (!state) return;
 
-    // Child reported its descendants. We trust only the child subtree here; the
-    // current parent still prefixes its own host.id before forwarding upward.
-    tokenByWindow.set(sourceWindow, d.token);
-    state.childToken = d.token;
+    // Child reports descendant paths relative to itself.
+    tokenByWindow.set(sourceWindow, data.token);
+    state.childToken = data.token;
     state.childDescendants.clear();
-    for (const entry of d.descendants) {
-      if (typeof entry !== "object" || entry === null) continue;
-      const { token, id, name } = entry as {
-        token?: unknown;
-        id?: unknown;
-        name?: unknown;
-      };
-      if (typeof token !== "string") continue;
-      if (!Array.isArray(id) || !id.every((part) => typeof part === "string")) {
-        continue;
-      }
-      state.childDescendants.set(token, {
-        id: [...id],
-        name:
-          Array.isArray(name) && name.every((part) => typeof part === "string")
-            ? [...name]
-            : [...id],
-      });
+
+    for (const entry of data.descendants) {
+      if (!entry || typeof entry !== "object") continue;
+      const token = (entry as { token?: unknown }).token;
+      const id = asStringArray((entry as { id?: unknown }).id);
+      if (typeof token !== "string" || !id) continue;
+      const name = asStringArray((entry as { name?: unknown }).name) ?? id;
+      state.childDescendants.set(token, { id: [...id], name: [...name] });
     }
-    publishDescendants();
+
+    publish();
   });
 
-  // Send an initial self announcement, and repeat on bfcache restore.
+  const announceSelf = () => {
+    const message: TranscludeTrackerMessage = {
+      type: "sw-transclude-self",
+      token: selfToken,
+    };
+    post(window.parent, message);
+    if (window.top && window.top !== window.parent) post(window.top, message);
+  };
+
   announceSelf();
   window.addEventListener("pageshow", announceSelf);
-
-  return {
-    track,
-    untrack,
-    syncIframeWindow,
-    notifyIdChanged,
-  };
+  return { track, untrack, syncIframeWindow, notifyIdChanged };
 }
