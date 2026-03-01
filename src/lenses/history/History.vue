@@ -275,6 +275,30 @@
                                             }}
                                         </button>
                                     </li>
+                                    <li
+                                        v-if="
+                                            $graffitiSession.value &&
+                                            index === 0 &&
+                                            $graffitiSession.value.actor !==
+                                                version.actor
+                                        "
+                                    >
+                                        <button
+                                            :disabled="hasPendingMutation"
+                                            @click.stop="
+                                                endorsePageVersion(
+                                                    version,
+                                                    $graffitiSession.value,
+                                                )
+                                            "
+                                        >
+                                            {{
+                                                isEndorsingVersion(version)
+                                                    ? 'Endorsing...'
+                                                    : 'Endorse'
+                                            }}
+                                        </button>
+                                    </li>
                                     <li>
                                         <button @click.stop="openEditLens">
                                             Edit
@@ -444,12 +468,14 @@ const activeProtection = computed(() => {
 const graffiti = useGraffiti();
 const navigate = window.navigate;
 const restoringVersionUrl = ref<string | null>(null);
+const endorsingVersionUrl = ref<string | null>(null);
 const deletingVersionUrl = ref<string | null>(null);
 const isUpdatingProtection = ref(false);
 const undoingProtectionUrl = ref<string | null>(null);
 const hasPendingMutation = computed(
     () =>
         restoringVersionUrl.value !== null ||
+        endorsingVersionUrl.value !== null ||
         deletingVersionUrl.value !== null ||
         isUpdatingProtection.value ||
         undoingProtectionUrl.value !== null,
@@ -527,6 +553,33 @@ async function restorePageVersion(
     }
 }
 
+async function endorsePageVersion(
+    version: PageVersionObject,
+    session: GraffitiSession,
+) {
+    if (hasPendingMutation.value) return;
+    const html = transclude.value?.getAttribute("srcdoc");
+    if (!html) {
+        console.error("no HTML to endorse");
+        return;
+    }
+    endorsingVersionUrl.value = version.url;
+    try {
+        selectedPageVersion.value = await createPageVersion(
+            graffiti,
+            version.value.object,
+            html,
+            pageVersions.value.map<string>((v) => v.url),
+            `Endorse: ${version.value.summary}`,
+            session,
+        );
+    } finally {
+        if (endorsingVersionUrl.value === version.url) {
+            endorsingVersionUrl.value = null;
+        }
+    }
+}
+
 async function deleteSelectedPageVersion(
     version: PageVersionObject,
     session: GraffitiSession,
@@ -593,6 +646,8 @@ const isSelected = (version: PageVersionObject) =>
     effectiveSelectedPageVersion.value?.url === version.url;
 const isRestoringVersion = (version: PageVersionObject) =>
     restoringVersionUrl.value === version.url;
+const isEndorsingVersion = (version: PageVersionObject) =>
+    endorsingVersionUrl.value === version.url;
 const isDeletingVersion = (version: PageVersionObject) =>
     deletingVersionUrl.value === version.url;
 
