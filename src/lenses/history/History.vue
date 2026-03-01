@@ -165,6 +165,14 @@
                                     >
                                         <template
                                             v-if="
+                                                $graffitiSession.value?.actor ===
+                                                version.actor
+                                            "
+                                        >
+                                            <span>(You.)</span>
+                                        </template>
+                                        <template
+                                            v-else-if="
                                                 getActorTrustStatus(
                                                     version.actor,
                                                 ) === 'trusted'
@@ -720,12 +728,21 @@ const trustAnnotationsByActor = computed(() => {
 });
 const trustedEditors = computed(() => {
     if (trustAnnotationsByActor.value === undefined) return undefined;
-    return [...trustAnnotationsByActor.value.entries()]
+    const trusted = new Set(
+        [...trustAnnotationsByActor.value.entries()]
         .filter(([_, o]) => o === true || o?.value.activity === "Trust")
-        .map(([actor]) => actor);
+        .map(([actor]) => actor),
+    );
+
+    if (session.value?.actor) {
+        trusted.add(session.value.actor);
+    }
+
+    return [...trusted];
 });
 
 const getActorTrustStatus = (actor: string) => {
+    if (session.value?.actor === actor) return "self";
     const byActor = trustAnnotationsByActor.value;
     if (!byActor) return "loading";
     const trustValue = byActor.get(actor);
@@ -738,6 +755,7 @@ const trustMutationActor = ref<string | null>(null);
 const isUpdatingTrust = (actor: string) => trustMutationActor.value === actor;
 
 async function toggleActorTrust(actor: string, session: GraffitiSession) {
+    if (actor === session.actor) return;
     trustMutationActor.value = actor;
     try {
         const trustValue = trustAnnotationsByActor.value?.get(actor);
