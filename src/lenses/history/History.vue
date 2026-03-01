@@ -16,10 +16,87 @@
                             <h3>{{ formatSummary(version.value.summary) }}</h3>
                         </header>
 
-                        <p class="history-meta">
-                            <strong class="history-actor">
-                                <GraffitiActorToHandle :actor="version.actor" />
-                            </strong>
+                        <div class="history-meta">
+                            <p class="history-actor-row">
+                                <strong class="history-actor">
+                                    <GraffitiActorToHandle
+                                        :actor="version.actor"
+                                    />
+                                </strong>
+                                <span
+                                    class="history-trust-inline"
+                                    v-if="isSelected(version)"
+                                >
+                                    <template
+                                        v-if="
+                                            getActorTrustStatus(
+                                                version.actor,
+                                            ) === 'trusted'
+                                        "
+                                    >
+                                        <span>(Trusted editor.</span>
+                                        <button
+                                            class="secondary"
+                                            type="button"
+                                            v-if="
+                                                $graffitiSession.value &&
+                                                !isUpdatingTrust(version.actor)
+                                            "
+                                            @click.stop.prevent="
+                                                toggleActorTrust(
+                                                    version.actor,
+                                                    $graffitiSession.value,
+                                                )
+                                            "
+                                        >
+                                            Untrust?
+                                        </button>
+                                        <button
+                                            class="secondary"
+                                            disabled
+                                            type="button"
+                                            v-else
+                                        >
+                                            Updating...
+                                        </button>
+                                        <span>)</span>
+                                    </template>
+                                    <template
+                                        v-else-if="
+                                            getActorTrustStatus(
+                                                version.actor,
+                                            ) === 'untrusted'
+                                        "
+                                    >
+                                        <span>(Untrusted editor.</span>
+                                        <button
+                                            type="button"
+                                            v-if="
+                                                $graffitiSession.value &&
+                                                !isUpdatingTrust(version.actor)
+                                            "
+                                            @click.stop.prevent="
+                                                toggleActorTrust(
+                                                    version.actor,
+                                                    $graffitiSession.value,
+                                                )
+                                            "
+                                        >
+                                            Trust?
+                                        </button>
+                                        <button
+                                            class="secondary"
+                                            disabled
+                                            type="button"
+                                            v-else
+                                        >
+                                            Updating...
+                                        </button>
+                                        <span>)</span>
+                                    </template>
+                                    <span v-else>(Loading...)</span>
+                                </span>
+                            </p>
                             <time
                                 :datetime="
                                     new Date(
@@ -33,7 +110,7 @@
                                     ).toLocaleString()
                                 }}
                             </time>
-                        </p>
+                        </div>
 
                         <footer
                             v-if="$graffitiSession.value && isSelected(version)"
@@ -122,11 +199,15 @@ import {
     useGraffiti,
     GraffitiActorToHandle,
     useGraffitiDiscover,
+    useGraffitiSession,
 } from "@graffiti-garden/wrapper-vue";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useTemplateRef } from "vue";
 import { initLens, outputLensStatus } from "../../backend/lens-client";
 import { composeRoute } from "../../backend/route";
+import { annotationSchema } from "../utils/schemas";
+import { computeTrustAnnotationsByActor, trustActor } from "../utils/trust";
+import { defaultTrustedEditors } from "../../default-trusted-editors";
 
 const pageName = ref("");
 const pageHash = ref("");
@@ -313,6 +394,53 @@ watch([pageVersions, isFirstPoll], ([versions, firstPoll]) => {
         outputLensStatus("not-found");
     }
 });
+
+const session = useGraffitiSession();
+const { objects: trustAnnotations, isFirstPoll: isTrustAnnotationLoading } =
+    useGraffitiDiscover(
+        () => (session.value ? [session.value.actor] : []),
+        annotationSchema(["Trust", "Untrust"], { actor: session.value?.actor }),
+    );
+const trustAnnotationsByActor = computed(() => {
+    if (isTrustAnnotationLoading.value) return undefined;
+    return computeTrustAnnotationsByActor(
+        trustAnnotations.value,
+        defaultTrustedEditors,
+    );
+});
+
+const getActorTrustStatus = (actor: string) => {
+    const byActor = trustAnnotationsByActor.value;
+    if (!byActor) return "loading";
+    const trustValue = byActor.get(actor);
+    return trustValue === true || trustValue?.value.activity === "Trust"
+        ? "trusted"
+        : "untrusted";
+};
+
+const trustMutationActor = ref<string | null>(null);
+const isUpdatingTrust = (actor: string) => trustMutationActor.value === actor;
+
+async function toggleActorTrust(actor: string, session: GraffitiSession) {
+    trustMutationActor.value = actor;
+    try {
+        const trustValue = trustAnnotationsByActor.value?.get(actor);
+
+        if (typeof trustValue === "object") {
+            await graffiti.delete(trustValue, session);
+        } else {
+            await trustActor(graffiti, actor, session, {
+                untrust: trustValue === true,
+            });
+        }
+    } catch (error) {
+        alert(`Error updating editor trust: String(error)`);
+    } finally {
+        if (trustMutationActor.value === actor) {
+            trustMutationActor.value = null;
+        }
+    }
+}
 </script>
 
 <style scoped>
@@ -374,9 +502,25 @@ watch([pageVersions, isFirstPoll], ([versions, firstPoll]) => {
     color: var(--text-color);
 }
 
+.history-actor-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.35rem;
+}
+
 .history-meta time {
     color: var(--secondary-color);
     font-size: 0.85rem;
+}
+
+.history-trust-inline {
+    font-size: 0.85rem;
+    color: var(--text-color);
+}
+
+.history-trust-inline button {
+    margin-left: 0.25rem;
 }
 
 .history-list footer > ul {
