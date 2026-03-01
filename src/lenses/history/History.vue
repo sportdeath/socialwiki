@@ -121,7 +121,12 @@
                     >
                         <article
                             :id="version.url"
-                            :class="{ selected: isSelected(version) }"
+                            :class="{
+                                selected: isSelected(version),
+                                untrusted:
+                                    isVersionUntrusted(version) &&
+                                    !isSelected(version),
+                            }"
                             role="button"
                             tabindex="0"
                             @click="selectPageVersion(version)"
@@ -145,6 +150,15 @@
                                             :actor="version.actor"
                                         />
                                     </strong>
+                                    <span
+                                        v-if="
+                                            isVersionUntrusted(version) &&
+                                            !isSelected(version)
+                                        "
+                                        class="history-untrusted-indicator"
+                                    >
+                                        (Untrusted editor)
+                                    </span>
                                     <span
                                         class="history-trust-inline"
                                         v-if="isSelected(version)"
@@ -611,12 +625,22 @@ function openVersionLink() {
 }
 
 const effectiveSelectedPageVersion = computed(() => {
+    if (isProtected.value === undefined) return null;
+
     const selected = selectedPageVersion.value;
     if (
         selected &&
         pageVersions.value.some((version) => version.url === selected.url)
     ) {
         return selected;
+    }
+
+    if (isProtected.value) {
+        return (
+            pageVersions.value.find((version) =>
+                trustedEditors.value?.includes(version.actor),
+            ) || null
+        );
     }
 
     return pageVersions.value.at(0) || null;
@@ -639,6 +663,7 @@ const previewAddress = computed(() => {
 });
 
 const selectPageVersion = (version: PageVersionObject) => {
+    if (isProtected.value === undefined) return;
     selectedPageVersion.value = version;
 };
 
@@ -650,6 +675,10 @@ const isEndorsingVersion = (version: PageVersionObject) =>
     endorsingVersionUrl.value === version.url;
 const isDeletingVersion = (version: PageVersionObject) =>
     deletingVersionUrl.value === version.url;
+const isVersionUntrusted = (version: PageVersionObject) =>
+    isProtected.value === true &&
+    trustedEditors.value !== undefined &&
+    !trustedEditors.value.includes(version.actor);
 
 const formatSummary = (summary?: string) =>
     summary?.trim() || "No summary provided";
@@ -815,6 +844,14 @@ async function toggleActorTrust(actor: string, session: GraffitiSession) {
     box-shadow: 0 0 0 1px var(--border-color-hover);
 }
 
+.history-list > li > article.untrusted {
+    border-style: dashed;
+}
+
+.history-list > li > article.untrusted h3 {
+    color: var(--secondary-color);
+}
+
 .history-list > li > article:focus-visible {
     outline: 2px solid var(--border-color-hover);
     outline-offset: 1px;
@@ -855,6 +892,12 @@ async function toggleActorTrust(actor: string, session: GraffitiSession) {
 .history-trust-inline {
     font-size: 0.85rem;
     color: var(--text-color);
+}
+
+.history-untrusted-indicator {
+    font-size: 0.78rem;
+    color: var(--secondary-color);
+    font-style: italic;
 }
 
 .history-trust-inline button {
