@@ -165,8 +165,8 @@
                                     >
                                         <template
                                             v-if="
-                                                $graffitiSession.value?.actor ===
-                                                version.actor
+                                                $graffitiSession.value
+                                                    ?.actor === version.actor
                                             "
                                         >
                                             <span>(You.)</span>
@@ -316,8 +316,8 @@
                                         >
                                             {{
                                                 isEndorsingVersion(version)
-                                                    ? 'Endorsing...'
-                                                    : 'Endorse'
+                                                    ? "Endorsing..."
+                                                    : "Endorse"
                                             }}
                                         </button>
                                     </li>
@@ -373,7 +373,7 @@
 </template>
 
 <script lang="ts" setup>
-import TwoPaneLayout from "../TwoPaneLayout.vue";
+import TwoPaneLayout from "../utils/TwoPaneLayout.vue";
 import type { GraffitiSession } from "@graffiti-garden/api";
 import {
     createPageVersion,
@@ -381,7 +381,7 @@ import {
     pageVersionSchema,
     type PageVersionObject,
     sortPageVersions,
-} from "../page-versions";
+} from "../utils/page-versions";
 import {
     useGraffiti,
     GraffitiActorToHandle,
@@ -730,8 +730,8 @@ const trustedEditors = computed(() => {
     if (trustAnnotationsByActor.value === undefined) return undefined;
     const trusted = new Set(
         [...trustAnnotationsByActor.value.entries()]
-        .filter(([_, o]) => o === true || o?.value.activity === "Trust")
-        .map(([actor]) => actor),
+            .filter(([_, o]) => o === true || o?.value.activity === "Trust")
+            .map(([actor]) => actor),
     );
 
     if (session.value?.actor) {

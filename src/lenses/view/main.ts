@@ -9,7 +9,7 @@ import {
   pageVersionSchema,
   sortPageVersions,
   type PageVersionObject,
-} from "../page-versions";
+} from "../utils/page-versions";
 import {
   ErrorPage,
   LoadingPage,
@@ -129,7 +129,9 @@ async function getTrustedEditors() {
   );
   const trusted = new Set(
     [...trustByActor.entries()]
-      .filter(([_, trust]) => trust === true || trust?.value.activity === "Trust")
+      .filter(
+        ([_, trust]) => trust === true || trust?.value.activity === "Trust",
+      )
       .map(([actor]) => actor),
   );
   if (session?.actor) {
@@ -140,12 +142,12 @@ async function getTrustedEditors() {
 
 async function getPageVersionsAndProtection(pageName: string) {
   const objects = new Map<string, PageVersionObject | AnnotationObject>();
-  for await (const result of graffiti.discover(
-    [pageName],
-    {
-      anyOf: [pageVersionSchema(pageName), annotationSchema(["Protect", "Remove"])],
-    } as const,
-  )) {
+  for await (const result of graffiti.discover([pageName], {
+    anyOf: [
+      pageVersionSchema(pageName),
+      annotationSchema(["Protect", "Remove"]),
+    ],
+  } as const)) {
     if (result.error) {
       console.error(result.error);
       continue;
@@ -153,15 +155,16 @@ async function getPageVersionsAndProtection(pageName: string) {
     if (result.tombstone) {
       objects.delete(result.object.url);
     } else {
-      objects.set(result.object.url, result.object as PageVersionObject | AnnotationObject);
+      objects.set(
+        result.object.url,
+        result.object as PageVersionObject | AnnotationObject,
+      );
     }
   }
 
   const values = [...objects.values()];
   const pageVersions = sortPageVersions(
-    values.filter(
-      (o): o is PageVersionObject => o.value.activity === "Update",
-    ),
+    values.filter((o): o is PageVersionObject => o.value.activity === "Update"),
   );
   const protectionAnnotations = values.filter(
     (o): o is AnnotationObject =>
@@ -178,7 +181,8 @@ function pickVersion(
 ) {
   if (!isProtected) return pageVersions.at(0) || null;
   return (
-    pageVersions.find((version) => trustedEditors.includes(version.actor)) || null
+    pageVersions.find((version) => trustedEditors.includes(version.actor)) ||
+    null
   );
 }
 
@@ -193,7 +197,11 @@ async function renderLens(options?: { force?: boolean }) {
   transclude.setAttribute("name", pageName);
   const contentKey = requestedVersion || pageName;
 
-  if (!options?.force && address === renderedAddress && contentKey === currentContentKey) {
+  if (
+    !options?.force &&
+    address === renderedAddress &&
+    contentKey === currentContentKey
+  ) {
     return;
   }
 
@@ -249,7 +257,9 @@ async function renderLens(options?: { force?: boolean }) {
       mediaAddress = selectedVersion.value.result.media;
     }
 
-    const media = await graffiti.getMedia(mediaAddress, { types: ["text/html"] });
+    const media = await graffiti.getMedia(mediaAddress, {
+      types: ["text/html"],
+    });
     if (renderVersion !== activeRenderVersion) return;
 
     const html = await media.data.text();

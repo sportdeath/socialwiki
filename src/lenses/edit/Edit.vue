@@ -194,9 +194,9 @@ import {
 } from "vue";
 import * as monaco from "monaco-editor";
 import { CodeEditor, DiffEditor } from "monaco-editor-vue3";
-import TwoPaneLayout from "../TwoPaneLayout.vue";
+import TwoPaneLayout from "../utils/TwoPaneLayout.vue";
 import { useGraffiti, useGraffitiSession } from "@graffiti-garden/wrapper-vue";
-import { createPageVersion } from "../page-versions";
+import { createPageVersion } from "../utils/page-versions";
 import { initVimMode, type VimAdapterInstance } from "monaco-vim";
 import { initLens } from "../../backend/lens-client";
 import { composeRoute } from "../../backend/route";
