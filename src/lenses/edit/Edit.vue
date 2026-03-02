@@ -178,6 +178,41 @@
             </template>
         </TwoPaneLayout>
 
+        <aside
+            v-if="showProtectedDialog"
+            class="protected-dialog-overlay"
+            @click.self.prevent=""
+        >
+            <dialog open class="protected-dialog">
+                <h2>Protected Page</h2>
+                <p>
+                    This is a protected page. Only people who have marked you as
+                    a "trusted editor" will see changes you make here.
+                </p>
+                <p>
+                    See this page's
+                    <a
+                        :href="historyRoute"
+                        @click.prevent="openProtectedPageHistory"
+                        >History</a
+                    >
+                    for more information.
+                </p>
+                <footer>
+                    <button
+                        type="button"
+                        class="secondary"
+                        @click="cancelProtectedEdit"
+                    >
+                        Cancel
+                    </button>
+                    <button type="button" @click="continueProtectedEdit">
+                        Continue to editor
+                    </button>
+                </footer>
+            </dialog>
+        </aside>
+
         <div v-if="publishing" class="backdrop" @click.prevent="">
             <h1 class="dots">Publishing</h1>
         </div>
@@ -198,11 +233,15 @@ import * as monaco from "monaco-editor";
 import { CodeEditor, DiffEditor } from "monaco-editor-vue3";
 import TwoPaneLayout from "../utils/TwoPaneLayout.vue";
 import { useGraffiti, useGraffitiSession } from "@graffiti-garden/wrapper-vue";
-import { createPageVersion } from "../utils/page-versions";
+import { createPageVersion, getPageVersions } from "../utils/page-versions";
 import { initVimMode, type VimAdapterInstance } from "monaco-vim";
 import { initLens } from "../../backend/lens-client";
 import { composeRoute } from "../../backend/route";
 import { randomBytes, bytesToHex } from "@noble/hashes/utils.js";
+import { annotationSchema, type AnnotationObject } from "../utils/schemas";
+import { computeTrustAnnotationsByActor } from "../utils/trust";
+import { defaultTrustedEditors } from "../utils/default-trusted-editors";
+import { sortProtectionHistory } from "../utils/protection";
 
 const previewTranscludeId = bytesToHex(randomBytes());
 const previewTransclude = useTemplateRef<HTMLElement>("previewTransclude");
@@ -367,12 +406,183 @@ function onPreviewNavigate(event: Event) {
 
 const pageName = ref("");
 const pageHash = ref("");
+const pageAddress = computed(() => `${pageName.value}${pageHash.value}`);
+const historyRoute = computed(
+    () =>
+        `#${composeRoute({
+            lens: "h",
+            lensParams: new URLSearchParams(),
+            pageAddress: pageAddress.value,
+        })}`,
+);
+const viewRoute = computed(
+    () =>
+        `#${composeRoute({
+            lens: "v",
+            lensParams: new URLSearchParams(),
+            pageAddress: pageAddress.value,
+        })}`,
+);
+const isProtectionLoading = ref(false);
+const isProtectedPage = ref<boolean | undefined>(undefined);
+const showProtectedDialog = ref(false);
+let activeProtectionRequest = 0;
 const session = useGraffitiSession();
 const graffiti = useGraffiti();
-initLens(async (pageAddress, lensParams) => {
-    const url = new URL(pageAddress, "https://example.com");
-    pageName.value = url.pathname.slice(1);
+
+function continueProtectedEdit() {
+    showProtectedDialog.value = false;
+}
+
+function cancelProtectedEdit() {
+    showProtectedDialog.value = false;
+    navigate(viewRoute.value);
+}
+
+function openProtectedPageHistory() {
+    navigate(historyRoute.value);
+}
+
+async function waitForSessionStatusKnown() {
+    if (session.value !== undefined) return;
+    await new Promise<void>((resolve) => {
+        const handleSessionReady = () => {
+            graffiti.sessionEvents.removeEventListener(
+                "initialized",
+                handleSessionReady,
+            );
+            graffiti.sessionEvents.removeEventListener(
+                "login",
+                handleSessionReady,
+            );
+            graffiti.sessionEvents.removeEventListener(
+                "logout",
+                handleSessionReady,
+            );
+            resolve();
+        };
+        graffiti.sessionEvents.addEventListener(
+            "initialized",
+            handleSessionReady,
+        );
+        graffiti.sessionEvents.addEventListener("login", handleSessionReady);
+        graffiti.sessionEvents.addEventListener("logout", handleSessionReady);
+    });
+}
+
+async function getTrustedEditors() {
+    const trustAnnotationsByUrl = new Map<string, AnnotationObject>();
+    const currentSession = session.value;
+    if (currentSession?.actor) {
+        for await (const result of graffiti.discover(
+            [currentSession.actor],
+            annotationSchema(["Trust", "Untrust"], {
+                actor: currentSession.actor,
+            }),
+        )) {
+            if (result.error) {
+                console.error(result.error);
+                continue;
+            }
+            if (result.tombstone) {
+                trustAnnotationsByUrl.delete(result.object.url);
+            } else {
+                trustAnnotationsByUrl.set(
+                    result.object.url,
+                    result.object as AnnotationObject,
+                );
+            }
+        }
+    }
+
+    const trustByActor = computeTrustAnnotationsByActor(
+        [...trustAnnotationsByUrl.values()],
+        defaultTrustedEditors,
+    );
+    const trustedEditors = new Set(
+        [...trustByActor.entries()]
+            .filter(
+                ([_, trust]) =>
+                    trust === true || trust?.value.activity === "Trust",
+            )
+            .map(([actor]) => actor),
+    );
+    if (currentSession?.actor) {
+        trustedEditors.add(currentSession.actor);
+    }
+
+    return [...trustedEditors];
+}
+
+async function getProtectionAnnotations(page: string) {
+    const protectionByUrl = new Map<string, AnnotationObject>();
+    for await (const result of graffiti.discover(
+        [page],
+        annotationSchema(["Protect", "Remove"]),
+    )) {
+        if (result.error) {
+            console.error(result.error);
+            continue;
+        }
+        if (result.tombstone) {
+            protectionByUrl.delete(result.object.url);
+        } else {
+            protectionByUrl.set(
+                result.object.url,
+                result.object as AnnotationObject,
+            );
+        }
+    }
+
+    return [...protectionByUrl.values()];
+}
+
+async function refreshPageProtection(page: string, requestId: number) {
+    isProtectionLoading.value = true;
+    isProtectedPage.value = undefined;
+    showProtectedDialog.value = false;
+    try {
+        await waitForSessionStatusKnown();
+        if (requestId !== activeProtectionRequest) return;
+
+        const [trustedEditors, protectionAnnotations] = await Promise.all([
+            getTrustedEditors(),
+            getProtectionAnnotations(page),
+        ]);
+        if (requestId !== activeProtectionRequest) return;
+
+        const protectionHistory = sortProtectionHistory(
+            protectionAnnotations,
+            trustedEditors,
+        );
+        const isProtected =
+            protectionHistory.at(0)?.value.activity === "Protect";
+        isProtectedPage.value = isProtected;
+        showProtectedDialog.value = isProtected;
+    } catch (error) {
+        console.error(`Error checking page protection: ${String(error)}`);
+        if (requestId !== activeProtectionRequest) return;
+        isProtectedPage.value = false;
+        showProtectedDialog.value = false;
+    } finally {
+        if (requestId === activeProtectionRequest) {
+            isProtectionLoading.value = false;
+        }
+    }
+}
+
+initLens(async (nextPageAddress, lensParams) => {
+    const url = new URL(nextPageAddress, "https://example.com");
+    const nextPageName = url.pathname.slice(1);
+    const didChangePage = pageName.value !== nextPageName;
+
+    pageName.value = nextPageName;
     pageHash.value = url.hash;
+
+    if (didChangePage) {
+        const requestId = ++activeProtectionRequest;
+        void refreshPageProtection(nextPageName, requestId);
+    }
 
     const searchDraft = lensParams.get("draft");
     if (searchDraft !== null) {
@@ -646,11 +856,12 @@ async function publish(as?: boolean) {
         const summary = prompt("Edit summary (Briefly describe your changes)");
         if (summary === null) return;
         const nextPublishedHtml = editorHtml.value;
+        const existingVersions = await getPageVersions(graffiti, publishName);
         await createPageVersion(
             graffiti,
             publishName,
             nextPublishedHtml,
-            [],
+            existingVersions.map((version) => version.url),
             summary,
             session.value,
         );
@@ -693,6 +904,46 @@ async function publish(as?: boolean) {
     display: flex;
     align-items: center;
     justify-content: center;
+}
+
+.protected-dialog-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 120;
+    display: grid;
+    justify-items: center;
+    align-items: start;
+    overflow: auto;
+    padding: 1rem;
+    background: rgb(0 0 0 / 0.2);
+}
+
+.protected-dialog {
+    position: static;
+    inset: auto;
+    margin: 0;
+    width: min(42rem, calc(100vw - 2rem));
+    overflow: visible;
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    background: var(--background-color);
+    color: var(--text-color);
+    box-shadow: 0 0 2.5rem rgb(0 0 0 / 0.9);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.protected-dialog h2,
+.protected-dialog p {
+    margin: 0;
+}
+
+.protected-dialog footer {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
 }
 
 /* Editor menubar + dropdowns */
