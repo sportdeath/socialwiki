@@ -22,7 +22,7 @@ import { sortProtectionHistory } from "../utils/protection";
 import { sha256 } from "@noble/hashes/sha2.js";
 import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 
-const graffiti = new window.graffiti();
+const graffiti = new window.Graffiti();
 
 let requestedAddress = "";
 let requestedLensParams = new URLSearchParams();

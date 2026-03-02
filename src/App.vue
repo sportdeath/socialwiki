@@ -209,7 +209,7 @@ function logout(session: GraffitiSession) {
 // Watch transclude srcdoc for draft updates and listen for explicit
 // navigation events from the transclude element.
 const transclude = useTemplateRef<HTMLElement>("transclude");
-const srcdoc = ref("");
+const srcdoc = ref<string | null>(null);
 let observer: MutationObserver | undefined;
 function onTranscludeNavigate(e: Event) {
     if (!(e instanceof CustomEvent) || typeof e.detail?.to !== "string") return;
@@ -226,7 +226,7 @@ function onTranscludeNavigate(e: Event) {
 onMounted(() => {
     if (!transclude.value) return;
     observer = new MutationObserver(() => {
-        srcdoc.value = transclude.value?.getAttribute("srcdoc") ?? "";
+        srcdoc.value = transclude.value?.getAttribute("srcdoc") ?? null;
     });
     transclude.value.addEventListener(
         "sw-transclude-navigate",
@@ -237,7 +237,7 @@ onMounted(() => {
         attributeFilter: ["srcdoc"],
     });
     // initialize value
-    srcdoc.value = transclude.value?.getAttribute("srcdoc") ?? "";
+    srcdoc.value = transclude.value?.getAttribute("srcdoc") ?? null;
 });
 onBeforeUnmount(() => {
     observer?.disconnect();
@@ -248,9 +248,9 @@ onBeforeUnmount(() => {
 });
 
 const editAddress = computed(() => {
-    const lensParams = new URLSearchParams({
-        draft: srcdoc.value,
-    });
+    const lensParams = new URLSearchParams(
+        srcdoc.value ? { draft: srcdoc.value } : undefined,
+    );
     return composeRoute({
         lens: "e",
         lensParams,

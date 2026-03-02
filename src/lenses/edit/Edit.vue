@@ -235,7 +235,7 @@ const template = (pageName: string) => `<!doctype html>
       }),
     })
       .use(GraffitiPlugin, {
-        graffiti: new window.graffiti(),
+        graffiti: new window.Graffiti(),
       })
       .mount("#app");
   <\/script>

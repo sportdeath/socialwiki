@@ -4,6 +4,6 @@ import Edit from "./Edit.vue";
 
 createApp(Edit)
   .use(GraffitiPlugin, {
-    graffiti: new window.graffiti(),
+    graffiti: new window.Graffiti(),
   })
   .mount("#app");

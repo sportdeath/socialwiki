@@ -6,6 +6,7 @@ import { installNavigation } from "./navigation-client";
 declare global {
   interface Window {
     graffiti: typeof GraffitiRpcClient;
+    Graffiti: typeof GraffitiRpcClient;
     topOrigin: string;
   }
 }
@@ -28,11 +29,12 @@ if (window.top !== window) {
   }
 
   // Then inject graffiti
-  window.graffiti = GraffitiRpcClient;
+  window.graffiti = GraffitiRpcClient; // backwards compatibility
+  window.Graffiti = GraffitiRpcClient;
 
   // Give the page access to transclude,
   // and the ability to navigate
-  installTransclude(new window.graffiti(), window.topOrigin);
+  installTransclude(new window.Graffiti(), window.topOrigin);
   installNavigation(window.topOrigin);
 } else {
   // If we are the top level window, wrap the content in an iframe

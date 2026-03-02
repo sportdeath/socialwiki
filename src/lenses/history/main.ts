@@ -4,6 +4,6 @@ import History from "./History.vue";
 
 createApp(History)
   .use(GraffitiPlugin, {
-    graffiti: new window.graffiti(),
+    graffiti: new window.Graffiti(),
   })
   .mount("#app");
