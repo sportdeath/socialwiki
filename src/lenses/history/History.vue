@@ -269,10 +269,7 @@
                             </div>
 
                             <footer
-                                v-if="
-                                    $graffitiSession.value &&
-                                    isSelected(version)
-                                "
+                                v-if="isSelected(version)"
                             >
                                 <ul>
                                     <li
@@ -322,14 +319,20 @@
                                         </button>
                                     </li>
                                     <li>
-                                        <button @click.stop="openEditLens">
+                                        <a
+                                            :href="editAddress"
+                                            @click.stop
+                                        >
                                             Edit
-                                        </button>
+                                        </a>
                                     </li>
                                     <li>
-                                        <button @click.stop="openVersionLink">
+                                        <a
+                                            :href="previewAddress"
+                                            @click.stop
+                                        >
                                             Link
-                                        </button>
+                                        </a>
                                     </li>
                                     <li
                                         v-if="
@@ -424,6 +427,7 @@ initLens(async (pageAddress, _lensParams) => {
 const transclude = useTemplateRef<HTMLElement>("transclude");
 defineExpose({ transclude });
 let previewObserver: MutationObserver | undefined;
+const previewHtml = ref("");
 
 const outputPreviewIfReady = () => {
     const preview = transclude.value;
@@ -431,6 +435,7 @@ const outputPreviewIfReady = () => {
 
     const status = preview.getAttribute("status");
     const html = preview.getAttribute("srcdoc");
+    previewHtml.value = html ?? "";
     if (status === "ok" && html !== null) {
         outputLensStatus("ok", html);
     }
@@ -505,7 +510,6 @@ const activeProtection = computed(() => {
 });
 
 const graffiti = useGraffiti();
-const navigate = window.navigate;
 const restoringVersionUrl = ref<string | null>(null);
 const endorsingVersionUrl = ref<string | null>(null);
 const deletingVersionUrl = ref<string | null>(null);
@@ -634,21 +638,6 @@ async function deleteSelectedPageVersion(
     }
 }
 
-function openEditLens() {
-    const draft = transclude.value?.getAttribute("srcdoc") ?? "";
-    navigate(
-        `#${composeRoute({
-            lens: "e",
-            lensParams: new URLSearchParams({ draft }),
-            pageAddress: `${pageName.value}${pageHash.value}`,
-        })}`,
-    );
-}
-
-function openVersionLink() {
-    navigate(previewAddress.value);
-}
-
 const effectiveSelectedPageVersion = computed(() => {
     if (isProtected.value === undefined) return null;
 
@@ -686,6 +675,16 @@ const previewAddress = computed(() => {
         pageAddress: `${pageName.value}${pageHash.value}`,
     })}`;
 });
+const editAddress = computed(
+    () =>
+        `#${composeRoute({
+            lens: "e",
+            lensParams: new URLSearchParams({
+                draft: previewHtml.value,
+            }),
+            pageAddress: `${pageName.value}${pageHash.value}`,
+        })}`,
+);
 
 const selectPageVersion = (version: PageVersionObject) => {
     if (isProtected.value === undefined) return;
