@@ -167,6 +167,7 @@
             <template #right-pane>
                 <div class="pane">
                     <sw-transclude
+                        ref="previewTransclude"
                         :id="previewTranscludeId"
                         name="Preview"
                         :hash="pageHash"
@@ -191,6 +192,7 @@ import {
     computed,
     onBeforeUnmount,
     onMounted,
+    useTemplateRef,
 } from "vue";
 import * as monaco from "monaco-editor";
 import { CodeEditor, DiffEditor } from "monaco-editor-vue3";
@@ -203,6 +205,7 @@ import { composeRoute } from "../../backend/route";
 import { randomBytes, bytesToHex } from "@noble/hashes/utils.js";
 
 const previewTranscludeId = bytesToHex(randomBytes());
+const previewTransclude = useTemplateRef<HTMLElement>("previewTransclude");
 
 const template = (pageName: string) => `<!doctype html>
 <head>
@@ -352,6 +355,15 @@ watch(hasUnsavedChanges, (isDirty, wasDirty) => {
 });
 
 const navigate = window.navigate;
+function onPreviewNavigate(event: Event) {
+    if (
+        !(event instanceof CustomEvent) ||
+        typeof event.detail?.to !== "string"
+    ) {
+        return;
+    }
+    window.navigate(event.detail.to);
+}
 
 const pageName = ref("");
 const pageHash = ref("");
@@ -576,10 +588,18 @@ const beforeUnload = (event: BeforeUnloadEvent) => {
 onMounted(() => {
     window.addEventListener("beforeunload", beforeUnload);
     document.addEventListener("pointerdown", onMenuPointerDown);
+    previewTransclude.value?.addEventListener(
+        "sw-transclude-navigate",
+        onPreviewNavigate,
+    );
 });
 onBeforeUnmount(() => {
     window.removeEventListener("beforeunload", beforeUnload);
     document.removeEventListener("pointerdown", onMenuPointerDown);
+    previewTransclude.value?.removeEventListener(
+        "sw-transclude-navigate",
+        onPreviewNavigate,
+    );
     disposeVimMode();
     clearLoginBypassListener();
 });

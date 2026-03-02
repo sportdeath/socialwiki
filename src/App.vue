@@ -206,36 +206,45 @@ function logout(session: GraffitiSession) {
     });
 }
 
-// Watch the transclude srcdoc and src for changes.
-// Update the route to reflect the src and store the
-// srcdoc for the purpose of populating the edit draft.
+// Watch transclude srcdoc for draft updates and listen for explicit
+// navigation events from the transclude element.
 const transclude = useTemplateRef<HTMLElement>("transclude");
 const srcdoc = ref("");
 let observer: MutationObserver | undefined;
+function onTranscludeNavigate(e: Event) {
+    if (!(e instanceof CustomEvent) || typeof e.detail?.to !== "string") return;
+
+    const url = new URL(e.detail.to, window.origin).toString();
+    if (url.startsWith(window.origin + "/#")) {
+        const route = url.slice(window.origin.length + 2);
+        router.push(route.startsWith("/") ? route : "/" + route);
+        return;
+    }
+
+    window.location.href = url;
+}
 onMounted(() => {
     if (!transclude.value) return;
     observer = new MutationObserver(() => {
         srcdoc.value = transclude.value?.getAttribute("srcdoc") ?? "";
-
-        const src = transclude.value?.getAttribute("src") ?? "";
-
-        const url = new URL(src, window.origin).toString();
-        if (url.startsWith(window.origin + "/#")) {
-            const route = url.slice(window.origin.length + 2);
-            router.push(route);
-        } else {
-            window.location.href = url;
-        }
     });
+    transclude.value.addEventListener(
+        "sw-transclude-navigate",
+        onTranscludeNavigate,
+    );
     observer.observe(transclude.value, {
         attributes: true,
-        attributeFilter: ["srcdoc", "src"],
+        attributeFilter: ["srcdoc"],
     });
     // initialize value
     srcdoc.value = transclude.value?.getAttribute("srcdoc") ?? "";
 });
 onBeforeUnmount(() => {
     observer?.disconnect();
+    transclude.value?.removeEventListener(
+        "sw-transclude-navigate",
+        onTranscludeNavigate,
+    );
 });
 
 const editAddress = computed(() => {

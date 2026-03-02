@@ -435,10 +435,23 @@ const outputPreviewIfReady = () => {
         outputLensStatus("ok", html);
     }
 };
+function onPreviewNavigate(event: Event) {
+    if (
+        !(event instanceof CustomEvent) ||
+        typeof event.detail?.to !== "string"
+    ) {
+        return;
+    }
+    window.navigate(event.detail.to);
+}
 
 onMounted(() => {
     if (!transclude.value) return;
     previewObserver = new MutationObserver(outputPreviewIfReady);
+    transclude.value.addEventListener(
+        "sw-transclude-navigate",
+        onPreviewNavigate,
+    );
     previewObserver.observe(transclude.value, {
         attributes: true,
         attributeFilter: ["srcdoc"],
@@ -448,6 +461,10 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
     previewObserver?.disconnect();
+    transclude.value?.removeEventListener(
+        "sw-transclude-navigate",
+        onPreviewNavigate,
+    );
 });
 
 const { objects: pageVersionsAndAnnotations, isFirstPoll } =

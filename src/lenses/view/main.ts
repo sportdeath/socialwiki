@@ -45,17 +45,10 @@ function setTranscludeSrcDoc(
 
 setTranscludeSrcDoc(LoadingPage, "loading");
 
-// Watch the transclude src attribute.
-// If it changes, forward the navigation to the parent
-const observer = new MutationObserver(() => {
-  const to = transclude.getAttribute("src");
-  if (to) window.navigate(to);
-  // Delete it to avoid loops
-  transclude.removeAttribute("src");
-});
-observer.observe(transclude, {
-  attributes: true,
-  attributeFilter: ["src"],
+// Forward explicit transclude navigation requests to the parent
+transclude.addEventListener("sw-transclude-navigate", (e) => {
+  if (!(e instanceof CustomEvent) || typeof e.detail?.to !== "string") return;
+  window.navigate(e.detail.to);
 });
 
 function maybeRenderForSessionChange() {

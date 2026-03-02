@@ -28,6 +28,15 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
     protected destroyNavigation = () => {};
     protected setHash = (hash: string) => {};
     protected currentBlobUrl: string | null = null;
+    protected emitNavigate(to: string) {
+      this.dispatchEvent(
+        new CustomEvent("sw-transclude-navigate", {
+          detail: { to },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    }
     // We intentionally use both srcdoc and blob URLs:
     // - Top-level, non-opaque contexts use blob URLs because Chrome can behave
     //   incorrectly with sandboxed srcdoc updates.
@@ -105,33 +114,24 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
           return;
         }
 
-        // Otherwise, if the link is still external, we must be
-        // at the top. Simply set the src and watchers on
-        // the src will take care of the rest.
-        if (!isInternal) {
-          this.setAttribute("src", to);
-          return;
-        }
+        // Otherwise, if the link is still external, we must be at the top.
+        // Emit a navigation request for the owner to handle.
+        if (!isInternal) return this.emitNavigate(to);
 
         // Strip out the origin, leading slash and hash
         const route = url.slice(origin.length + 2);
 
-        // If there is no current source to compute relative routes
-        // against or the route is not relative, simply set the src,
-        // again assuming watchers on the src will take care of the rest.
+        // If there is no current source to compute relative routes against
+        // or the route is not relative, emit the navigation request as-is.
         const currentSrc = this.getAttribute("src");
         if (
-          currentSrc == null ||
+          currentSrc === null ||
           !(route.startsWith("?") || route.startsWith("#"))
         ) {
-          this.setAttribute("src", to);
-          return;
+          return this.emitNavigate(to);
         }
 
-        const currentSrcUrl = new URL(
-          this.getAttribute("src") || "",
-          origin,
-        ).toString();
+        const currentSrcUrl = new URL(currentSrc || "", origin).toString();
         if (!currentSrcUrl.startsWith(origin + "/#/")) {
           throw new Error(`Current src is not a valid route: ${currentSrcUrl}`);
         }
@@ -151,7 +151,9 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
           : toUrl.search;
 
         // Navigate to the new route
-        this.setAttribute("src", "#" + toUrl.toString().slice(origin.length));
+        const newSrc = "#" + toUrl.toString().slice(origin.length);
+        this.setAttribute("src", newSrc);
+        this.emitNavigate(newSrc);
       }, this.iframe);
 
       this.destroyNavigation = destroy;
