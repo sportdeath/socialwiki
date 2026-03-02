@@ -427,6 +427,7 @@ const isProtectionLoading = ref(false);
 const isProtectedPage = ref<boolean | undefined>(undefined);
 const showProtectedDialog = ref(false);
 let activeProtectionRequest = 0;
+let localDraftSeq = 0;
 const session = useGraffitiSession();
 const graffiti = useGraffiti();
 
@@ -585,7 +586,13 @@ initLens(async (nextPageAddress, lensParams) => {
     }
 
     const searchDraft = lensParams.get("draft");
-    if (searchDraft !== null) {
+    const incomingDraftSeq = Number(lensParams.get("draftSeq"));
+    const isLocalDraftEcho =
+        !didChangePage &&
+        Number.isFinite(incomingDraftSeq) &&
+        incomingDraftSeq > 0 &&
+        incomingDraftSeq <= localDraftSeq;
+    if (searchDraft !== null && !isLocalDraftEcho) {
         draftHtml.value = searchDraft;
     } else if (!draftHtml.value.length) {
         // If there's no draft HTML, initialize it with the template
@@ -762,12 +769,16 @@ const schedulePreviewUpdate = (newHtml: string) => {
     if (timeout !== null) clearTimeout(timeout);
     timeout = window.setTimeout(() => {
         previewHtml.value = newHtml;
+        const draftSeq = ++localDraftSeq;
 
         // Set the draft HTML
         navigate(
             `#${composeRoute({
                 lens: "e",
-                lensParams: new URLSearchParams({ draft: newHtml }),
+                lensParams: new URLSearchParams({
+                    draft: newHtml,
+                    draftSeq: String(draftSeq),
+                }),
                 pageAddress: `${pageName.value}${pageHash.value}`,
             })}`,
         );
