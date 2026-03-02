@@ -11,40 +11,15 @@
                 :key="`${index}:${page.key}`"
             >
                 <article class="connected-page-card">
-                    <h3 class="connected-page-path">
-                        <span class="transclude-name-path">
-                            <template
-                                v-for="(part, partIndex) in page.parts"
-                                :key="`${page.key}:${partIndex}:${part}`"
-                            >
-                                <span v-if="partIndex > 0" class="muted"
-                                    >/</span
-                                >
-                                <span>{{ part }}</span>
-                            </template>
-                        </span>
-                    </h3>
-                    <button
-                        v-if="
-                            page.transcludeId && !isPageVersionVisible(page.key)
+                    <GraffitiGuardPageIdentity
+                        name-tag="h3"
+                        :page-parts="page.parts"
+                        :transclude-id="page.transcludeId"
+                        :is-page-version-visible="
+                            isPageVersionVisible(page.key)
                         "
-                        type="button"
-                        class="secondary version-toggle"
-                        :aria-expanded="isPageVersionVisible(page.key)"
-                        @click="togglePageVersion(page.key)"
-                    >
-                        Show page version
-                    </button>
-                    <p
-                        v-if="
-                            page.transcludeId && isPageVersionVisible(page.key)
-                        "
-                        class="transclude-version muted"
-                        :title="page.transcludeId"
-                    >
-                        Page version:
-                        {{ page.transcludeId }}
-                    </p>
+                        @toggle-page-version="togglePageVersion(page.key)"
+                    />
 
                     <section>
                         <header>
@@ -91,6 +66,7 @@ import {
     listGraffitiGuardApprovalRules,
     type GraffitiGuardApprovalRule,
 } from "./graffiti-guard-approval-rules";
+import GraffitiGuardPageIdentity from "./GraffitiGuardPageIdentity.vue";
 
 type ConnectedPagePermission = GraffitiGuardApprovalRule & { id: number };
 
@@ -268,10 +244,6 @@ onUnmounted(() => {
         border-bottom: 1px solid var(--border-color);
     }
 
-    .muted {
-        color: var(--secondary-color);
-    }
-
     > ul {
         list-style: none;
         display: grid;
@@ -291,53 +263,6 @@ onUnmounted(() => {
         border: 1px solid var(--border-color);
         border-radius: 0.5rem;
         background: var(--background-color-interactive);
-    }
-
-    .connected-page-path {
-        margin: 0;
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: flex-start;
-        align-items: baseline;
-        gap: 0.25rem;
-        line-height: 1.3;
-        text-align: left;
-        min-width: 0;
-        font-size: 1rem;
-        font-weight: 700;
-    }
-
-    .transclude-version {
-        margin: -0.15rem 0 0.05rem;
-        min-width: 0;
-        font-size: 0.75rem;
-        line-height: 1.2;
-        font-family:
-            ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-            "Liberation Mono", "Courier New", monospace;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    .version-toggle {
-        justify-self: start;
-        font-size: 0.75rem;
-        line-height: 1.1;
-        margin-top: -0.1rem;
-    }
-
-    .transclude-name-path {
-        display: inline-flex;
-        flex-wrap: wrap;
-        align-items: baseline;
-        justify-content: center;
-        gap: 0.3rem;
-        min-width: 0;
-    }
-
-    .transclude-name-path > span {
-        word-break: break-word;
     }
 
     .connected-page-card > section {

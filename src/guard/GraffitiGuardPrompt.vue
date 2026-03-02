@@ -2,50 +2,12 @@
     <aside v-if="activeGuardRequest" @click.self="rejectActive">
         <dialog open>
             <h2>{{ activeRequestTitle }}</h2>
-            <section class="request-origin">
-                <p class="request-page-name">
-                    <span class="request-page-label muted">Page:</span>
-                    <template v-if="activeRequestPageParts.length > 0">
-                        <span class="transclude-name-path">
-                            <template
-                                v-for="(
-                                    part, partIndex
-                                ) in activeRequestPageParts"
-                                :key="`${partIndex}:${part}`"
-                            >
-                                <span v-if="partIndex > 0" class="muted"
-                                    >/</span
-                                >
-                                <span>{{ part }}</span>
-                            </template>
-                        </span>
-                    </template>
-                    <template v-else>
-                        <span class="muted">(resolving transclude name)</span>
-                    </template>
-                </p>
-                <button
-                    v-if="
-                        activeGuardRequest.transcludeId && !isPageVersionVisible
-                    "
-                    type="button"
-                    class="secondary version-toggle"
-                    :aria-expanded="isPageVersionVisible"
-                    @click="togglePageVersion"
-                >
-                    Show page version
-                </button>
-                <p
-                    v-if="
-                        activeGuardRequest.transcludeId && isPageVersionVisible
-                    "
-                    class="transclude-version muted"
-                    :title="activeGuardRequest.transcludeId"
-                >
-                    Page version:
-                    {{ activeGuardRequest.transcludeId }}
-                </p>
-            </section>
+            <GraffitiGuardPageIdentity
+                :page-parts="activeRequestPageParts"
+                :transclude-id="activeGuardRequest.transcludeId"
+                :is-page-version-visible="isPageVersionVisible"
+                @toggle-page-version="togglePageVersion"
+            />
             <template v-if="activeGuardRequest.method === 'post'">
                 <ObjectDetails :object="activeGuardRequest.args[0] as any" />
             </template>
@@ -143,6 +105,7 @@ import {
 import MediaDetails from "./MediaDetails.vue";
 import ObjectDetails from "./ObjectDetails.vue";
 import DiscoverDetails from "./DiscoverDetails.vue";
+import GraffitiGuardPageIdentity from "./GraffitiGuardPageIdentity.vue";
 
 const activeGuardRequest = computed(
     () => graffitiGuardState.pending[0] ?? null,
@@ -257,60 +220,6 @@ dialog {
     & h2,
     & p {
         margin: 0;
-    }
-
-    .request-origin {
-        display: grid;
-        gap: 0.35rem;
-    }
-
-    .request-page-name {
-        display: flex;
-        align-items: baseline;
-        gap: 0.3rem;
-        flex-wrap: wrap;
-        font-size: 1rem;
-        line-height: 1.25;
-    }
-
-    .request-page-label {
-        font-weight: 400;
-    }
-
-    .transclude-name-path {
-        display: inline-flex;
-        flex-wrap: wrap;
-        align-items: baseline;
-        gap: 0.3rem;
-        min-width: 0;
-        font-weight: 700;
-    }
-
-    .transclude-name-path > span {
-        word-break: break-word;
-    }
-
-    .transclude-version {
-        margin: 0;
-        min-width: 0;
-        font-size: 0.85rem;
-        line-height: 1.2;
-        font-family:
-            ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-            "Liberation Mono", "Courier New", monospace;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    .version-toggle {
-        justify-self: start;
-        font-size: 0.85rem;
-        line-height: 1.1;
-    }
-
-    .muted {
-        color: var(--secondary-color);
     }
 
     & footer {
