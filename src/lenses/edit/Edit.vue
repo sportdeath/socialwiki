@@ -200,10 +200,9 @@ import { createPageVersion } from "../utils/page-versions";
 import { initVimMode, type VimAdapterInstance } from "monaco-vim";
 import { initLens } from "../../backend/lens-client";
 import { composeRoute } from "../../backend/route";
+import { randomBytes, bytesToHex } from "@noble/hashes/utils.js";
 
-const previewTranscludeId = `e-${Date.now().toString(36)}-${Math.random()
-    .toString(36)
-    .slice(2, 10)}`;
+const previewTranscludeId = bytesToHex(randomBytes());
 
 const template = (pageName: string) => `<!doctype html>
 <head>

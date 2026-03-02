@@ -19,6 +19,8 @@ import { annotationSchema, type AnnotationObject } from "../utils/schemas";
 import { computeTrustAnnotationsByActor } from "../utils/trust";
 import { defaultTrustedEditors } from "../utils/default-trusted-editors";
 import { sortProtectionHistory } from "../utils/protection";
+import { sha256 } from "@noble/hashes/sha2.js";
+import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 
 const graffiti = new window.graffiti();
 
@@ -30,21 +32,14 @@ let activeRenderVersion = 0;
 let graffitiSession: GraffitiSession | undefined | null = undefined;
 const transclude = document.querySelector("#transclude") as HTMLElement;
 
-function hashStringId(value: string): string {
-  // FNV-1a-ish 32-bit hash; deterministic and cheap (not cryptographic).
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < value.length; i++) {
-    hash ^= value.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return `h-${(hash >>> 0).toString(36)}`;
-}
-
 function setTranscludeSrcDoc(
   html: string,
   status: "loading" | "not-found" | "ok" | "error",
 ) {
-  transclude.setAttribute("id", status === "ok" ? hashStringId(html) : status);
+  transclude.setAttribute(
+    "id",
+    status === "ok" ? bytesToHex(sha256(utf8ToBytes(html))) : status,
+  );
   transclude.setAttribute("srcdoc", html);
 }
 
