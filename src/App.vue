@@ -306,13 +306,29 @@ async function syncGuardPermissionsButtonVisibility() {
 
 // When input is submitted, the route changes
 function submitForm() {
-    router.push(
-        composeRoute({
-            lens: lens.value,
-            lensParams: lensParams.value,
-            pageAddress: addressInput.value,
-        }),
-    );
+    // Extract the page name from the input
+    const inputPageName = addressInput.value.split("#", 1)[0];
+    const currentPageName = pageAddress.value.split("#", 1)[0];
+    if (inputPageName === currentPageName) {
+        // If the user only changed the fragment, keep the current lens/params
+        // and just update the page address
+        router.push(
+            composeRoute({
+                lens: lens.value,
+                lensParams: lensParams.value,
+                pageAddress: addressInput.value,
+            }),
+        );
+    } else {
+        // Otherwise, navigate to the view lens
+        router.push(
+            composeRoute({
+                lens: "v",
+                lensParams: new URLSearchParams(),
+                pageAddress: addressInput.value,
+            }),
+        );
+    }
     (document.activeElement as HTMLElement | null)?.blur();
 }
 
