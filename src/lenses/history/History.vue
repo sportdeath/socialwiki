@@ -268,9 +268,7 @@
                                 </time>
                             </div>
 
-                            <footer
-                                v-if="isSelected(version)"
-                            >
+                            <footer v-if="isSelected(version)">
                                 <ul>
                                     <li
                                         v-if="
@@ -319,20 +317,10 @@
                                         </button>
                                     </li>
                                     <li>
-                                        <a
-                                            :href="editAddress"
-                                            @click.stop
-                                        >
-                                            Edit
-                                        </a>
+                                        <a :href="editAddress"> Edit </a>
                                     </li>
                                     <li>
-                                        <a
-                                            :href="previewAddress"
-                                            @click.stop
-                                        >
-                                            Link
-                                        </a>
+                                        <a :href="previewAddress"> Link </a>
                                     </li>
                                     <li
                                         v-if="

@@ -22,12 +22,18 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
   const transcludeIdTracker = createTranscludeIdTracker();
 
   class SocialWikiTransclude extends HTMLElement {
+    protected readonly origin: string;
+    protected readonly transcludeIdTracker: ReturnType<
+      typeof createTranscludeIdTracker
+    >;
+    protected readonly shadowRootContainer: ShadowRoot;
     protected iframe: HTMLIFrameElement;
     protected renderVersion = 0;
     protected destroyLens = () => {};
     protected destroyNavigation = () => {};
     protected setHash = (hash: string) => {};
     protected currentBlobUrl: string | null = null;
+    protected currentFrameSourceKey = "";
     protected emitNavigate(to: string) {
       this.dispatchEvent(
         new CustomEvent("sw-transclude-navigate", {
@@ -47,41 +53,9 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
 
     constructor() {
       super();
-
-      // Attach shadow DOM
-      const shadow = this.attachShadow({ mode: "closed" });
-
-      // Create iframe
-      this.iframe = document.createElement("iframe");
-      this.iframe.title = "Social.Wiki Transclude";
-      this.iframe.loading = "lazy";
-      this.iframe.sandbox.add(
-        "allow-scripts",
-        "allow-forms",
-        "allow-modals",
-        "allow-pointer-lock",
-        "allow-downloads",
-      );
-      this.iframe.allow = [
-        "camera *",
-        "microphone *",
-        "geolocation *",
-        "fullscreen *",
-        "clipboard-read *",
-        "clipboard-write *",
-      ].join("; ");
-      this.iframe.addEventListener("load", () =>
-        transcludeIdTracker.syncIframeWindow(this),
-      );
-
-      this.destroyLens = serveLens(this.iframe, (status, srcdoc) => {
-        this.setAttribute("status", status);
-        if (srcdoc === undefined) {
-          this.removeAttribute("srcdoc");
-        } else {
-          this.setAttribute("srcdoc", srcdoc);
-        }
-      });
+      this.origin = origin;
+      this.transcludeIdTracker = transcludeIdTracker;
+      this.shadowRootContainer = this.attachShadow({ mode: "closed" });
 
       // Add styling
       const style = document.createElement("style");
@@ -98,72 +72,144 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
           overflow: clip;
         }
       `;
+      this.iframe = this.createIframeElement();
+      this.shadowRootContainer.append(style, this.iframe);
+      this.attachIframeServices();
+    }
 
-      shadow.append(style, this.iframe);
+    protected createIframeElement() {
+      const iframe = document.createElement("iframe");
+      iframe.title = "Social.Wiki Transclude";
+      iframe.loading = "lazy";
+      iframe.sandbox.add(
+        "allow-scripts",
+        "allow-forms",
+        "allow-modals",
+        "allow-pointer-lock",
+        "allow-downloads",
+      );
+      iframe.allow = [
+        "camera *",
+        "microphone *",
+        "geolocation *",
+        "fullscreen *",
+        "clipboard-read *",
+        "clipboard-write *",
+      ].join("; ");
+      iframe.addEventListener("load", () =>
+        this.transcludeIdTracker.syncIframeWindow(this),
+      );
+      return iframe;
+    }
 
-      const { destroy, setHash } = serveNavigation((to, top) => {
-        const url = new URL(to, origin).toString();
+    protected attachIframeServices() {
+      this.destroyLens();
+      this.destroyNavigation();
 
-        // Internal links are formatted with hash history
-        const isInternal = url.startsWith(origin + "/#");
-
-        // If we are not the top and either the link is external or top is set,
-        // propagate the request to the root with another navigation
-        if (window.top !== window && (!isInternal || top)) {
-          window.navigate(to, true);
-          return;
+      this.destroyLens = serveLens(this.iframe, (status, srcdoc) => {
+        this.setAttribute("status", status);
+        if (srcdoc === undefined) {
+          this.removeAttribute("srcdoc");
+        } else {
+          this.setAttribute("srcdoc", srcdoc);
         }
+      });
 
-        // Otherwise, if the link is still external, we must be at the top.
-        // Emit a navigation request for the owner to handle.
-        if (!isInternal) return this.emitNavigate(to);
+      const { destroy, setHash } = serveNavigation(
+        (to, top) => {
+          const url = new URL(to, this.origin).toString();
 
-        // Strip out the origin, leading slash and hash
-        const route = url.slice(origin.length + 2);
+          // Internal links are formatted with hash history
+          const isInternal = url.startsWith(this.origin + "/#");
 
-        // If there is no current source to compute relative routes against
-        // or the route is not relative, emit the navigation request as-is.
-        const currentSrc = this.getAttribute("src");
-        if (
-          currentSrc === null ||
-          !(route.startsWith("?") || route.startsWith("#"))
-        ) {
-          return this.emitNavigate(to);
-        }
+          // If we are not the top and either the link is external or top is set,
+          // propagate the request to the root with another navigation
+          if (window.top !== window && (!isInternal || top)) {
+            window.navigate(to, true);
+            return;
+          }
 
-        const currentSrcUrl = new URL(currentSrc || "", origin).toString();
-        if (!currentSrcUrl.startsWith(origin + "/#/")) {
-          throw new Error(`Current src is not a valid route: ${currentSrcUrl}`);
-        }
+          // Otherwise, if the link is still external, we must be at the top.
+          // Emit a navigation request for the owner to handle.
+          if (!isInternal) return this.emitNavigate(to);
 
-        // Otherwise, the fragment or query is being changed,
-        // which we treat as a relative navigation.
-        const currentRoute = currentSrcUrl.slice(origin.length + 3);
+          // Strip out the origin, leading slash and hash
+          const route = url.slice(this.origin.length + 2);
 
-        // Replace the fragment and query with the new ones if they exist
-        const dummyRouteUrl = new URL(route, origin);
-        const toUrl = new URL(currentRoute, origin);
-        toUrl.hash = dummyRouteUrl.hash.length
-          ? dummyRouteUrl.hash
-          : toUrl.hash;
-        toUrl.search = dummyRouteUrl.search.length
-          ? dummyRouteUrl.search
-          : toUrl.search;
+          // If there is no current source to compute relative routes against
+          // or the route is not relative, emit the navigation request as-is.
+          const currentSrc = this.getAttribute("src");
+          if (
+            currentSrc === null ||
+            !(route.startsWith("?") || route.startsWith("#"))
+          ) {
+            return this.emitNavigate(to);
+          }
 
-        // Navigate to the new route
-        const newSrc = "#" + toUrl.toString().slice(origin.length);
-        this.setAttribute("src", newSrc);
-        this.emitNavigate(newSrc);
-      }, this.iframe);
+          const currentSrcUrl = new URL(currentSrc || "", this.origin).toString();
+          if (!currentSrcUrl.startsWith(this.origin + "/#/")) {
+            throw new Error(
+              `Current src is not a valid route: ${currentSrcUrl}`,
+            );
+          }
+
+          // Otherwise, the fragment or query is being changed,
+          // which we treat as a relative navigation.
+          const currentRoute = currentSrcUrl.slice(this.origin.length + 3);
+
+          // Replace the fragment and query with the new ones if they exist
+          const dummyRouteUrl = new URL(route, this.origin);
+          const toUrl = new URL(currentRoute, this.origin);
+          toUrl.hash = dummyRouteUrl.hash.length
+            ? dummyRouteUrl.hash
+            : toUrl.hash;
+          toUrl.search = dummyRouteUrl.search.length
+            ? dummyRouteUrl.search
+            : toUrl.search;
+
+          // Navigate to the new route
+          const newSrc = "#" + toUrl.toString().slice(this.origin.length);
+          this.setAttribute("src", newSrc);
+          this.emitNavigate(newSrc);
+        },
+        this.iframe,
+      );
 
       this.destroyNavigation = destroy;
       this.setHash = setHash;
     }
 
+    protected replaceIframeForSourceChange(sourceKey: string) {
+      if (this.currentFrameSourceKey === sourceKey) return;
+
+      const hadFrame = this.currentFrameSourceKey.length > 0;
+      this.currentFrameSourceKey = sourceKey;
+
+      this.currentRoute = "";
+      this.currentLens = "";
+      this.lensReadyPromise = null;
+      this.srcDocReadyPromise = null;
+      this.currentSrcDoc = "";
+
+      if (this.currentBlobUrl) {
+        URL.revokeObjectURL(this.currentBlobUrl);
+        this.currentBlobUrl = null;
+      }
+
+      if (!hadFrame) return;
+
+      const previousIframe = this.iframe;
+      this.iframe = this.createIframeElement();
+      this.attachIframeServices();
+      previousIframe.remove();
+      this.shadowRootContainer.append(this.iframe);
+      this.transcludeIdTracker.track(this, this.iframe);
+    }
+
     protected alive = true;
     disconnectedCallback() {
       this.alive = false;
-      transcludeIdTracker.untrack(this);
+      this.transcludeIdTracker.untrack(this);
       this.destroyLens();
       this.destroyNavigation();
       if (this.currentBlobUrl) {
@@ -181,6 +227,9 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
 
       const src = this.getAttribute("src");
       if (src === null) {
+        const srcdoc = this.getAttribute("srcdoc");
+        this.replaceIframeForSourceChange(`srcdoc:${srcdoc ?? ""}`);
+
         // srcdoc mode renders raw HTML directly in the iframe.
         // Reset lens/route state so returning to src mode reloads the lens page.
         this.currentRoute = "";
@@ -190,7 +239,6 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         // If no source, then a lens is using transclude
         // to manually set page contents. Just pay attention
         // to the srcdoc and the hash in this case.
-        const srcdoc = this.getAttribute("srcdoc");
         if (srcdoc === null) {
           return this.setSrcDoc(LoadingPage, "loading");
         }
@@ -220,6 +268,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
 
       const url = new URL(src, origin).toString();
       if (!url.startsWith(origin + "/#/")) {
+        this.replaceIframeForSourceChange(`src-invalid:${src}`);
         return this.setSrcDoc(
           ErrorPage(`Could not extract page name from src: ${src}`),
           "error",
@@ -230,6 +279,8 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
       this.currentRoute = route;
 
       const { lens, lensParams, pageAddress } = parseRoute(route);
+      const sourcePageAddress = pageAddress.split("#")[0];
+      this.replaceIframeForSourceChange(`src:${lens}/${sourcePageAddress}`);
 
       const token = ++this.renderVersion;
 
@@ -240,8 +291,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         return;
       }
       this.currentLens = lens;
-
-      this.setSrcDoc(LoadingPage, "loading");
+      this.setAttribute("status", "loading");
 
       try {
         assertLens(lens);
@@ -297,6 +347,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
       // If srcdoc is set, it wins over src; clear it before URL navigation.
       this.iframe.removeAttribute("srcdoc");
       this.iframe.src = url;
+
       this.setAttribute("status", status);
     }
 
@@ -305,18 +356,18 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
       return ["src", "srcdoc", "hash", "id", "name"];
     }
     connectedCallback() {
-      transcludeIdTracker.track(this, this.iframe);
+      this.transcludeIdTracker.track(this, this.iframe);
       this.renderPage();
     }
     attributeChangedCallback(name: string) {
       if (name === "id" || name === "name") {
-        transcludeIdTracker.notifyIdChanged(this);
+        this.transcludeIdTracker.notifyIdChanged(this);
         return;
       }
       this.renderPage();
     }
     adoptedCallback() {
-      transcludeIdTracker.syncIframeWindow(this);
+      this.transcludeIdTracker.syncIframeWindow(this);
       this.renderPage();
     }
   }

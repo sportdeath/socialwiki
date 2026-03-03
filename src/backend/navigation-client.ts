@@ -25,9 +25,14 @@ export function installNavigation(origin: string) {
     const d = data as Record<string, unknown>;
     if (d.type !== "sw-hash" || typeof d.hash !== "string") return;
     currentHash = d.hash;
-    window.location.hash = currentHash;
+    if (window.location.hash === currentHash) return;
+
+    const url = new URL(window.location.href);
+    url.hash = currentHash;
+    // Replace hash without adding iframe history entries.
+    window.location.replace(url.toString());
   });
-  window.addEventListener("hashchange", (e) => {
+  window.addEventListener("hashchange", () => {
     if (window.location.hash === currentHash) return;
     currentHash = window.location.hash;
     window.navigate(`#${window.location.hash}`);
