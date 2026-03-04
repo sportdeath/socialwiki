@@ -1,6 +1,10 @@
+import { composeHash, parseHash } from "./route";
+
 declare global {
   interface Window {
     navigate: (to: string, top?: boolean) => void;
+    params: URLSearchParams;
+    address: string;
   }
 }
 
@@ -9,7 +13,75 @@ export function installNavigation(origin: string) {
     window.emit("sw-navigate", { to, top });
   };
 
-  let currentHash = window.location.hash;
+  let currentAddress = "";
+  let currentParamsSerialized = "";
+
+  function normalizeParams(params: URLSearchParams | string): string {
+    const serialized =
+      params instanceof URLSearchParams ? params.toString() : String(params);
+    return serialized.startsWith("?") ? serialized.slice(1) : serialized;
+  }
+
+  function updateHashState(params: URLSearchParams | string, address: string) {
+    const paramsSerialized = normalizeParams(params);
+
+    const didAddressChange = currentAddress !== address;
+    const didParamsChange = currentParamsSerialized !== paramsSerialized;
+    if (!didAddressChange && !didParamsChange) {
+      return { didAddressChange, didParamsChange };
+    }
+
+    currentAddress = address;
+    currentParamsSerialized = paramsSerialized;
+
+    if (didParamsChange) {
+      window.dispatchEvent(new Event("paramschange"));
+    }
+    if (didAddressChange) {
+      window.dispatchEvent(new Event("addresschange"));
+    }
+
+    return { didAddressChange, didParamsChange };
+  }
+
+  function navigateForHashChange() {
+    const to = `#${composeHash(
+      new URLSearchParams(currentParamsSerialized),
+      currentAddress,
+    )}`;
+    window.navigate(to);
+    return;
+  }
+
+  Object.defineProperties(window, {
+    address: {
+      configurable: true,
+      get: () => currentAddress,
+      set: (value: string) => {
+        const nextAddress = String(value);
+        const { didAddressChange } = updateHashState(
+          currentParamsSerialized,
+          nextAddress,
+        );
+        if (!didAddressChange) return;
+        navigateForHashChange();
+      },
+    },
+    params: {
+      configurable: true,
+      get: () => new URLSearchParams(currentParamsSerialized),
+      set: (value: URLSearchParams | string) => {
+        const nextParamsSerialized = normalizeParams(value);
+        const { didParamsChange } = updateHashState(
+          nextParamsSerialized,
+          currentAddress,
+        );
+        if (!didParamsChange) return;
+        navigateForHashChange();
+      },
+    },
+  });
+
   window.addEventListener("sw-hash", (event: Event) => {
     if (!(event instanceof CustomEvent)) return;
     const payload = event.detail;
@@ -17,18 +89,8 @@ export function installNavigation(origin: string) {
     const p = payload as Record<string, unknown>;
     if (typeof p.hash !== "string") return;
 
-    currentHash = p.hash;
-    if (window.location.hash === currentHash) return;
-
-    const url = new URL(window.location.href);
-    url.hash = currentHash;
-    // Replace hash without adding iframe history entries.
-    window.location.replace(url.toString());
-  });
-  window.addEventListener("hashchange", () => {
-    if (window.location.hash === currentHash) return;
-    currentHash = window.location.hash;
-    window.navigate(`#${window.location.hash}`);
+    const { params, address } = parseHash(p.hash);
+    updateHashState(params, address);
   });
 
   const base = document.createElement("base");

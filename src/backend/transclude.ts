@@ -2,7 +2,7 @@ import type { Graffiti } from "@graffiti-garden/api";
 import { ErrorPage, LoadingPage } from "./status-pages";
 import { serveEvents } from "./events-server";
 import { serveNavigation } from "./navigation-server";
-import { composeLensHash, parseLensHash, parsePageAddress } from "./route";
+import { parseHash, parseAddress, composeHash, composeAddress } from "./route";
 import { createTranscludeIdTracker } from "./transclude-ids";
 export { getTranscludeId } from "./transclude-ids";
 
@@ -35,7 +35,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
     protected destroyEvents = () => {};
     protected destroyNavigation = () => {};
     protected sendEvent = (_eventName: string, _payload?: unknown) => {};
-    protected setHash = (hash: string) => {};
+    protected setHash = (_hash: string) => {};
     protected currentBlobUrl: string | null = null;
     protected currentFrameSourceKey = "";
     protected emitNavigate(to: string) {
@@ -178,23 +178,23 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         const currentRoute = currentSrcUrl.slice(this.origin.length + 3);
 
         const { name: currentLens, hash: currentLensHash } =
-          parsePageAddress(currentRoute);
-        const { lensParams: currentLensParams, pageAddress: currentPageAddress } =
-          parseLensHash(currentLensHash);
+          parseAddress(currentRoute);
+        const { params: currentLensParams, address: currentPageAddress } =
+          parseHash(currentLensHash);
 
         let newSrc = "";
         if (route.startsWith("?")) {
           const nextLensParams = new URLSearchParams(route.slice(1));
-          newSrc = `#/${currentLens}${composeLensHash(
-            nextLensParams,
-            currentPageAddress,
+          newSrc = `#/${composeAddress(
+            currentLens,
+            composeHash(nextLensParams, currentPageAddress),
           )}`;
         } else {
-          const { name: currentPageName } = parsePageAddress(currentPageAddress);
+          const { name: currentPageName } = parseAddress(currentPageAddress);
           const nextPageAddress = `${currentPageName}${route}`;
-          newSrc = `#/${currentLens}${composeLensHash(
-            currentLensParams,
-            nextPageAddress,
+          newSrc = `#/${composeAddress(
+            currentLens,
+            composeHash(currentLensParams, nextPageAddress),
           )}`;
         }
 
@@ -348,9 +348,9 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
       if (this.currentRoute === route) return;
       this.currentRoute = route;
 
-      const { name: lens, hash: lensHash } = parsePageAddress(route);
-      const { lensParams, pageAddress } = parseLensHash(lensHash);
-      const sourcePageAddress = pageAddress.split("#")[0];
+      const { name: lens, hash: lensHash } = parseAddress(route);
+      const { params, address } = parseHash(lensHash);
+      const sourcePageAddress = address.split("#")[0];
       this.replaceIframeForSourceChange(`src:${lens}/${sourcePageAddress}`);
 
       const token = ++this.renderVersion;
@@ -358,7 +358,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
       if (this.currentLens === lens) {
         await this.lensReadyPromise;
         if (!this.alive || token !== this.renderVersion) return;
-        this.setHash(composeLensHash(lensParams, pageAddress));
+        this.setHash(composeHash(params, address));
         return;
       }
       this.currentLens = lens;
@@ -378,7 +378,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         await this.lensReadyPromise;
         if (!this.alive || token !== this.renderVersion) return;
 
-        this.setHash(composeLensHash(lensParams, pageAddress));
+        this.setHash(composeHash(params, address));
       } catch (e) {
         if (!this.alive || token !== this.renderVersion) return;
         return this.setSrcDoc(

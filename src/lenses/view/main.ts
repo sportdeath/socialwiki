@@ -14,7 +14,7 @@ import {
   LoadingPage,
   PageNotFound,
 } from "../../backend/status-pages";
-import { parseLensHash, parsePageAddress } from "../../backend/route";
+import { parseAddress } from "../../backend/route";
 import { annotationSchema, type AnnotationObject } from "../utils/schemas";
 import { computeTrustAnnotationsByActor } from "../utils/trust";
 import { defaultTrustedEditors } from "../utils/default-trusted-editors";
@@ -186,7 +186,7 @@ async function renderLens(options?: { force?: boolean }) {
   if (!address.length) return;
 
   const lensParams = requestedLensParams;
-  const { name: pageName, hash: pageHash } = parsePageAddress(address);
+  const { name: pageName, hash: pageHash } = parseAddress(address);
   const requestedVersion = lensParams.get("version") ?? "";
   transclude.setAttribute("name", pageName);
   const contentKey = requestedVersion || pageName;
@@ -262,7 +262,7 @@ async function renderLens(options?: { force?: boolean }) {
     emitLensOutput("ok", html);
     setTranscludeSrcDoc(html, "ok");
 
-    const { hash: renderedPageHash } = parsePageAddress(renderedAddress);
+    const { hash: renderedPageHash } = parseAddress(renderedAddress);
     transclude?.setAttribute("hash", renderedPageHash);
   } catch (e) {
     if (renderVersion !== activeRenderVersion) return;
@@ -275,10 +275,10 @@ async function renderLens(options?: { force?: boolean }) {
 }
 
 async function onHashChange() {
-  const { lensParams, pageAddress } = parseLensHash(window.location.hash);
-  requestedAddress = pageAddress;
-  requestedLensParams = new URLSearchParams(lensParams);
+  requestedAddress = window.address;
+  requestedLensParams = new URLSearchParams(window.params);
   await renderLens();
 }
-window.addEventListener("hashchange", onHashChange);
-onHashChange();
+window.addEventListener("addresschange", onHashChange);
+window.addEventListener("paramschange", onHashChange);
+void onHashChange();

@@ -381,12 +381,7 @@ import {
 } from "@graffiti-garden/wrapper-vue";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useTemplateRef } from "vue";
-import {
-    composeLensAddress,
-    composeLensHash,
-    parseLensHash,
-    parsePageAddress,
-} from "../../backend/route";
+import { composeAddress, composeHash, parseAddress } from "../../backend/route";
 import { annotationSchema, type AnnotationObject } from "../utils/schemas";
 import { computeTrustAnnotationsByActor, trustActor } from "../utils/trust";
 import { defaultTrustedEditors } from "../utils/default-trusted-editors";
@@ -409,9 +404,9 @@ const selectedPageVersion = ref<PageVersionObject | null | undefined>(
 );
 
 function onHashChange() {
-    const { pageAddress } = parseLensHash(window.location.hash);
-    const { name: nextPageName, hash: nextPageHash } =
-        parsePageAddress(pageAddress);
+    const { name: nextPageName, hash: nextPageHash } = parseAddress(
+        window.address,
+    );
     const didChangePage = pageName.value !== nextPageName;
 
     pageName.value = nextPageName;
@@ -422,7 +417,7 @@ function onHashChange() {
         selectedPageVersion.value = undefined;
     }
 }
-window.addEventListener("hashchange", onHashChange);
+window.addEventListener("addresschange", onHashChange);
 onHashChange();
 
 const transclude = useTemplateRef<HTMLElement>("transclude");
@@ -670,20 +665,21 @@ const previewAddress = computed(() => {
         );
     }
 
-    return `#/${composeLensAddress(
+    return `#/${composeAddress(
         "v",
-        lensParams,
-        `${pageName.value}${pageHash.value}`,
+        composeHash(lensParams, composeAddress(pageName.value, pageHash.value)),
     )}`;
 });
 const editAddress = computed(
     () =>
-        `#/${composeLensAddress(
+        `#/${composeAddress(
             "e",
-            new URLSearchParams({
-                draft: previewHtml.value,
-            }),
-            `${pageName.value}${pageHash.value}`,
+            composeHash(
+                new URLSearchParams({
+                    draft: previewHtml.value,
+                }),
+                composeAddress(pageName.value, pageHash.value),
+            ),
         )}`,
 );
 

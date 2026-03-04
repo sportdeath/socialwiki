@@ -1,52 +1,46 @@
-export function parsePageAddress(pageAddress: string): {
+export function parseAddress(address: string): {
   name: string;
   hash: string;
 } {
-  const hashIndex = pageAddress.indexOf("#");
-  const name = hashIndex < 0 ? pageAddress : pageAddress.slice(0, hashIndex);
-  const hash = hashIndex < 0 ? "" : pageAddress.slice(hashIndex);
+  const hashIndex = address.indexOf("#");
+  const name = hashIndex < 0 ? address : address.slice(0, hashIndex);
+  const hash = hashIndex < 0 ? "" : address.slice(hashIndex);
   return { name, hash };
 }
 
-export function composePageAddress(name: string, hash: string): string {
+export function composeAddress(name: string, hash: string): string {
   if (!hash.length) return name;
   return `${name}${hash.startsWith("#") ? hash : `#${hash}`}`;
 }
 
-export function parseLensHash(hash: string): {
-  lensParams: URLSearchParams;
-  pageAddress: string;
+export function parseHash(hash: string): {
+  params: URLSearchParams;
+  address: string;
 } {
   const normalized = hash.startsWith("#") ? hash.slice(1) : hash;
 
   if (normalized.startsWith("?")) {
-    const [serializedParams = "", pageAddress = ""] = normalized
+    const [serializedParams = "", address = ""] = normalized
       .slice(1)
       .split(/\/(.*)/);
     return {
-      lensParams: new URLSearchParams(serializedParams),
-      pageAddress,
+      params: new URLSearchParams(serializedParams),
+      address,
     };
   }
 
   return {
-    lensParams: new URLSearchParams(),
-    pageAddress: normalized.replace(/^\//, ""),
+    params: new URLSearchParams(),
+    address: normalized.replace(/^\//, ""),
   };
 }
 
-export function composeLensHash(
-  lensParams: URLSearchParams | undefined,
-  pageAddress: string,
+export function composeHash(
+  params: URLSearchParams | undefined,
+  address: string,
 ): string {
-  const params = (lensParams ?? "").toString();
-  return params.length ? `#?${params}/${pageAddress}` : `#/${pageAddress}`;
-}
-
-export function composeLensAddress(
-  lens: string,
-  lensParams: URLSearchParams | undefined,
-  pageAddress: string,
-): string {
-  return composePageAddress(lens, composeLensHash(lensParams, pageAddress));
+  const paramsSerialized = (params ?? "").toString();
+  return paramsSerialized.length
+    ? `#?${paramsSerialized}/${address}`
+    : `#/${address}`;
 }

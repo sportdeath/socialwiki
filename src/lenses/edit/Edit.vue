@@ -235,11 +235,7 @@ import TwoPaneLayout from "../utils/TwoPaneLayout.vue";
 import { useGraffiti, useGraffitiSession } from "@graffiti-garden/wrapper-vue";
 import { createPageVersion, getPageVersions } from "../utils/page-versions";
 import { initVimMode, type VimAdapterInstance } from "monaco-vim";
-import {
-    composeLensAddress,
-    parseLensHash,
-    parsePageAddress,
-} from "../../backend/route";
+import { composeAddress, composeHash, parseAddress } from "../../backend/route";
 import { randomBytes, bytesToHex } from "@noble/hashes/utils.js";
 import { annotationSchema, type AnnotationObject } from "../utils/schemas";
 import { computeTrustAnnotationsByActor } from "../utils/trust";
@@ -411,12 +407,10 @@ const pageName = ref("");
 const pageHash = ref("");
 const pageAddress = computed(() => `${pageName.value}${pageHash.value}`);
 const historyRoute = computed(
-    () =>
-        `#/${composeLensAddress("h", new URLSearchParams(), pageAddress.value)}`,
+    () => `#/${composeAddress("h", composeHash(undefined, pageAddress.value))}`,
 );
 const viewRoute = computed(
-    () =>
-        `#/${composeLensAddress("v", new URLSearchParams(), pageAddress.value)}`,
+    () => `#/${composeAddress("v", composeHash(undefined, pageAddress.value))}`,
 );
 const isProtectionLoading = ref(false);
 const isProtectedPage = ref<boolean | undefined>(undefined);
@@ -568,9 +562,10 @@ async function refreshPageProtection(page: string, requestId: number) {
 }
 
 function onHashChange() {
-    const { lensParams, pageAddress } = parseLensHash(window.location.hash);
-    const { name: nextPageName, hash: nextPageHash } =
-        parsePageAddress(pageAddress);
+    const lensParams = new URLSearchParams(window.params);
+    const { name: nextPageName, hash: nextPageHash } = parseAddress(
+        window.address,
+    );
     const didChangePage = pageName.value !== nextPageName;
 
     pageName.value = nextPageName;
@@ -605,7 +600,8 @@ function onHashChange() {
         }
     }
 }
-window.addEventListener("hashchange", onHashChange);
+window.addEventListener("addresschange", onHashChange);
+window.addEventListener("paramschange", onHashChange);
 onHashChange();
 
 function download() {
@@ -771,13 +767,15 @@ const schedulePreviewUpdate = (newHtml: string) => {
 
         // Set the draft HTML
         navigate(
-            `#/${composeLensAddress(
+            `#/${composeAddress(
                 "e",
-                new URLSearchParams({
-                    draft: newHtml,
-                    draftSeq: String(draftSeq),
-                }),
-                `${pageName.value}${pageHash.value}`,
+                composeHash(
+                    new URLSearchParams({
+                        draft: newHtml,
+                        draftSeq: String(draftSeq),
+                    }),
+                    composeAddress(pageName.value, pageHash.value),
+                ),
             )}`,
         );
 
@@ -884,10 +882,12 @@ async function publish(as?: boolean) {
             publishShakeTimeout = null;
         }
         navigate(
-            `#/${composeLensAddress(
+            `#/${composeAddress(
                 "v",
-                new URLSearchParams(),
-                `${publishName}${pageHash.value}`,
+                composeHash(
+                    undefined,
+                    composeAddress(publishName, pageHash.value),
+                ),
             )}`,
         );
     } finally {

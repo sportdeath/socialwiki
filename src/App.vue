@@ -46,7 +46,10 @@
             >
                 <li>
                     <RouterLink
-                        :to="`/${composeLensAddress(lens, lensParams, pageAddress)}`"
+                        :to="`/${composeAddress(
+                            lens,
+                            composeHash(lensParams, pageAddress),
+                        )}`"
                         @click="
                             addressInput = pageAddress;
                             isDropdownOpen = false;
@@ -66,7 +69,7 @@
                 <ul>
                     <li>
                         <RouterLink
-                            :to="`/${composeLensAddress('v', undefined, pageAddress)}`"
+                            :to="`/${composeAddress('v', composeHash(undefined, pageAddress))}`"
                             title="The current version of this page"
                         >
                             View
@@ -82,7 +85,7 @@
                     </li>
                     <li>
                         <RouterLink
-                            :to="`/${composeLensAddress('h', undefined, pageAddress)}`"
+                            :to="`/${composeAddress('h', composeHash(undefined, pageAddress))}`"
                             title="Past revisions of this page"
                         >
                             History
@@ -128,7 +131,7 @@
                         ? 'History'
                         : lens
             "
-            :src="`#/${composeLensAddress(lens, lensParams, pageAddress)}`"
+            :src="`#/${composeAddress(lens, composeHash(lensParams, pageAddress))}`"
             ref="transclude"
         ></sw-transclude>
     </main>
@@ -148,9 +151,10 @@ import { useRouter } from "vue-router";
 import { useGraffiti } from "@graffiti-garden/wrapper-vue";
 import type { GraffitiSession } from "@graffiti-garden/api";
 import {
-    composeLensAddress,
-    parseLensHash,
-    parsePageAddress,
+    composeAddress,
+    composeHash,
+    parseAddress,
+    parseHash,
 } from "./backend/route";
 import { getTranscludeId } from "./backend/transclude-ids";
 import GraffitiGuardPrompt from "./guard/GraffitiGuardPrompt.vue";
@@ -182,8 +186,8 @@ function parseLensRoute(address: string): {
         };
     }
 
-    const { name: lens, hash: lensHash } = parsePageAddress(normalized);
-    const { lensParams, pageAddress } = parseLensHash(lensHash);
+    const { name: lens, hash: lensHash } = parseAddress(normalized);
+    const { params: lensParams, address: pageAddress } = parseHash(lensHash);
     return { lens, lensParams, pageAddress, needsLegacyRedirect: false };
 }
 
@@ -206,10 +210,9 @@ watch(
         pageAddress.value = parsed.pageAddress;
 
         if (parsed.needsLegacyRedirect) {
-            const redirectRoute = `/${composeLensAddress(
+            const redirectRoute = `/${composeAddress(
                 parsed.lens,
-                parsed.lensParams,
-                parsed.pageAddress,
+                composeHash(parsed.lensParams, parsed.pageAddress),
             )}`;
             const normalizedAddress = `/${newAddress.replace(/^\/+/, "")}`;
             if (redirectRoute !== normalizedAddress) {
@@ -223,10 +226,9 @@ watch(
         const normalized = newAddress.replace(/^\/+/, "");
         const normalizedPageAddress = normalized.replace(/\/+$/, "");
         if (!parsed.pageAddress.length && normalizedPageAddress.length > 0) {
-            const redirectRoute = `/${composeLensAddress(
+            const redirectRoute = `/${composeAddress(
                 "v",
-                lensParams.value,
-                normalizedPageAddress,
+                composeHash(lensParams.value, normalizedPageAddress),
             )}`;
             if (`/${normalizedPageAddress}` !== redirectRoute) {
                 router.replace(redirectRoute);
@@ -298,7 +300,7 @@ const editRoute = computed(() => {
     const lensParams = new URLSearchParams(
         srcdoc.value ? { draft: srcdoc.value } : undefined,
     );
-    return `/${composeLensAddress("e", lensParams, pageAddress.value)}`;
+    return `/${composeAddress("e", composeHash(lensParams, pageAddress.value))}`;
 });
 
 // Partially couple the input address to the route address
@@ -356,16 +358,15 @@ function submitForm() {
         // If the user only changed the fragment, keep the current lens/params
         // and just update the page address
         router.push(
-            `/${composeLensAddress(
+            `/${composeAddress(
                 lens.value,
-                lensParams.value,
-                addressInput.value,
+                composeHash(lensParams.value, addressInput.value),
             )}`,
         );
     } else {
         // Otherwise, navigate to the view lens
         router.push(
-            `/${composeLensAddress("v", undefined, addressInput.value)}`,
+            `/${composeAddress("v", composeHash(undefined, addressInput.value))}`,
         );
     }
     (document.activeElement as HTMLElement | null)?.blur();
