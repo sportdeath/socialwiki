@@ -28,6 +28,9 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
     >;
     protected readonly shadowRootContainer: ShadowRoot;
     protected iframe: HTMLIFrameElement;
+    protected displayedIframe: HTMLIFrameElement;
+    protected pendingSwapFromIframe: HTMLIFrameElement | null = null;
+    protected pendingSwapTarget: HTMLIFrameElement | null = null;
     protected renderVersion = 0;
     protected destroyEvents = () => {};
     protected destroyNavigation = () => {};
@@ -74,6 +77,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         }
       `;
       this.iframe = this.createIframeElement();
+      this.displayedIframe = this.iframe;
       this.shadowRootContainer.append(style, this.iframe);
       this.attachIframeServices();
     }
@@ -223,12 +227,50 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
 
       if (!hadFrame) return;
 
-      const previousIframe = this.iframe;
-      this.iframe = this.createIframeElement();
+      const previousIframe = this.displayedIframe;
+      // Keep the currently displayed frame alive until the replacement frame has
+      // fully loaded. This avoids showing a transient unstyled first paint
+      // (observed in Safari during lens navigations).
+      this.shadowRootContainer.querySelectorAll("iframe").forEach((iframe) => {
+        if (iframe !== previousIframe) iframe.remove();
+      });
+
+      const nextIframe = this.createIframeElement();
+      // Hidden preloaded frames must not be lazy, or Safari/Firefox can defer
+      // them indefinitely and never fire "load".
+      nextIframe.loading = "eager";
+      nextIframe.style.display = "none";
+      this.pendingSwapFromIframe = previousIframe;
+      this.pendingSwapTarget = null;
+      this.iframe = nextIframe;
       this.attachIframeServices();
-      previousIframe.remove();
-      this.shadowRootContainer.append(this.iframe);
-      this.transcludeIdTracker.track(this, this.iframe);
+    }
+
+    protected armSwapOnNextLoad(targetIframe: HTMLIFrameElement) {
+      // Only swap when a replacement frame is pending.
+      if (targetIframe === this.displayedIframe) return;
+      if (!this.pendingSwapFromIframe) return;
+      if (this.pendingSwapTarget === targetIframe) return;
+
+      this.pendingSwapTarget = targetIframe;
+      targetIframe.addEventListener(
+        "load",
+        () => {
+          if (this.pendingSwapTarget !== targetIframe) return;
+          this.pendingSwapTarget = null;
+          if (this.iframe !== targetIframe) return;
+
+          // Swap only after the replacement document is loaded so users never
+          // see about:blank or partially styled content between pages.
+          const previousIframe = this.pendingSwapFromIframe;
+          if (previousIframe?.isConnected) previousIframe.remove();
+          targetIframe.style.removeProperty("display");
+          this.displayedIframe = targetIframe;
+          this.pendingSwapFromIframe = null;
+          this.transcludeIdTracker.track(this, targetIframe);
+        },
+        { once: true },
+      );
     }
 
     protected alive = true;
@@ -358,7 +400,13 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
           URL.revokeObjectURL(this.currentBlobUrl);
           this.currentBlobUrl = null;
         }
+        this.armSwapOnNextLoad(this.iframe);
         this.iframe.srcdoc = srcdoc;
+        // Append only after assigning content so "load" corresponds to the new
+        // document, not the initial about:blank load.
+        if (!this.iframe.isConnected) {
+          this.shadowRootContainer.append(this.iframe);
+        }
         this.setAttribute("status", status);
         return;
       }
@@ -373,9 +421,15 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
       this.setUrl(this.currentBlobUrl, status);
     }
     setUrl(url: string, status: string) {
+      this.armSwapOnNextLoad(this.iframe);
       // If srcdoc is set, it wins over src; clear it before URL navigation.
       this.iframe.removeAttribute("srcdoc");
       this.iframe.src = url;
+      // Append only after src is assigned so the first load event we react to
+      // is for the target URL.
+      if (!this.iframe.isConnected) {
+        this.shadowRootContainer.append(this.iframe);
+      }
 
       this.setAttribute("status", status);
     }
