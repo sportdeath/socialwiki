@@ -15,6 +15,7 @@ import {
   LoadingPage,
   PageNotFound,
 } from "../../backend/status-pages";
+import { parsePageAddress } from "../../backend/route";
 import { annotationSchema, type AnnotationObject } from "../utils/schemas";
 import { computeTrustAnnotationsByActor } from "../utils/trust";
 import { defaultTrustedEditors } from "../utils/default-trusted-editors";
@@ -179,9 +180,8 @@ async function renderLens(options?: { force?: boolean }) {
   if (!address.length) return;
 
   const lensParams = requestedLensParams;
-  const url = new URL(address, "http://example.com");
+  const { pageName, pageHash } = parsePageAddress(address);
   const requestedVersion = lensParams.get("version") ?? "";
-  const pageName = url.pathname.slice(1);
   transclude.setAttribute("name", pageName);
   const contentKey = requestedVersion || pageName;
 
@@ -196,7 +196,7 @@ async function renderLens(options?: { force?: boolean }) {
   if (!options?.force && contentKey === currentContentKey) {
     // If the rendered content target hasn't changed, only update the hash.
     renderedAddress = address;
-    transclude?.setAttribute("hash", url.hash);
+    transclude?.setAttribute("hash", pageHash);
     return;
   }
 
@@ -256,8 +256,8 @@ async function renderLens(options?: { force?: boolean }) {
     outputLensStatus("ok", html);
     setTranscludeSrcDoc(html, "ok");
 
-    const currentUrl = new URL(renderedAddress, "http://example.com");
-    transclude?.setAttribute("hash", currentUrl.hash);
+    const { pageHash: renderedPageHash } = parsePageAddress(renderedAddress);
+    transclude?.setAttribute("hash", renderedPageHash);
   } catch (e) {
     if (renderVersion !== activeRenderVersion) return;
     outputLensStatus("error");

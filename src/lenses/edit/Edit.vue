@@ -236,7 +236,7 @@ import { useGraffiti, useGraffitiSession } from "@graffiti-garden/wrapper-vue";
 import { createPageVersion, getPageVersions } from "../utils/page-versions";
 import { initVimMode, type VimAdapterInstance } from "monaco-vim";
 import { initLens } from "../../backend/lens-client";
-import { composeRoute } from "../../backend/route";
+import { composeRoute, parsePageAddress } from "../../backend/route";
 import { randomBytes, bytesToHex } from "@noble/hashes/utils.js";
 import { annotationSchema, type AnnotationObject } from "../utils/schemas";
 import { computeTrustAnnotationsByActor } from "../utils/trust";
@@ -573,12 +573,12 @@ async function refreshPageProtection(page: string, requestId: number) {
 }
 
 initLens(async (nextPageAddress, lensParams) => {
-    const url = new URL(nextPageAddress, "https://example.com");
-    const nextPageName = url.pathname.slice(1);
+    const { pageName: nextPageName, pageHash: nextPageHash } =
+        parsePageAddress(nextPageAddress);
     const didChangePage = pageName.value !== nextPageName;
 
     pageName.value = nextPageName;
-    pageHash.value = url.hash;
+    pageHash.value = nextPageHash;
 
     if (didChangePage) {
         const requestId = ++activeProtectionRequest;

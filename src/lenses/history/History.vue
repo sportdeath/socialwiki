@@ -382,7 +382,7 @@ import {
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useTemplateRef } from "vue";
 import { initLens, outputLensStatus } from "../../backend/lens-client";
-import { composeRoute } from "../../backend/route";
+import { composeRoute, parsePageAddress } from "../../backend/route";
 import { annotationSchema, type AnnotationObject } from "../utils/schemas";
 import { computeTrustAnnotationsByActor, trustActor } from "../utils/trust";
 import { defaultTrustedEditors } from "../utils/default-trusted-editors";
@@ -398,9 +398,8 @@ const selectedPageVersion = ref<PageVersionObject | null | undefined>(
 );
 
 initLens(async (pageAddress, _lensParams) => {
-    const url = new URL(pageAddress, "https://example.com");
-    const nextPageName = url.pathname.slice(1);
-    const nextPageHash = url.hash;
+    const { pageName: nextPageName, pageHash: nextPageHash } =
+        parsePageAddress(pageAddress);
     const didChangePage = pageName.value !== nextPageName;
 
     pageName.value = nextPageName;
