@@ -1,6 +1,7 @@
 import importMap from "./import-map.json";
 import { GraffitiRpcClient } from "./graffiti-client";
 import { installTransclude } from "./transclude";
+import { installEventBridge } from "./events-client";
 import { installNavigation } from "./navigation-client";
 
 declare global {
@@ -35,6 +36,7 @@ if (window.top !== window) {
   // Give the page access to transclude,
   // and the ability to navigate
   installTransclude(new window.Graffiti(), window.topOrigin);
+  installEventBridge();
   installNavigation(window.topOrigin);
 } else {
   // If we are the top level window, wrap the content in an iframe

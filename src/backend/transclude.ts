@@ -1,8 +1,8 @@
 import type { Graffiti } from "@graffiti-garden/api";
-import { inputLensAddress, serveLens } from "./lens-server";
 import { ErrorPage, LoadingPage } from "./status-pages";
+import { serveEvents } from "./events-server";
 import { serveNavigation } from "./navigation-server";
-import { parseRoute } from "./route";
+import { composeLensHash, parseLensHash, parsePageAddress } from "./route";
 import { createTranscludeIdTracker } from "./transclude-ids";
 export { getTranscludeId } from "./transclude-ids";
 
@@ -29,8 +29,9 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
     protected readonly shadowRootContainer: ShadowRoot;
     protected iframe: HTMLIFrameElement;
     protected renderVersion = 0;
-    protected destroyLens = () => {};
+    protected destroyEvents = () => {};
     protected destroyNavigation = () => {};
+    protected sendEvent = (_eventName: string, _payload?: unknown) => {};
     protected setHash = (hash: string) => {};
     protected currentBlobUrl: string | null = null;
     protected currentFrameSourceKey = "";
@@ -103,79 +104,103 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
     }
 
     protected attachIframeServices() {
-      this.destroyLens();
+      this.destroyEvents();
       this.destroyNavigation();
 
-      this.destroyLens = serveLens(this.iframe, (status, srcdoc) => {
-        this.setAttribute("status", status);
-        if (srcdoc === undefined) {
-          this.removeAttribute("srcdoc");
-        } else {
-          this.setAttribute("srcdoc", srcdoc);
-        }
-      });
+      const { destroy: destroyEvents, send } = serveEvents(
+        (eventName, payload) => {
+          this.dispatchEvent(
+            new CustomEvent(eventName, {
+              detail: payload,
+              bubbles: true,
+              composed: true,
+            }),
+          );
 
-      const { destroy, setHash } = serveNavigation(
-        (to, top) => {
-          const url = new URL(to, this.origin).toString();
+          if (eventName !== "sw-lens-output") return;
+          if (typeof payload !== "object" || payload === null) return;
+          const p = payload as Record<string, unknown>;
+          if (
+            typeof p.status !== "string" ||
+            (typeof p.srcdoc !== "string" && p.srcdoc !== undefined)
+          )
+            return;
 
-          // Internal links are formatted with hash history
-          const isInternal = url.startsWith(this.origin + "/#");
-
-          // If we are not the top and either the link is external or top is set,
-          // propagate the request to the root with another navigation
-          if (window.top !== window && (!isInternal || top)) {
-            window.navigate(to, true);
+          this.setAttribute("status", p.status);
+          if (p.srcdoc === undefined) {
+            this.removeAttribute("srcdoc");
             return;
           }
-
-          // Otherwise, if the link is still external, we must be at the top.
-          // Emit a navigation request for the owner to handle.
-          if (!isInternal) return this.emitNavigate(to);
-
-          // Strip out the origin, leading slash and hash
-          const route = url.slice(this.origin.length + 2);
-
-          // If there is no current source to compute relative routes against
-          // or the route is not relative, emit the navigation request as-is.
-          const currentSrc = this.getAttribute("src");
-          if (
-            currentSrc === null ||
-            !(route.startsWith("?") || route.startsWith("#"))
-          ) {
-            return this.emitNavigate(to);
-          }
-
-          const currentSrcUrl = new URL(currentSrc || "", this.origin).toString();
-          if (!currentSrcUrl.startsWith(this.origin + "/#/")) {
-            throw new Error(
-              `Current src is not a valid route: ${currentSrcUrl}`,
-            );
-          }
-
-          // Otherwise, the fragment or query is being changed,
-          // which we treat as a relative navigation.
-          const currentRoute = currentSrcUrl.slice(this.origin.length + 3);
-
-          // Replace the fragment and query with the new ones if they exist
-          const dummyRouteUrl = new URL(route, this.origin);
-          const toUrl = new URL(currentRoute, this.origin);
-          toUrl.hash = dummyRouteUrl.hash.length
-            ? dummyRouteUrl.hash
-            : toUrl.hash;
-          toUrl.search = dummyRouteUrl.search.length
-            ? dummyRouteUrl.search
-            : toUrl.search;
-
-          // Navigate to the new route
-          const newSrc = "#" + toUrl.toString().slice(this.origin.length);
-          this.setAttribute("src", newSrc);
-          this.emitNavigate(newSrc);
+          this.setAttribute("srcdoc", p.srcdoc);
         },
         this.iframe,
       );
 
+      const { destroy, setHash } = serveNavigation((to, top) => {
+        const url = new URL(to, this.origin).toString();
+
+        // Internal links are formatted with hash history
+        const isInternal = url.startsWith(this.origin + "/#");
+        const route = isInternal ? url.slice(this.origin.length + 2) : "";
+
+        // If we are not the top and either the link is external or top is set,
+        // propagate the request to the root with another navigation
+        if (window.top !== window && (!isInternal || top)) {
+          window.navigate(to, true);
+          return;
+        }
+
+        // Otherwise, if the link is still external, we must be at the top.
+        // Emit a navigation request for the owner to handle.
+        if (!isInternal) return this.emitNavigate(to);
+
+        // If there is no current source to compute relative routes against
+        // or the route is not relative, emit the navigation request as-is.
+        const currentSrc = this.getAttribute("src");
+        if (
+          currentSrc === null ||
+          !(route.startsWith("?") || route.startsWith("#"))
+        ) {
+          return this.emitNavigate(to);
+        }
+
+        const currentSrcUrl = new URL(currentSrc || "", this.origin).toString();
+        if (!currentSrcUrl.startsWith(this.origin + "/#/")) {
+          throw new Error(`Current src is not a valid route: ${currentSrcUrl}`);
+        }
+
+        // Otherwise, the fragment or query is being changed,
+        // which we treat as a relative navigation.
+        const currentRoute = currentSrcUrl.slice(this.origin.length + 3);
+
+        const { name: currentLens, hash: currentLensHash } =
+          parsePageAddress(currentRoute);
+        const { lensParams: currentLensParams, pageAddress: currentPageAddress } =
+          parseLensHash(currentLensHash);
+
+        let newSrc = "";
+        if (route.startsWith("?")) {
+          const nextLensParams = new URLSearchParams(route.slice(1));
+          newSrc = `#/${currentLens}${composeLensHash(
+            nextLensParams,
+            currentPageAddress,
+          )}`;
+        } else {
+          const { name: currentPageName } = parsePageAddress(currentPageAddress);
+          const nextPageAddress = `${currentPageName}${route}`;
+          newSrc = `#/${currentLens}${composeLensHash(
+            currentLensParams,
+            nextPageAddress,
+          )}`;
+        }
+
+        this.setAttribute("src", newSrc);
+        this.emitNavigate(newSrc);
+      }, this.iframe);
+
+      this.destroyEvents = destroyEvents;
       this.destroyNavigation = destroy;
+      this.sendEvent = send;
       this.setHash = setHash;
     }
 
@@ -207,10 +232,13 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
     }
 
     protected alive = true;
+    send(eventName: string, payload?: unknown) {
+      this.sendEvent(eventName, payload);
+    }
     disconnectedCallback() {
       this.alive = false;
       this.transcludeIdTracker.untrack(this);
-      this.destroyLens();
+      this.destroyEvents();
       this.destroyNavigation();
       if (this.currentBlobUrl) {
         URL.revokeObjectURL(this.currentBlobUrl);
@@ -278,7 +306,8 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
       if (this.currentRoute === route) return;
       this.currentRoute = route;
 
-      const { lens, lensParams, pageAddress } = parseRoute(route);
+      const { name: lens, hash: lensHash } = parsePageAddress(route);
+      const { lensParams, pageAddress } = parseLensHash(lensHash);
       const sourcePageAddress = pageAddress.split("#")[0];
       this.replaceIframeForSourceChange(`src:${lens}/${sourcePageAddress}`);
 
@@ -287,7 +316,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
       if (this.currentLens === lens) {
         await this.lensReadyPromise;
         if (!this.alive || token !== this.renderVersion) return;
-        inputLensAddress(this.iframe, pageAddress, lensParams);
+        this.setHash(composeLensHash(lensParams, pageAddress));
         return;
       }
       this.currentLens = lens;
@@ -307,7 +336,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         await this.lensReadyPromise;
         if (!this.alive || token !== this.renderVersion) return;
 
-        inputLensAddress(this.iframe, pageAddress, lensParams);
+        this.setHash(composeLensHash(lensParams, pageAddress));
       } catch (e) {
         if (!this.alive || token !== this.renderVersion) return;
         return this.setSrcDoc(

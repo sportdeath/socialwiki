@@ -6,25 +6,18 @@ declare global {
 
 export function installNavigation(origin: string) {
   window.navigate = (to: string, top = false) => {
-    window.parent?.postMessage(
-      {
-        type: "sw-navigate",
-        to,
-        top,
-      },
-      "*",
-    );
+    window.emit("sw-navigate", { to, top });
   };
 
   let currentHash = window.location.hash;
-  window.addEventListener("message", (event: MessageEvent<unknown>) => {
-    if (event.source !== window.parent) return;
+  window.addEventListener("sw-hash", (event: Event) => {
+    if (!(event instanceof CustomEvent)) return;
+    const payload = event.detail;
+    if (typeof payload !== "object" || payload === null) return;
+    const p = payload as Record<string, unknown>;
+    if (typeof p.hash !== "string") return;
 
-    const data = event.data;
-    if (typeof data !== "object" || data === null) return;
-    const d = data as Record<string, unknown>;
-    if (d.type !== "sw-hash" || typeof d.hash !== "string") return;
-    currentHash = d.hash;
+    currentHash = p.hash;
     if (window.location.hash === currentHash) return;
 
     const url = new URL(window.location.href);

@@ -381,8 +381,12 @@ import {
 } from "@graffiti-garden/wrapper-vue";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useTemplateRef } from "vue";
-import { initLens, outputLensStatus } from "../../backend/lens-client";
-import { composeRoute, parsePageAddress } from "../../backend/route";
+import {
+    composeLensAddress,
+    composeLensHash,
+    parseLensHash,
+    parsePageAddress,
+} from "../../backend/route";
 import { annotationSchema, type AnnotationObject } from "../utils/schemas";
 import { computeTrustAnnotationsByActor, trustActor } from "../utils/trust";
 import { defaultTrustedEditors } from "../utils/default-trusted-editors";
@@ -391,14 +395,22 @@ import {
     updatePageProtection,
 } from "../utils/protection";
 
+function emitLensOutput(
+    status: "loading" | "not-found" | "ok" | "error",
+    srcdoc?: string,
+) {
+    window.emit("sw-lens-output", { status, srcdoc });
+}
+
 const pageName = ref("");
 const pageHash = ref("");
 const selectedPageVersion = ref<PageVersionObject | null | undefined>(
     undefined,
 );
 
-initLens(async (pageAddress, _lensParams) => {
-    const { pageName: nextPageName, pageHash: nextPageHash } =
+function onHashChange() {
+    const { pageAddress } = parseLensHash(window.location.hash);
+    const { name: nextPageName, hash: nextPageHash } =
         parsePageAddress(pageAddress);
     const didChangePage = pageName.value !== nextPageName;
 
@@ -409,7 +421,9 @@ initLens(async (pageAddress, _lensParams) => {
         // Avoid rendering stale preview routes while the new page versions load.
         selectedPageVersion.value = undefined;
     }
-});
+}
+window.addEventListener("hashchange", onHashChange);
+onHashChange();
 
 const transclude = useTemplateRef<HTMLElement>("transclude");
 defineExpose({ transclude });
@@ -424,7 +438,7 @@ const outputPreviewIfReady = () => {
     const html = preview.getAttribute("srcdoc");
     previewHtml.value = html ?? "";
     if (status === "ok" && html !== null) {
-        outputLensStatus("ok", html);
+        emitLensOutput("ok", html);
     }
 };
 function onPreviewNavigate(event: Event) {
@@ -656,21 +670,21 @@ const previewAddress = computed(() => {
         );
     }
 
-    return `#${composeRoute({
-        lens: "v",
+    return `#/${composeLensAddress(
+        "v",
         lensParams,
-        pageAddress: `${pageName.value}${pageHash.value}`,
-    })}`;
+        `${pageName.value}${pageHash.value}`,
+    )}`;
 });
 const editAddress = computed(
     () =>
-        `#${composeRoute({
-            lens: "e",
-            lensParams: new URLSearchParams({
+        `#/${composeLensAddress(
+            "e",
+            new URLSearchParams({
                 draft: previewHtml.value,
             }),
-            pageAddress: `${pageName.value}${pageHash.value}`,
-        })}`,
+            `${pageName.value}${pageHash.value}`,
+        )}`,
 );
 
 const selectPageVersion = (version: PageVersionObject) => {
@@ -712,7 +726,7 @@ watch(pageVersions, (versions) => {
 watch([pageVersions, isFirstPoll], ([versions, firstPoll]) => {
     if (firstPoll) return;
     if (!versions.length) {
-        outputLensStatus("not-found");
+        emitLensOutput("not-found");
     }
 });
 

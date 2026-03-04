@@ -25,7 +25,7 @@ const router = createRouter({
     {
       path: "/",
       name: "home",
-      redirect: "/v/Social.Wiki",
+      redirect: "/v#/Social.Wiki",
     },
     {
       path: "/:path(.+)",

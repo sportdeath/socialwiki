@@ -235,8 +235,11 @@ import TwoPaneLayout from "../utils/TwoPaneLayout.vue";
 import { useGraffiti, useGraffitiSession } from "@graffiti-garden/wrapper-vue";
 import { createPageVersion, getPageVersions } from "../utils/page-versions";
 import { initVimMode, type VimAdapterInstance } from "monaco-vim";
-import { initLens } from "../../backend/lens-client";
-import { composeRoute, parsePageAddress } from "../../backend/route";
+import {
+    composeLensAddress,
+    parseLensHash,
+    parsePageAddress,
+} from "../../backend/route";
 import { randomBytes, bytesToHex } from "@noble/hashes/utils.js";
 import { annotationSchema, type AnnotationObject } from "../utils/schemas";
 import { computeTrustAnnotationsByActor } from "../utils/trust";
@@ -409,19 +412,11 @@ const pageHash = ref("");
 const pageAddress = computed(() => `${pageName.value}${pageHash.value}`);
 const historyRoute = computed(
     () =>
-        `#${composeRoute({
-            lens: "h",
-            lensParams: new URLSearchParams(),
-            pageAddress: pageAddress.value,
-        })}`,
+        `#/${composeLensAddress("h", new URLSearchParams(), pageAddress.value)}`,
 );
 const viewRoute = computed(
     () =>
-        `#${composeRoute({
-            lens: "v",
-            lensParams: new URLSearchParams(),
-            pageAddress: pageAddress.value,
-        })}`,
+        `#/${composeLensAddress("v", new URLSearchParams(), pageAddress.value)}`,
 );
 const isProtectionLoading = ref(false);
 const isProtectedPage = ref<boolean | undefined>(undefined);
@@ -572,9 +567,10 @@ async function refreshPageProtection(page: string, requestId: number) {
     }
 }
 
-initLens(async (nextPageAddress, lensParams) => {
-    const { pageName: nextPageName, pageHash: nextPageHash } =
-        parsePageAddress(nextPageAddress);
+function onHashChange() {
+    const { lensParams, pageAddress } = parseLensHash(window.location.hash);
+    const { name: nextPageName, hash: nextPageHash } =
+        parsePageAddress(pageAddress);
     const didChangePage = pageName.value !== nextPageName;
 
     pageName.value = nextPageName;
@@ -608,7 +604,9 @@ initLens(async (nextPageAddress, lensParams) => {
             publishShakeTimeout = null;
         }
     }
-});
+}
+window.addEventListener("hashchange", onHashChange);
+onHashChange();
 
 function download() {
     const blob = new Blob([editorHtml.value], { type: "text/html" });
@@ -773,14 +771,14 @@ const schedulePreviewUpdate = (newHtml: string) => {
 
         // Set the draft HTML
         navigate(
-            `#${composeRoute({
-                lens: "e",
-                lensParams: new URLSearchParams({
+            `#/${composeLensAddress(
+                "e",
+                new URLSearchParams({
                     draft: newHtml,
                     draftSeq: String(draftSeq),
                 }),
-                pageAddress: `${pageName.value}${pageHash.value}`,
-            })}`,
+                `${pageName.value}${pageHash.value}`,
+            )}`,
         );
 
         debouncing.value = false;
@@ -885,7 +883,13 @@ async function publish(as?: boolean) {
             clearTimeout(publishShakeTimeout);
             publishShakeTimeout = null;
         }
-        navigate(`#/v/${publishName}${pageHash.value}`);
+        navigate(
+            `#/${composeLensAddress(
+                "v",
+                new URLSearchParams(),
+                `${publishName}${pageHash.value}`,
+            )}`,
+        );
     } finally {
         publishing.value = false;
     }

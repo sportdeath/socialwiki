@@ -1,36 +1,26 @@
+import { serveEvents } from "./events-server";
+
 export function serveNavigation(
   onNavigate: (to: string, top?: boolean) => void,
   iframe?: HTMLIFrameElement,
 ) {
-  const onMessage = (event: MessageEvent<unknown>) => {
-    if (iframe && iframe.contentWindow !== event.source) return;
-
-    const data = event.data;
-    if (typeof data !== "object" || data === null) return;
-    const d = data as Record<string, unknown>;
+  const { destroy, send } = serveEvents((eventName, payload) => {
+    if (eventName !== "sw-navigate") return;
+    if (typeof payload !== "object" || payload === null) return;
+    const p = payload as Record<string, unknown>;
     if (
-      d.type !== "sw-navigate" ||
-      typeof d.to !== "string" ||
-      (typeof d.top !== "boolean" && d.top !== undefined)
+      typeof p.to !== "string" ||
+      (typeof p.top !== "boolean" && p.top !== undefined)
     )
       return;
 
-    onNavigate(d.to, d.top);
-  };
+    onNavigate(p.to, p.top);
+  }, iframe);
 
-  window.addEventListener("message", onMessage);
   return {
-    destroy: () => window.removeEventListener("message", onMessage),
+    destroy,
     setHash: (hash: string) => {
-      if (iframe) {
-        iframe.contentWindow?.postMessage(
-          {
-            type: "sw-hash",
-            hash,
-          },
-          "*",
-        );
-      }
+      send("sw-hash", { hash });
     },
   };
 }

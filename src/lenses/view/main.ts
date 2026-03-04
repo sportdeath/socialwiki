@@ -4,7 +4,6 @@ import type {
   GraffitiSession,
   GraffitiSessionInitializedEvent,
 } from "@graffiti-garden/api";
-import { initLens, outputLensStatus } from "../../backend/lens-client";
 import {
   pageVersionSchema,
   sortPageVersions,
@@ -15,7 +14,7 @@ import {
   LoadingPage,
   PageNotFound,
 } from "../../backend/status-pages";
-import { parsePageAddress } from "../../backend/route";
+import { parseLensHash, parsePageAddress } from "../../backend/route";
 import { annotationSchema, type AnnotationObject } from "../utils/schemas";
 import { computeTrustAnnotationsByActor } from "../utils/trust";
 import { defaultTrustedEditors } from "../utils/default-trusted-editors";
@@ -51,6 +50,13 @@ transclude.addEventListener("sw-transclude-navigate", (e) => {
   if (!(e instanceof CustomEvent) || typeof e.detail?.to !== "string") return;
   window.navigate(e.detail.to);
 });
+
+function emitLensOutput(
+  status: "loading" | "not-found" | "ok" | "error",
+  srcdoc?: string,
+) {
+  window.emit("sw-lens-output", { status, srcdoc });
+}
 
 function maybeRenderForSessionChange() {
   if (!requestedAddress.length) return;
@@ -180,7 +186,7 @@ async function renderLens(options?: { force?: boolean }) {
   if (!address.length) return;
 
   const lensParams = requestedLensParams;
-  const { pageName, pageHash } = parsePageAddress(address);
+  const { name: pageName, hash: pageHash } = parsePageAddress(address);
   const requestedVersion = lensParams.get("version") ?? "";
   transclude.setAttribute("name", pageName);
   const contentKey = requestedVersion || pageName;
@@ -234,7 +240,7 @@ async function renderLens(options?: { force?: boolean }) {
         isProtected,
       );
       if (!selectedVersion) {
-        outputLensStatus("not-found");
+        emitLensOutput("not-found");
         setTranscludeSrcDoc(
           PageNotFound(address, window.topOrigin),
           "not-found",
@@ -253,14 +259,14 @@ async function renderLens(options?: { force?: boolean }) {
     const html = await media.data.text();
     if (renderVersion !== activeRenderVersion) return;
 
-    outputLensStatus("ok", html);
+    emitLensOutput("ok", html);
     setTranscludeSrcDoc(html, "ok");
 
-    const { pageHash: renderedPageHash } = parsePageAddress(renderedAddress);
+    const { hash: renderedPageHash } = parsePageAddress(renderedAddress);
     transclude?.setAttribute("hash", renderedPageHash);
   } catch (e) {
     if (renderVersion !== activeRenderVersion) return;
-    outputLensStatus("error");
+    emitLensOutput("error");
     setTranscludeSrcDoc(
       ErrorPage(e instanceof Error ? e.message : String(e)),
       "error",
@@ -268,8 +274,11 @@ async function renderLens(options?: { force?: boolean }) {
   }
 }
 
-initLens(async (pageAddress, lensParams) => {
+async function onHashChange() {
+  const { lensParams, pageAddress } = parseLensHash(window.location.hash);
   requestedAddress = pageAddress;
   requestedLensParams = new URLSearchParams(lensParams);
   await renderLens();
-});
+}
+window.addEventListener("hashchange", onHashChange);
+onHashChange();

@@ -1,3 +1,5 @@
+import { composeLensAddress } from "./route";
+
 import styleCss from "../style.css?inline";
 const style = `<style>${styleCss}</style>`;
 
@@ -24,7 +26,7 @@ export const PageNotFound = (pageName: string, origin: string) => `
     </head>
     <body>
         <h1 class="status">Nothing here…yet.</h1>
-        <a class="status-button" href="#/e/${pageName}">
+        <a class="status-button" href="#/${composeLensAddress("e", undefined, pageName)}">
             Edit page
         </a>
     </body>

@@ -1,51 +1,52 @@
-export type ParsedRoute = {
-  lens: string;
-  lensParams: URLSearchParams;
-  pageAddress: string;
-};
-
 export function parsePageAddress(pageAddress: string): {
-  pageName: string;
-  pageHash: string;
+  name: string;
+  hash: string;
 } {
-  // Page name is of the form "name#fragment")
-  // Split on the first "#" only; everything before it is the page name.
   const hashIndex = pageAddress.indexOf("#");
-  const pageName =
-    hashIndex >= 0 ? pageAddress.slice(0, hashIndex) : pageAddress;
-
-  // Keep the fragment with its leading "#" when present, else use empty string.
-  const pageHash = hashIndex >= 0 ? pageAddress.slice(hashIndex) : "";
-
-  return { pageName, pageHash };
+  const name = hashIndex < 0 ? pageAddress : pageAddress.slice(0, hashIndex);
+  const hash = hashIndex < 0 ? "" : pageAddress.slice(hashIndex);
+  return { name, hash };
 }
 
-export function parseRoute(route: string): ParsedRoute {
-  const normalized = route.replace(/^#?\//, "");
-  const [lensWithParams = "", pageAddress = ""] = normalized.split(/\/(.*)/);
-  const [encodedLens = "", lensParams = ""] = lensWithParams.split(/\?(.*)/);
-  let lens = encodedLens;
-  try {
-    lens = decodeURIComponent(encodedLens);
-  } catch {
-    // Keep invalid percent-encoding as-is to avoid throwing on malformed URLs.
+export function composePageAddress(name: string, hash: string): string {
+  if (!hash.length) return name;
+  return `${name}${hash.startsWith("#") ? hash : `#${hash}`}`;
+}
+
+export function parseLensHash(hash: string): {
+  lensParams: URLSearchParams;
+  pageAddress: string;
+} {
+  const normalized = hash.startsWith("#") ? hash.slice(1) : hash;
+
+  if (normalized.startsWith("?")) {
+    const [serializedParams = "", pageAddress = ""] = normalized
+      .slice(1)
+      .split(/\/(.*)/);
+    return {
+      lensParams: new URLSearchParams(serializedParams),
+      pageAddress,
+    };
   }
+
   return {
-    lens,
-    lensParams: new URLSearchParams(lensParams),
-    pageAddress,
+    lensParams: new URLSearchParams(),
+    pageAddress: normalized.replace(/^\//, ""),
   };
 }
 
-export function composeRoute({
-  lens,
-  lensParams,
-  pageAddress,
-}: ParsedRoute): string {
-  const encodedLens = encodeURIComponent(lens);
-  const params = lensParams.toString();
-  const lensWithParams = params.length
-    ? `${encodedLens}?${params}`
-    : encodedLens;
-  return `/${lensWithParams}/${pageAddress}`;
+export function composeLensHash(
+  lensParams: URLSearchParams | undefined,
+  pageAddress: string,
+): string {
+  const params = (lensParams ?? "").toString();
+  return params.length ? `#?${params}/${pageAddress}` : `#/${pageAddress}`;
+}
+
+export function composeLensAddress(
+  lens: string,
+  lensParams: URLSearchParams | undefined,
+  pageAddress: string,
+): string {
+  return composePageAddress(lens, composeLensHash(lensParams, pageAddress));
 }
