@@ -1,23 +1,23 @@
 export function parseAddress(address: string): {
   name: string;
-  hash: string;
+  fragment: string;
 } {
-  const hashIndex = address.indexOf("#");
-  const name = hashIndex < 0 ? address : address.slice(0, hashIndex);
-  const hash = hashIndex < 0 ? "" : address.slice(hashIndex);
-  return { name, hash };
+  const fragmentIndex = address.indexOf("#");
+  const name = fragmentIndex < 0 ? address : address.slice(0, fragmentIndex);
+  const fragment = fragmentIndex < 0 ? "" : address.slice(fragmentIndex);
+  return { name, fragment };
 }
 
-export function composeAddress(name: string, hash: string): string {
-  if (!hash.length) return name;
-  return `${name}${hash.startsWith("#") ? hash : `#${hash}`}`;
+export function composeAddress(name: string, fragment: string): string {
+  if (!fragment.length) return name;
+  return `${name}${fragment.startsWith("#") ? fragment : `#${fragment}`}`;
 }
 
-export function parseHash(hash: string): {
+export function parseFragment(fragment: string): {
   params: URLSearchParams;
   address: string;
 } {
-  const normalized = hash.startsWith("#") ? hash.slice(1) : hash;
+  const normalized = fragment.startsWith("#") ? fragment.slice(1) : fragment;
 
   if (normalized.startsWith("?")) {
     const [serializedParams = "", address = ""] = normalized
@@ -35,7 +35,7 @@ export function parseHash(hash: string): {
   };
 }
 
-export function composeHash(
+export function composeFragment(
   params: URLSearchParams | undefined,
   address: string,
 ): string {

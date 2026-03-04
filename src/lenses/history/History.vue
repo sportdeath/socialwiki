@@ -381,7 +381,7 @@ import {
 } from "@graffiti-garden/wrapper-vue";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useTemplateRef } from "vue";
-import { composeAddress, composeHash, parseAddress } from "../../backend/route";
+import { composeAddress, composeFragment, parseAddress } from "../../backend/route";
 import { annotationSchema, type AnnotationObject } from "../utils/schemas";
 import { computeTrustAnnotationsByActor, trustActor } from "../utils/trust";
 import { defaultTrustedEditors } from "../utils/default-trusted-editors";
@@ -398,27 +398,27 @@ function emitLensOutput(
 }
 
 const pageName = ref("");
-const pageHash = ref("");
+const pageFragment = ref("");
 const selectedPageVersion = ref<PageVersionObject | null | undefined>(
     undefined,
 );
 
-function onHashChange() {
-    const { name: nextPageName, hash: nextPageHash } = parseAddress(
+function onFragmentChange() {
+    const { name: nextPageName, fragment: nextPageFragment } = parseAddress(
         window.address,
     );
     const didChangePage = pageName.value !== nextPageName;
 
     pageName.value = nextPageName;
-    pageHash.value = nextPageHash;
+    pageFragment.value = nextPageFragment;
 
     if (didChangePage) {
         // Avoid rendering stale preview routes while the new page versions load.
         selectedPageVersion.value = undefined;
     }
 }
-window.addEventListener("addresschange", onHashChange);
-onHashChange();
+window.addEventListener("addresschange", onFragmentChange);
+onFragmentChange();
 
 const transclude = useTemplateRef<HTMLElement>("transclude");
 defineExpose({ transclude });
@@ -667,18 +667,21 @@ const previewAddress = computed(() => {
 
     return `#/${composeAddress(
         "v",
-        composeHash(lensParams, composeAddress(pageName.value, pageHash.value)),
+        composeFragment(
+            lensParams,
+            composeAddress(pageName.value, pageFragment.value),
+        ),
     )}`;
 });
 const editAddress = computed(
     () =>
         `#/${composeAddress(
             "e",
-            composeHash(
+            composeFragment(
                 new URLSearchParams({
                     draft: previewHtml.value,
                 }),
-                composeAddress(pageName.value, pageHash.value),
+                composeAddress(pageName.value, pageFragment.value),
             ),
         )}`,
 );

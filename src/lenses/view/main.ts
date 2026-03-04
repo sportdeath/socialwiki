@@ -186,7 +186,7 @@ async function renderLens(options?: { force?: boolean }) {
   if (!address.length) return;
 
   const lensParams = requestedLensParams;
-  const { name: pageName, hash: pageHash } = parseAddress(address);
+  const { name: pageName, fragment: pageFragment } = parseAddress(address);
   const requestedVersion = lensParams.get("version") ?? "";
   transclude.setAttribute("name", pageName);
   const contentKey = requestedVersion || pageName;
@@ -200,9 +200,9 @@ async function renderLens(options?: { force?: boolean }) {
   }
 
   if (!options?.force && contentKey === currentContentKey) {
-    // If the rendered content target hasn't changed, only update the hash.
+    // If the rendered content target hasn't changed, only update the fragment.
     renderedAddress = address;
-    transclude?.setAttribute("hash", pageHash);
+    transclude?.setAttribute("fragment", pageFragment);
     return;
   }
 
@@ -262,8 +262,8 @@ async function renderLens(options?: { force?: boolean }) {
     emitLensOutput("ok", html);
     setTranscludeSrcDoc(html, "ok");
 
-    const { hash: renderedPageHash } = parseAddress(renderedAddress);
-    transclude?.setAttribute("hash", renderedPageHash);
+    const { fragment: renderedPageFragment } = parseAddress(renderedAddress);
+    transclude?.setAttribute("fragment", renderedPageFragment);
   } catch (e) {
     if (renderVersion !== activeRenderVersion) return;
     emitLensOutput("error");
@@ -274,11 +274,11 @@ async function renderLens(options?: { force?: boolean }) {
   }
 }
 
-async function onHashChange() {
+async function onFragmentChange() {
   requestedAddress = window.address;
   requestedLensParams = new URLSearchParams(window.params);
   await renderLens();
 }
-window.addEventListener("addresschange", onHashChange);
-window.addEventListener("paramschange", onHashChange);
-void onHashChange();
+window.addEventListener("addresschange", onFragmentChange);
+window.addEventListener("paramschange", onFragmentChange);
+void onFragmentChange();

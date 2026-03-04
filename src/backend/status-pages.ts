@@ -1,4 +1,4 @@
-import { composeAddress, composeHash } from "./route";
+import { composeAddress, composeFragment } from "./route";
 
 import styleCss from "../style.css?inline";
 const style = `<style>${styleCss}</style>`;
@@ -26,7 +26,7 @@ export const PageNotFound = (pageName: string, origin: string) => `
     </head>
     <body>
         <h1 class="status">Nothing here…yet.</h1>
-        <a class="status-button" href="#/${composeAddress("e", composeHash(undefined, pageName))}">
+        <a class="status-button" href="#/${composeAddress("e", composeFragment(undefined, pageName))}">
             Edit page
         </a>
     </body>

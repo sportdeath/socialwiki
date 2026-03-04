@@ -19,8 +19,8 @@ export function serveNavigation(
 
   return {
     destroy,
-    setHash: (hash: string) => {
-      send("sw-hash", { hash });
+    setFragment: (fragment: string) => {
+      send("sw-fragment", { fragment });
     },
   };
 }

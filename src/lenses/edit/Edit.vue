@@ -170,7 +170,7 @@
                         ref="previewTransclude"
                         :id="previewTranscludeId"
                         name="Preview"
-                        :hash="pageHash"
+                        :fragment="pageFragment"
                         :key="refreshKey"
                         :srcdoc="previewHtml"
                     ></sw-transclude>
@@ -235,7 +235,11 @@ import TwoPaneLayout from "../utils/TwoPaneLayout.vue";
 import { useGraffiti, useGraffitiSession } from "@graffiti-garden/wrapper-vue";
 import { createPageVersion, getPageVersions } from "../utils/page-versions";
 import { initVimMode, type VimAdapterInstance } from "monaco-vim";
-import { composeAddress, composeHash, parseAddress } from "../../backend/route";
+import {
+    composeAddress,
+    composeFragment,
+    parseAddress,
+} from "../../backend/route";
 import { randomBytes, bytesToHex } from "@noble/hashes/utils.js";
 import { annotationSchema, type AnnotationObject } from "../utils/schemas";
 import { computeTrustAnnotationsByActor } from "../utils/trust";
@@ -404,13 +408,17 @@ function onPreviewNavigate(event: Event) {
 }
 
 const pageName = ref("");
-const pageHash = ref("");
-const pageAddress = computed(() => `${pageName.value}${pageHash.value}`);
+const pageFragment = ref("");
+const pageAddress = computed(() =>
+    composeAddress(pageName.value, pageFragment.value),
+);
 const historyRoute = computed(
-    () => `#/${composeAddress("h", composeHash(undefined, pageAddress.value))}`,
+    () =>
+        `#/${composeAddress("h", composeFragment(undefined, pageAddress.value))}`,
 );
 const viewRoute = computed(
-    () => `#/${composeAddress("v", composeHash(undefined, pageAddress.value))}`,
+    () =>
+        `#/${composeAddress("v", composeFragment(undefined, pageAddress.value))}`,
 );
 const isProtectionLoading = ref(false);
 const isProtectedPage = ref<boolean | undefined>(undefined);
@@ -561,15 +569,15 @@ async function refreshPageProtection(page: string, requestId: number) {
     }
 }
 
-function onHashChange() {
+function onFragmentChange() {
     const lensParams = new URLSearchParams(window.params);
-    const { name: nextPageName, hash: nextPageHash } = parseAddress(
+    const { name: nextPageName, fragment: nextPageFragment } = parseAddress(
         window.address,
     );
     const didChangePage = pageName.value !== nextPageName;
 
     pageName.value = nextPageName;
-    pageHash.value = nextPageHash;
+    pageFragment.value = nextPageFragment;
 
     if (didChangePage) {
         const requestId = ++activeProtectionRequest;
@@ -600,9 +608,9 @@ function onHashChange() {
         }
     }
 }
-window.addEventListener("addresschange", onHashChange);
-window.addEventListener("paramschange", onHashChange);
-onHashChange();
+window.addEventListener("addresschange", onFragmentChange);
+window.addEventListener("paramschange", onFragmentChange);
+onFragmentChange();
 
 function download() {
     const blob = new Blob([editorHtml.value], { type: "text/html" });
@@ -769,12 +777,12 @@ const schedulePreviewUpdate = (newHtml: string) => {
         navigate(
             `#/${composeAddress(
                 "e",
-                composeHash(
+                composeFragment(
                     new URLSearchParams({
                         draft: newHtml,
                         draftSeq: String(draftSeq),
                     }),
-                    composeAddress(pageName.value, pageHash.value),
+                    composeAddress(pageName.value, pageFragment.value),
                 ),
             )}`,
         );
@@ -884,9 +892,9 @@ async function publish(as?: boolean) {
         navigate(
             `#/${composeAddress(
                 "v",
-                composeHash(
+                composeFragment(
                     undefined,
-                    composeAddress(publishName, pageHash.value),
+                    composeAddress(publishName, pageFragment.value),
                 ),
             )}`,
         );

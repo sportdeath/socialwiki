@@ -2,7 +2,7 @@ import type { Graffiti } from "@graffiti-garden/api";
 import { ErrorPage, LoadingPage } from "./status-pages";
 import { serveEvents } from "./events-server";
 import { serveNavigation } from "./navigation-server";
-import { parseHash, parseAddress, composeHash, composeAddress } from "./route";
+import { parseFragment, parseAddress, composeFragment, composeAddress } from "./route";
 import { createTranscludeIdTracker } from "./transclude-ids";
 export { getTranscludeId } from "./transclude-ids";
 
@@ -35,7 +35,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
     protected destroyEvents = () => {};
     protected destroyNavigation = () => {};
     protected sendEvent = (_eventName: string, _payload?: unknown) => {};
-    protected setHash = (_hash: string) => {};
+    protected setFragment = (_fragment: string) => {};
     protected currentBlobUrl: string | null = null;
     protected currentFrameSourceKey = "";
     protected emitNavigate(to: string) {
@@ -140,10 +140,10 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         this.iframe,
       );
 
-      const { destroy, setHash } = serveNavigation((to, top) => {
+      const { destroy, setFragment } = serveNavigation((to, top) => {
         const url = new URL(to, this.origin).toString();
 
-        // Internal links are formatted with hash history
+        // Internal links are formatted with fragment history
         const isInternal = url.startsWith(this.origin + "/#");
         const route = isInternal ? url.slice(this.origin.length + 2) : "";
 
@@ -177,24 +177,24 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         // which we treat as a relative navigation.
         const currentRoute = currentSrcUrl.slice(this.origin.length + 3);
 
-        const { name: currentLens, hash: currentLensHash } =
+        const { name: currentLens, fragment: currentLensFragment } =
           parseAddress(currentRoute);
         const { params: currentLensParams, address: currentPageAddress } =
-          parseHash(currentLensHash);
+          parseFragment(currentLensFragment);
 
         let newSrc = "";
         if (route.startsWith("?")) {
           const nextLensParams = new URLSearchParams(route.slice(1));
           newSrc = `#/${composeAddress(
             currentLens,
-            composeHash(nextLensParams, currentPageAddress),
+            composeFragment(nextLensParams, currentPageAddress),
           )}`;
         } else {
           const { name: currentPageName } = parseAddress(currentPageAddress);
           const nextPageAddress = `${currentPageName}${route}`;
           newSrc = `#/${composeAddress(
             currentLens,
-            composeHash(currentLensParams, nextPageAddress),
+            composeFragment(currentLensParams, nextPageAddress),
           )}`;
         }
 
@@ -205,7 +205,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
       this.destroyEvents = destroyEvents;
       this.destroyNavigation = destroy;
       this.sendEvent = send;
-      this.setHash = setHash;
+      this.setFragment = setFragment;
     }
 
     protected replaceIframeForSourceChange(sourceKey: string) {
@@ -308,18 +308,18 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
 
         // If no source, then a lens is using transclude
         // to manually set page contents. Just pay attention
-        // to the srcdoc and the hash in this case.
+        // to the srcdoc and the fragment in this case.
         if (srcdoc === null) {
           return this.setSrcDoc(LoadingPage, "loading");
         }
 
         const token = ++this.renderVersion;
 
-        // If the doc is already set, just set the hash
+        // If the doc is already set, just set the fragment.
         if (this.currentSrcDoc === srcdoc) {
           await this.srcDocReadyPromise;
           if (!this.alive || token !== this.renderVersion) return;
-          this.setHash(this.getAttribute("hash") || "");
+          this.setFragment(this.getAttribute("fragment") || "");
           return;
         }
 
@@ -332,7 +332,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         await this.srcDocReadyPromise;
         if (!this.alive || token !== this.renderVersion) return;
 
-        this.setHash(this.getAttribute("hash") || "");
+        this.setFragment(this.getAttribute("fragment") || "");
         return;
       }
 
@@ -348,8 +348,8 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
       if (this.currentRoute === route) return;
       this.currentRoute = route;
 
-      const { name: lens, hash: lensHash } = parseAddress(route);
-      const { params, address } = parseHash(lensHash);
+      const { name: lens, fragment: lensFragment } = parseAddress(route);
+      const { params, address } = parseFragment(lensFragment);
       const sourcePageAddress = address.split("#")[0];
       this.replaceIframeForSourceChange(`src:${lens}/${sourcePageAddress}`);
 
@@ -358,7 +358,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
       if (this.currentLens === lens) {
         await this.lensReadyPromise;
         if (!this.alive || token !== this.renderVersion) return;
-        this.setHash(composeHash(params, address));
+        this.setFragment(composeFragment(params, address));
         return;
       }
       this.currentLens = lens;
@@ -378,7 +378,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         await this.lensReadyPromise;
         if (!this.alive || token !== this.renderVersion) return;
 
-        this.setHash(composeHash(params, address));
+        this.setFragment(composeFragment(params, address));
       } catch (e) {
         if (!this.alive || token !== this.renderVersion) return;
         return this.setSrcDoc(
@@ -436,7 +436,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
 
     // Rerender on initialization or src/srcdoc changes
     static get observedAttributes(): string[] {
-      return ["src", "srcdoc", "hash", "id", "name"];
+      return ["src", "srcdoc", "fragment", "id", "name"];
     }
     connectedCallback() {
       this.transcludeIdTracker.track(this, this.iframe);

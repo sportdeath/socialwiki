@@ -1,4 +1,4 @@
-import { composeHash, parseHash } from "./route";
+import { composeFragment, parseFragment } from "./route";
 
 declare global {
   interface Window {
@@ -22,7 +22,10 @@ export function installNavigation(origin: string) {
     return serialized.startsWith("?") ? serialized.slice(1) : serialized;
   }
 
-  function updateHashState(params: URLSearchParams | string, address: string) {
+  function updateFragmentState(
+    params: URLSearchParams | string,
+    address: string,
+  ) {
     const paramsSerialized = normalizeParams(params);
 
     const didAddressChange = currentAddress !== address;
@@ -44,8 +47,8 @@ export function installNavigation(origin: string) {
     return { didAddressChange, didParamsChange };
   }
 
-  function navigateForHashChange() {
-    const to = `#${composeHash(
+  function navigateForFragmentChange() {
+    const to = `#${composeFragment(
       new URLSearchParams(currentParamsSerialized),
       currentAddress,
     )}`;
@@ -59,12 +62,12 @@ export function installNavigation(origin: string) {
       get: () => currentAddress,
       set: (value: string) => {
         const nextAddress = String(value);
-        const { didAddressChange } = updateHashState(
+        const { didAddressChange } = updateFragmentState(
           currentParamsSerialized,
           nextAddress,
         );
         if (!didAddressChange) return;
-        navigateForHashChange();
+        navigateForFragmentChange();
       },
     },
     params: {
@@ -72,25 +75,25 @@ export function installNavigation(origin: string) {
       get: () => new URLSearchParams(currentParamsSerialized),
       set: (value: URLSearchParams | string) => {
         const nextParamsSerialized = normalizeParams(value);
-        const { didParamsChange } = updateHashState(
+        const { didParamsChange } = updateFragmentState(
           nextParamsSerialized,
           currentAddress,
         );
         if (!didParamsChange) return;
-        navigateForHashChange();
+        navigateForFragmentChange();
       },
     },
   });
 
-  window.addEventListener("sw-hash", (event: Event) => {
+  window.addEventListener("sw-fragment", (event: Event) => {
     if (!(event instanceof CustomEvent)) return;
     const payload = event.detail;
     if (typeof payload !== "object" || payload === null) return;
     const p = payload as Record<string, unknown>;
-    if (typeof p.hash !== "string") return;
+    if (typeof p.fragment !== "string") return;
 
-    const { params, address } = parseHash(p.hash);
-    updateHashState(params, address);
+    const { params, address } = parseFragment(p.fragment);
+    updateFragmentState(params, address);
   });
 
   const base = document.createElement("base");
