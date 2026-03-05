@@ -170,7 +170,7 @@
                         ref="previewTransclude"
                         :id="previewTranscludeId"
                         name="Preview"
-                        :fragment="pageFragment"
+                        :query="pageQuery"
                         :key="refreshKey"
                         :srcdoc="previewHtml"
                     ></sw-transclude>
@@ -237,8 +237,9 @@ import { createPageVersion, getPageVersions } from "../utils/page-versions";
 import { initVimMode, type VimAdapterInstance } from "monaco-vim";
 import {
     composeAddress,
-    composeFragment,
+    composeQuery,
     parseAddress,
+    parseQuery,
 } from "../../backend/route";
 import { randomBytes, bytesToHex } from "@noble/hashes/utils.js";
 import { annotationSchema, type AnnotationObject } from "../utils/schemas";
@@ -396,29 +397,31 @@ watch(hasUnsavedChanges, (isDirty, wasDirty) => {
     }, 320);
 });
 
-const navigate = window.navigate;
-function onPreviewNavigate(event: Event) {
-    if (
-        !(event instanceof CustomEvent) ||
-        typeof event.detail?.to !== "string"
-    ) {
-        return;
-    }
-    window.navigate(event.detail.to);
+function onPreviewNavigate(e: Event) {
+    if (!(e instanceof CustomEvent) || typeof e.detail?.to !== "string") return;
+    const to = e.detail.to;
+
+    // If not relative, just pass it on
+    if (!to.startsWith("?")) return window.navigate(to);
+
+    // If it is relative, add the page name and the params
+    const { name } = parseAddress(window.address);
+    const newTo = composeQuery(window.params, composeAddress(name, to));
+    window.navigate(newTo);
 }
 
 const pageName = ref("");
-const pageFragment = ref("");
+const pageQuery = ref("");
 const pageAddress = computed(() =>
-    composeAddress(pageName.value, pageFragment.value),
+    composeAddress(pageName.value, pageQuery.value),
 );
 const historyRoute = computed(
     () =>
-        `#/${composeAddress("h", composeFragment(undefined, pageAddress.value))}`,
+        `#/${composeAddress("h", composeQuery(undefined, pageAddress.value))}`,
 );
 const viewRoute = computed(
     () =>
-        `#/${composeAddress("v", composeFragment(undefined, pageAddress.value))}`,
+        `#/${composeAddress("v", composeQuery(undefined, pageAddress.value))}`,
 );
 const isProtectionLoading = ref(false);
 const isProtectedPage = ref<boolean | undefined>(undefined);
@@ -569,15 +572,15 @@ async function refreshPageProtection(page: string, requestId: number) {
     }
 }
 
-function onFragmentChange() {
+function onQueryChange() {
     const lensParams = new URLSearchParams(window.params);
-    const { name: nextPageName, fragment: nextPageFragment } = parseAddress(
+    const { name: nextPageName, query: nextPageQuery } = parseAddress(
         window.address,
     );
     const didChangePage = pageName.value !== nextPageName;
 
     pageName.value = nextPageName;
-    pageFragment.value = nextPageFragment;
+    pageQuery.value = nextPageQuery;
 
     if (didChangePage) {
         const requestId = ++activeProtectionRequest;
@@ -608,9 +611,9 @@ function onFragmentChange() {
         }
     }
 }
-window.addEventListener("addresschange", onFragmentChange);
-window.addEventListener("paramschange", onFragmentChange);
-onFragmentChange();
+window.addEventListener("addresschange", onQueryChange);
+window.addEventListener("paramschange", onQueryChange);
+onQueryChange();
 
 function download() {
     const blob = new Blob([editorHtml.value], { type: "text/html" });
@@ -777,12 +780,12 @@ const schedulePreviewUpdate = (newHtml: string) => {
         navigate(
             `#/${composeAddress(
                 "e",
-                composeFragment(
+                composeQuery(
                     new URLSearchParams({
                         draft: newHtml,
                         draftSeq: String(draftSeq),
                     }),
-                    composeAddress(pageName.value, pageFragment.value),
+                    composeAddress(pageName.value, pageQuery.value),
                 ),
             )}`,
         );
@@ -813,16 +816,13 @@ const beforeUnload = (event: BeforeUnloadEvent) => {
 onMounted(() => {
     window.addEventListener("beforeunload", beforeUnload);
     document.addEventListener("pointerdown", onMenuPointerDown);
-    previewTransclude.value?.addEventListener(
-        "sw-transclude-navigate",
-        onPreviewNavigate,
-    );
+    previewTransclude.value?.addEventListener("sw-navigate", onPreviewNavigate);
 });
 onBeforeUnmount(() => {
     window.removeEventListener("beforeunload", beforeUnload);
     document.removeEventListener("pointerdown", onMenuPointerDown);
     previewTransclude.value?.removeEventListener(
-        "sw-transclude-navigate",
+        "sw-navigate",
         onPreviewNavigate,
     );
     disposeVimMode();
@@ -892,9 +892,9 @@ async function publish(as?: boolean) {
         navigate(
             `#/${composeAddress(
                 "v",
-                composeFragment(
+                composeQuery(
                     undefined,
-                    composeAddress(publishName, pageFragment.value),
+                    composeAddress(publishName, pageQuery.value),
                 ),
             )}`,
         );

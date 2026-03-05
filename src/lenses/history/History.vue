@@ -381,7 +381,12 @@ import {
 } from "@graffiti-garden/wrapper-vue";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useTemplateRef } from "vue";
-import { composeAddress, composeFragment, parseAddress } from "../../backend/route";
+import {
+    composeAddress,
+    composeQuery,
+    parseAddress,
+    parseQuery,
+} from "../../backend/route";
 import { annotationSchema, type AnnotationObject } from "../utils/schemas";
 import { computeTrustAnnotationsByActor, trustActor } from "../utils/trust";
 import { defaultTrustedEditors } from "../utils/default-trusted-editors";
@@ -398,27 +403,27 @@ function emitLensOutput(
 }
 
 const pageName = ref("");
-const pageFragment = ref("");
+const pageQuery = ref("");
 const selectedPageVersion = ref<PageVersionObject | null | undefined>(
     undefined,
 );
 
-function onFragmentChange() {
-    const { name: nextPageName, fragment: nextPageFragment } = parseAddress(
+function onQueryChange() {
+    const { name: nextPageName, query: nextPageQuery } = parseAddress(
         window.address,
     );
     const didChangePage = pageName.value !== nextPageName;
 
     pageName.value = nextPageName;
-    pageFragment.value = nextPageFragment;
+    pageQuery.value = nextPageQuery;
 
     if (didChangePage) {
         // Avoid rendering stale preview routes while the new page versions load.
         selectedPageVersion.value = undefined;
     }
 }
-window.addEventListener("addresschange", onFragmentChange);
-onFragmentChange();
+window.addEventListener("addresschange", onQueryChange);
+onQueryChange();
 
 const transclude = useTemplateRef<HTMLElement>("transclude");
 defineExpose({ transclude });
@@ -436,23 +441,22 @@ const outputPreviewIfReady = () => {
         emitLensOutput("ok", html);
     }
 };
-function onPreviewNavigate(event: Event) {
-    if (
-        !(event instanceof CustomEvent) ||
-        typeof event.detail?.to !== "string"
-    ) {
-        return;
-    }
-    window.navigate(event.detail.to);
+function onPreviewNavigate(e: Event) {
+    if (!(e instanceof CustomEvent) || typeof e.detail?.to !== "string") return;
+    const to = e.detail.to;
+
+    // If not relative, just pass it on
+    if (!to.startsWith("?")) return window.navigate(to);
+
+    // For relative queries strip out the version name
+    const { address } = parseQuery(to);
+    window.navigate(composeQuery(undefined, address));
 }
 
 onMounted(() => {
     if (!transclude.value) return;
     previewObserver = new MutationObserver(outputPreviewIfReady);
-    transclude.value.addEventListener(
-        "sw-transclude-navigate",
-        onPreviewNavigate,
-    );
+    transclude.value.addEventListener("sw-navigate", onPreviewNavigate);
     previewObserver.observe(transclude.value, {
         attributes: true,
         attributeFilter: ["srcdoc"],
@@ -462,10 +466,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
     previewObserver?.disconnect();
-    transclude.value?.removeEventListener(
-        "sw-transclude-navigate",
-        onPreviewNavigate,
-    );
+    transclude.value?.removeEventListener("sw-navigate", onPreviewNavigate);
 });
 
 const { objects: pageVersionsAndAnnotations, isFirstPoll } =
@@ -667,9 +668,9 @@ const previewAddress = computed(() => {
 
     return `#/${composeAddress(
         "v",
-        composeFragment(
+        composeQuery(
             lensParams,
-            composeAddress(pageName.value, pageFragment.value),
+            composeAddress(pageName.value, pageQuery.value),
         ),
     )}`;
 });
@@ -677,11 +678,11 @@ const editAddress = computed(
     () =>
         `#/${composeAddress(
             "e",
-            composeFragment(
+            composeQuery(
                 new URLSearchParams({
                     draft: previewHtml.value,
                 }),
-                composeAddress(pageName.value, pageFragment.value),
+                composeAddress(pageName.value, pageQuery.value),
             ),
         )}`,
 );

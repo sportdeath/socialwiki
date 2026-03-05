@@ -1,30 +1,31 @@
-import { composeFragment, parseFragment } from "./route";
+import { composeQuery, parseQuery } from "./route";
 
 declare global {
   interface Window {
-    navigate: (to: string, top?: boolean) => void;
-    params: URLSearchParams;
-    address: string;
+    navigate: (to: string) => void;
+    params?: URLSearchParams;
+    address?: string;
   }
 }
 
 export function installNavigation(origin: string) {
-  window.navigate = (to: string, top = false) => {
-    window.emit("sw-navigate", { to, top });
+  window.navigate = (to: string) => {
+    window.emit("sw-navigate", { to });
   };
 
-  let currentAddress = "";
-  let currentParamsSerialized = "";
+  let currentAddress: string | undefined = undefined;
+  let currentParamsSerialized: string | undefined = undefined;
 
-  function normalizeParams(params: URLSearchParams | string): string {
+  function normalizeParams(params?: URLSearchParams | string): string {
+    if (params === undefined) return "";
     const serialized =
       params instanceof URLSearchParams ? params.toString() : String(params);
-    return serialized.startsWith("?") ? serialized.slice(1) : serialized;
+    return serialized.startsWith("?") ? serialized : `?${serialized}`;
   }
 
-  function updateFragmentState(
-    params: URLSearchParams | string,
-    address: string,
+  function updateQueryState(
+    params?: URLSearchParams | string,
+    address?: string,
   ) {
     const paramsSerialized = normalizeParams(params);
 
@@ -47,11 +48,11 @@ export function installNavigation(origin: string) {
     return { didAddressChange, didParamsChange };
   }
 
-  function navigateForFragmentChange() {
-    const to = `#${composeFragment(
+  function navigateForQueryChange() {
+    const to = composeQuery(
       new URLSearchParams(currentParamsSerialized),
       currentAddress,
-    )}`;
+    );
     window.navigate(to);
     return;
   }
@@ -60,40 +61,40 @@ export function installNavigation(origin: string) {
     address: {
       configurable: true,
       get: () => currentAddress,
-      set: (value: string) => {
-        const nextAddress = String(value);
-        const { didAddressChange } = updateFragmentState(
+      set: (value?: string) => {
+        const nextAddress = value === undefined ? value : String(value);
+        const { didAddressChange } = updateQueryState(
           currentParamsSerialized,
           nextAddress,
         );
         if (!didAddressChange) return;
-        navigateForFragmentChange();
+        navigateForQueryChange();
       },
     },
     params: {
       configurable: true,
       get: () => new URLSearchParams(currentParamsSerialized),
-      set: (value: URLSearchParams | string) => {
+      set: (value?: URLSearchParams | string) => {
         const nextParamsSerialized = normalizeParams(value);
-        const { didParamsChange } = updateFragmentState(
+        const { didParamsChange } = updateQueryState(
           nextParamsSerialized,
           currentAddress,
         );
         if (!didParamsChange) return;
-        navigateForFragmentChange();
+        navigateForQueryChange();
       },
     },
   });
 
-  window.addEventListener("sw-fragment", (event: Event) => {
+  window.addEventListener("sw-query", (event: Event) => {
     if (!(event instanceof CustomEvent)) return;
     const payload = event.detail;
     if (typeof payload !== "object" || payload === null) return;
     const p = payload as Record<string, unknown>;
-    if (typeof p.fragment !== "string") return;
+    if (typeof p.query !== "string") return;
 
-    const { params, address } = parseFragment(p.fragment);
-    updateFragmentState(params, address);
+    const { params, address } = parseQuery(p.query);
+    updateQueryState(params, address);
   });
 
   const base = document.createElement("base");
@@ -113,6 +114,6 @@ export function installNavigation(origin: string) {
     if (a.hasAttribute("download")) return;
 
     e.preventDefault();
-    window.navigate(a.href, a.target === "_top");
+    window.navigate(a.href);
   });
 }

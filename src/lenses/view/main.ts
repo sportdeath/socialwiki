@@ -14,7 +14,11 @@ import {
   LoadingPage,
   PageNotFound,
 } from "../../backend/status-pages";
-import { parseAddress } from "../../backend/route";
+import {
+  composeAddress,
+  composeQuery,
+  parseAddress,
+} from "../../backend/route";
 import { annotationSchema, type AnnotationObject } from "../utils/schemas";
 import { computeTrustAnnotationsByActor } from "../utils/trust";
 import { defaultTrustedEditors } from "../utils/default-trusted-editors";
@@ -24,8 +28,8 @@ import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 
 const graffiti = new window.Graffiti();
 
-let requestedAddress = "";
-let requestedLensParams = new URLSearchParams();
+let requestedAddress: string | undefined = undefined;
+let requestedLensParams: URLSearchParams | undefined = undefined;
 let renderedAddress = "";
 let currentContentKey = "";
 let activeRenderVersion = 0;
@@ -45,10 +49,21 @@ function setTranscludeSrcDoc(
 
 setTranscludeSrcDoc(LoadingPage, "loading");
 
-// Forward explicit transclude navigation requests to the parent
-transclude.addEventListener("sw-transclude-navigate", (e) => {
+// Forward navigation requests to the parent
+transclude.addEventListener("sw-navigate", (e) => {
   if (!(e instanceof CustomEvent) || typeof e.detail?.to !== "string") return;
-  window.navigate(e.detail.to);
+  const to = e.detail.to;
+
+  // If it is not relative, just pass it on
+  if (!to.startsWith("?")) return window.navigate(to);
+
+  // Otherwise, add on the current page parameters
+  const { name: pageName } = parseAddress(requestedAddress);
+  const newQuery = composeQuery(
+    requestedLensParams,
+    composeAddress(pageName, to),
+  );
+  window.navigate(newQuery);
 });
 
 function emitLensOutput(
@@ -59,7 +74,7 @@ function emitLensOutput(
 }
 
 function maybeRenderForSessionChange() {
-  if (!requestedAddress.length) return;
+  if (!requestedAddress?.length) return;
   void renderLens({ force: true });
 }
 
@@ -183,11 +198,11 @@ function pickVersion(
 
 async function renderLens(options?: { force?: boolean }) {
   const address = requestedAddress;
-  if (!address.length) return;
+  if (!address?.length) return;
 
   const lensParams = requestedLensParams;
-  const { name: pageName, fragment: pageFragment } = parseAddress(address);
-  const requestedVersion = lensParams.get("version") ?? "";
+  const { name: pageName, query: pageQuery } = parseAddress(address);
+  const requestedVersion = lensParams?.get("version") ?? "";
   transclude.setAttribute("name", pageName);
   const contentKey = requestedVersion || pageName;
 
@@ -200,9 +215,9 @@ async function renderLens(options?: { force?: boolean }) {
   }
 
   if (!options?.force && contentKey === currentContentKey) {
-    // If the rendered content target hasn't changed, only update the fragment.
+    // If the rendered content target hasn't changed, only update the query.
     renderedAddress = address;
-    transclude?.setAttribute("fragment", pageFragment);
+    transclude?.setAttribute("query", pageQuery);
     return;
   }
 
@@ -262,8 +277,8 @@ async function renderLens(options?: { force?: boolean }) {
     emitLensOutput("ok", html);
     setTranscludeSrcDoc(html, "ok");
 
-    const { fragment: renderedPageFragment } = parseAddress(renderedAddress);
-    transclude?.setAttribute("fragment", renderedPageFragment);
+    const { query: renderedPageQuery } = parseAddress(renderedAddress);
+    transclude?.setAttribute("query", renderedPageQuery);
   } catch (e) {
     if (renderVersion !== activeRenderVersion) return;
     emitLensOutput("error");
@@ -274,11 +289,11 @@ async function renderLens(options?: { force?: boolean }) {
   }
 }
 
-async function onFragmentChange() {
+async function onQueryChange() {
   requestedAddress = window.address;
   requestedLensParams = new URLSearchParams(window.params);
   await renderLens();
 }
-window.addEventListener("addresschange", onFragmentChange);
-window.addEventListener("paramschange", onFragmentChange);
-void onFragmentChange();
+window.addEventListener("addresschange", onQueryChange);
+window.addEventListener("paramschange", onQueryChange);
+void onQueryChange();

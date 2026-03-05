@@ -2,7 +2,12 @@ import type { Graffiti } from "@graffiti-garden/api";
 import { ErrorPage, LoadingPage } from "./status-pages";
 import { serveEvents } from "./events-server";
 import { serveNavigation } from "./navigation-server";
-import { parseFragment, parseAddress, composeFragment, composeAddress } from "./route";
+import {
+  parseQuery,
+  parseAddress,
+  composeQuery,
+  composeAddress,
+} from "./route";
 import { createTranscludeIdTracker } from "./transclude-ids";
 export { getTranscludeId } from "./transclude-ids";
 
@@ -35,18 +40,10 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
     protected destroyEvents = () => {};
     protected destroyNavigation = () => {};
     protected sendEvent = (_eventName: string, _payload?: unknown) => {};
-    protected setFragment = (_fragment: string) => {};
+    protected setQuery = (_query: string) => {};
     protected currentBlobUrl: string | null = null;
     protected currentFrameSourceKey = "";
-    protected emitNavigate(to: string) {
-      this.dispatchEvent(
-        new CustomEvent("sw-transclude-navigate", {
-          detail: { to },
-          bubbles: true,
-          composed: true,
-        }),
-      );
-    }
+
     // We intentionally use both srcdoc and blob URLs:
     // - Top-level, non-opaque contexts use blob URLs because Chrome can behave
     //   incorrectly with sandboxed srcdoc updates.
@@ -140,72 +137,35 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         this.iframe,
       );
 
-      const { destroy, setFragment } = serveNavigation((to, top) => {
-        const url = new URL(to, this.origin).toString();
+      const { destroy, setQuery } = serveNavigation((to) => {
+        // If the navigation is not relative, don't do anything.
+        // The host will get the message and handle it if needed
+        if (!to.startsWith("?")) return;
 
-        // Internal links are formatted with fragment history
-        const isInternal = url.startsWith(this.origin + "/#");
-        const route = isInternal ? url.slice(this.origin.length + 2) : "";
-
-        // If we are not the top and either the link is external or top is set,
-        // propagate the request to the root with another navigation
-        if (window.top !== window && (!isInternal || top)) {
-          window.navigate(to, true);
+        // If there is no source, just replace the query
+        const currentSrc = this.getAttribute("src");
+        if (currentSrc === null) {
+          this.setAttribute("query", to);
           return;
         }
 
-        // Otherwise, if the link is still external, we must be at the top.
-        // Emit a navigation request for the owner to handle.
-        if (!isInternal) return this.emitNavigate(to);
-
-        // If there is no current source to compute relative routes against
-        // or the route is not relative, emit the navigation request as-is.
-        const currentSrc = this.getAttribute("src");
-        if (
-          currentSrc === null ||
-          !(route.startsWith("?") || route.startsWith("#"))
-        ) {
-          return this.emitNavigate(to);
-        }
-
+        // Otherwise, parse the query from the source
         const currentSrcUrl = new URL(currentSrc || "", this.origin).toString();
         if (!currentSrcUrl.startsWith(this.origin + "/#/")) {
           throw new Error(`Current src is not a valid route: ${currentSrcUrl}`);
         }
-
-        // Otherwise, the fragment or query is being changed,
-        // which we treat as a relative navigation.
         const currentRoute = currentSrcUrl.slice(this.origin.length + 3);
 
-        const { name: currentLens, fragment: currentLensFragment } =
-          parseAddress(currentRoute);
-        const { params: currentLensParams, address: currentPageAddress } =
-          parseFragment(currentLensFragment);
-
-        let newSrc = "";
-        if (route.startsWith("?")) {
-          const nextLensParams = new URLSearchParams(route.slice(1));
-          newSrc = `#/${composeAddress(
-            currentLens,
-            composeFragment(nextLensParams, currentPageAddress),
-          )}`;
-        } else {
-          const { name: currentPageName } = parseAddress(currentPageAddress);
-          const nextPageAddress = `${currentPageName}${route}`;
-          newSrc = `#/${composeAddress(
-            currentLens,
-            composeFragment(currentLensParams, nextPageAddress),
-          )}`;
-        }
-
+        // Then inject the relative query
+        const { name } = parseAddress(currentRoute);
+        const newSrc = `#/${composeAddress(name, to)}`;
         this.setAttribute("src", newSrc);
-        this.emitNavigate(newSrc);
       }, this.iframe);
 
       this.destroyEvents = destroyEvents;
       this.destroyNavigation = destroy;
       this.sendEvent = send;
-      this.setFragment = setFragment;
+      this.setQuery = setQuery;
     }
 
     protected replaceIframeForSourceChange(sourceKey: string) {
@@ -308,18 +268,18 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
 
         // If no source, then a lens is using transclude
         // to manually set page contents. Just pay attention
-        // to the srcdoc and the fragment in this case.
+        // to the srcdoc and the query in this case.
         if (srcdoc === null) {
           return this.setSrcDoc(LoadingPage, "loading");
         }
 
         const token = ++this.renderVersion;
 
-        // If the doc is already set, just set the fragment.
+        // If the doc is already set, just set the query.
         if (this.currentSrcDoc === srcdoc) {
           await this.srcDocReadyPromise;
           if (!this.alive || token !== this.renderVersion) return;
-          this.setFragment(this.getAttribute("fragment") || "");
+          this.setQuery(this.getAttribute("query") || "");
           return;
         }
 
@@ -332,7 +292,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         await this.srcDocReadyPromise;
         if (!this.alive || token !== this.renderVersion) return;
 
-        this.setFragment(this.getAttribute("fragment") || "");
+        this.setQuery(this.getAttribute("query") || "");
         return;
       }
 
@@ -348,17 +308,18 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
       if (this.currentRoute === route) return;
       this.currentRoute = route;
 
-      const { name: lens, fragment: lensFragment } = parseAddress(route);
-      const { params, address } = parseFragment(lensFragment);
-      const sourcePageAddress = address.split("#")[0];
-      this.replaceIframeForSourceChange(`src:${lens}/${sourcePageAddress}`);
+      const { name: lens, query: lensQuery } = parseAddress(route);
+      const { params, address } = parseQuery(lensQuery);
+      this.replaceIframeForSourceChange(
+        `src:${lens}${address ? `/${parseAddress(address).name}` : ""}`,
+      );
 
       const token = ++this.renderVersion;
 
       if (this.currentLens === lens) {
         await this.lensReadyPromise;
         if (!this.alive || token !== this.renderVersion) return;
-        this.setFragment(composeFragment(params, address));
+        this.setQuery(composeQuery(params, address));
         return;
       }
       this.currentLens = lens;
@@ -378,7 +339,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         await this.lensReadyPromise;
         if (!this.alive || token !== this.renderVersion) return;
 
-        this.setFragment(composeFragment(params, address));
+        this.setQuery(composeQuery(params, address));
       } catch (e) {
         if (!this.alive || token !== this.renderVersion) return;
         return this.setSrcDoc(
@@ -436,7 +397,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
 
     // Rerender on initialization or src/srcdoc changes
     static get observedAttributes(): string[] {
-      return ["src", "srcdoc", "fragment", "id", "name"];
+      return ["src", "srcdoc", "query", "id", "name"];
     }
     connectedCallback() {
       this.transcludeIdTracker.track(this, this.iframe);

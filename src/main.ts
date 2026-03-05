@@ -2,7 +2,7 @@ import "./style.css";
 import { createApp } from "vue";
 import {
   createRouter,
-  createWebHashHistory as createWebFragmentHistory,
+  createWebHashHistory,
   RouterView,
 } from "vue-router";
 import App from "./App.vue";
@@ -13,28 +13,30 @@ import { handleGraffitiGuardRequest } from "./guard/graffiti-guard";
 
 // Set up a graffiti "server" that is served
 // to all the "client" pages
-const { graffiti, listConnectedWindows } = serveGraffiti(handleGraffitiGuardRequest);
+const { graffiti, listConnectedWindows } = serveGraffiti(
+  handleGraffitiGuardRequest,
+);
 
 const router = createRouter({
-  // Use web fragment history so that the page name
+  // Use web hash history so that the page name
   // is never sent to the server. This means that
   // when Graffiti becomes E2EE, page names will
   // never touch any server in the clear.
-  history: createWebFragmentHistory(),
+  history: createWebHashHistory(),
   routes: [
     {
       path: "/",
       name: "home",
-      redirect: "/v#/Social.Wiki",
+      redirect: "/v?/Social.Wiki",
     },
     {
       path: "/:path(.+)",
       component: App,
       props: () => {
-        // Use the raw fragment route to avoid Vue Router query decoding/re-encoding
+        // Use the raw hash route to avoid Vue Router query decoding/re-encoding
         // that can alter reserved characters in lens params.
-        const fragment = window.location.hash;
-        const route = fragment.replace(/^#\/?/, "");
+        const hash = window.location.hash;
+        const route = hash.replace(/^#\/?/, "");
         return {
           address: route,
         };
