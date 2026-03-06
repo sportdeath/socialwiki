@@ -21,27 +21,18 @@ function safeDecodeComponent(value: string): string {
   }
 }
 
-function decodeAddressForRouter(address?: string): string {
-  if (address === undefined) return "";
-
+function decodeAddress(address: string): string {
   const { name, query } = parseAddress(address);
   const decodedName = safeDecodeComponent(name);
   if (!query.length) return composeAddress(decodedName, query);
 
   const { params, address: nestedAddress } = parseQuery(query);
   const decodedNestedAddress =
-    nestedAddress === undefined
-      ? undefined
-      : decodeAddressForRouter(nestedAddress);
+    nestedAddress === undefined ? undefined : decodeAddress(nestedAddress);
   return composeAddress(
     decodedName,
     composeQuery(params, decodedNestedAddress),
   );
-}
-
-function decodeRouteForApp(route: string): string {
-  const normalized = route.replace(/^\/+/, "");
-  return decodeAddressForRouter(normalized);
 }
 
 // Set up a graffiti "server" that is served
@@ -69,8 +60,8 @@ const router = createRouter({
         // Use the raw hash route to avoid Vue Router query decoding/re-encoding
         // that can alter reserved characters in lens params.
         const hash = window.location.hash;
-        const route = hash.replace(/^#\/?/, "");
-        return { address: decodeRouteForApp(route) };
+        const addressEncoded = hash.replace(/^#\/?/, "");
+        return { address: decodeAddress(addressEncoded) };
       },
     },
   ],

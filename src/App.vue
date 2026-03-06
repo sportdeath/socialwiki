@@ -214,6 +214,26 @@ function extractHashRoute(source: string, origin: string): string | null {
     return null;
 }
 
+function getLegacyLensRedirect(address: string): string | null {
+    const lenses = ["v", "h", "e"];
+
+    for (const lens of lenses) {
+        const slashPrefix = `${lens}/`;
+        if (address.startsWith(slashPrefix)) {
+            const pageAddress = address.slice(slashPrefix.length);
+            return composeAddress(lens, composeQuery(undefined, pageAddress));
+        }
+
+        const hashPrefix = `${lens}#/`;
+        if (address.startsWith(hashPrefix)) {
+            const pageAddress = address.slice(hashPrefix.length);
+            return composeAddress(lens, composeQuery(undefined, pageAddress));
+        }
+    }
+
+    return null;
+}
+
 const graffiti = useGraffiti();
 const router = useRouter();
 
@@ -234,7 +254,12 @@ watch(
         lensParams.value = lensParams_;
         pageAddress.value = pageAddress_;
 
-        // TODO: Add redirects for old formats
+        // TODO: Remove this after the legacy route format is fully sunset.
+        const legacyRedirectRoute = getLegacyLensRedirect(newAddress);
+        if (legacyRedirectRoute !== null) {
+            router.replace(encodeRouteForRouter(legacyRedirectRoute));
+            return;
+        }
 
         // If the route is missing a lens (e.g. "#/SomePage"), redirect
         // to the view lens while preserving the raw page address.
