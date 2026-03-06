@@ -1,7 +1,7 @@
 <template>
     <GraffitiGuardPrompt />
     <header>
-        <RouterLink :to="encodeRouteForRouter('/')">
+        <RouterLink :to="encodeRouteForRouter('')">
             <h1>
                 <span class="brand-full">Social.Wiki</span>
                 <span class="brand-short" aria-hidden="true">SW</span>
@@ -48,10 +48,10 @@
                     <RouterLink
                         :to="
                             encodeRouteForRouter(
-                                `/${composeAddress(
+                                composeAddress(
                                     lens,
                                     composeQuery(lensParams, pageAddress),
-                                )}`,
+                                ),
                             )
                         "
                         @click="
@@ -75,10 +75,10 @@
                         <RouterLink
                             :to="
                                 encodeRouteForRouter(
-                                    `/${composeAddress(
+                                    composeAddress(
                                         'v',
                                         composeQuery(undefined, pageAddress),
-                                    )}`,
+                                    ),
                                 )
                             "
                             title="The current version of this page"
@@ -98,10 +98,10 @@
                         <RouterLink
                             :to="
                                 encodeRouteForRouter(
-                                    `/${composeAddress(
+                                    composeAddress(
                                         'h',
                                         composeQuery(undefined, pageAddress),
-                                    )}`,
+                                    ),
                                 )
                             "
                             title="Past revisions of this page"
@@ -203,8 +203,7 @@ function encodeAddressForRoute(address?: string): string {
 }
 
 function encodeRouteForRouter(route: string): string {
-    const normalized = route.replace(/^\/+/, "");
-    return `/${encodeAddressForRoute(normalized)}`;
+    return `/${encodeAddressForRoute(route)}`;
 }
 
 function extractHashRoute(source: string, origin: string): string | null {
@@ -213,21 +212,6 @@ function extractHashRoute(source: string, origin: string): string | null {
     if (source.startsWith(`${origin}/#/`))
         return source.slice(origin.length + 3);
     return null;
-}
-
-function parseLensRoute(address: string): {
-    lens: string;
-    lensParams?: URLSearchParams;
-    pageAddress?: string;
-} {
-    const normalized = address.replace(/^\/+/, "");
-    const { name: lens, query: lensQuery } = parseAddress(normalized);
-    const { params: lensParams, address: pageAddress } = parseQuery(lensQuery);
-    return {
-        lens,
-        lensParams,
-        pageAddress,
-    };
 }
 
 const graffiti = useGraffiti();
@@ -243,23 +227,23 @@ const pageAddress = ref<string | undefined>(undefined);
 watch(
     () => props.address,
     (newAddress) => {
-        const parsed = parseLensRoute(newAddress);
-        lens.value = parsed.lens;
-        lensParams.value = parsed.lensParams;
-        pageAddress.value = parsed.pageAddress;
+        const { name: lens_, query } = parseAddress(newAddress);
+        lens.value = lens_;
+        const { params: lensParams_, address: pageAddress_ } =
+            parseQuery(query);
+        lensParams.value = lensParams_;
+        pageAddress.value = pageAddress_;
+
+        // TODO: Add redirects for old formats
 
         // If the route is missing a lens (e.g. "#/SomePage"), redirect
         // to the view lens while preserving the raw page address.
-        const normalized = newAddress.replace(/^\/+/, "");
-        const normalizedPageAddress = normalized.replace(/\/+$/, "");
-        if (!parsed.pageAddress?.length && normalizedPageAddress.length > 0) {
-            const redirectRoute = `/${composeAddress(
+        if (!pageAddress.value?.length) {
+            const redirectRoute = composeAddress(
                 "v",
-                composeQuery(lensParams.value, normalizedPageAddress),
-            )}`;
-            if (`/${normalizedPageAddress}` !== redirectRoute) {
-                router.replace(encodeRouteForRouter(redirectRoute));
-            }
+                composeQuery(lensParams.value, lens.value),
+            );
+            router.replace(encodeRouteForRouter(redirectRoute));
             return;
         }
     },
@@ -293,13 +277,13 @@ function onTranscludeNavigate(e: Event) {
     // If it is relative, add the lens
     const to = e.detail.to;
     if (to.startsWith("?")) {
-        router.push(encodeRouteForRouter(`/${composeAddress(lens.value, to)}`));
+        router.push(encodeRouteForRouter(composeAddress(lens.value, to)));
         return;
     }
 
     const internalRoute = extractHashRoute(e.detail.to, window.origin);
     if (internalRoute !== null) {
-        router.push(encodeRouteForRouter(`/${internalRoute}`));
+        router.push(encodeRouteForRouter(internalRoute));
         return;
     }
 
@@ -328,7 +312,7 @@ const editRoute = computed(() => {
     const lensParams = new URLSearchParams(
         srcdoc.value ? { draft: srcdoc.value } : undefined,
     );
-    return `/${composeAddress("e", composeQuery(lensParams, pageAddress.value))}`;
+    return composeAddress("e", composeQuery(lensParams, pageAddress.value));
 });
 
 // Partially couple the input address to the route address
@@ -387,17 +371,20 @@ function submitForm() {
         // and just update the page address
         router.push(
             encodeRouteForRouter(
-                `/${composeAddress(
+                composeAddress(
                     lens.value,
                     composeQuery(lensParams.value, addressInput.value),
-                )}`,
+                ),
             ),
         );
     } else {
         // Otherwise, navigate to the view lens
         router.push(
             encodeRouteForRouter(
-                `/${composeAddress("v", composeQuery(undefined, addressInput.value))}`,
+                composeAddress(
+                    "v",
+                    composeQuery(undefined, addressInput.value),
+                ),
             ),
         );
     }
