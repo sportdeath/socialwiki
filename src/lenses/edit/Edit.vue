@@ -437,11 +437,11 @@ function continueProtectedEdit() {
 
 function cancelProtectedEdit() {
     showProtectedDialog.value = false;
-    navigate(viewRoute.value);
+    window.navigate(viewRoute.value);
 }
 
 function openProtectedPageHistory() {
-    navigate(historyRoute.value);
+    window.navigate(historyRoute.value);
 }
 
 async function waitForSessionStatusKnown() {
@@ -777,7 +777,7 @@ const schedulePreviewUpdate = (newHtml: string) => {
         const draftSeq = ++localDraftSeq;
 
         // Set the draft HTML
-        navigate(
+        window.navigate(
             `#/${composeAddress(
                 "e",
                 composeQuery(
@@ -889,7 +889,7 @@ async function publish(as?: boolean) {
             clearTimeout(publishShakeTimeout);
             publishShakeTimeout = null;
         }
-        navigate(
+        window.navigate(
             `#/${composeAddress(
                 "v",
                 composeQuery(

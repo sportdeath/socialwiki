@@ -179,17 +179,9 @@ import GraffitiGuardPrompt from "./guard/GraffitiGuardPrompt.vue";
 import GraffitiGuardPermissionsPanel from "./guard/GraffitiGuardPermissionsPanel.vue";
 import { listGraffitiGuardApprovalRules } from "./guard/graffiti-guard-approval-rules";
 
-function safeDecodeComponent(value: string): string {
-    try {
-        return decodeURIComponent(value);
-    } catch {
-        return value;
-    }
-}
-
 function encodeNameForRoute(name: string): string {
     // Keep path separators readable in names while encoding other reserved chars.
-    return encodeURIComponent(safeDecodeComponent(name)).replace(/%2F/gi, "/");
+    return encodeURIComponent(name).replace(/%2F/gi, "/");
 }
 
 function encodeAddressForRoute(address?: string): string {
@@ -225,16 +217,16 @@ function extractHashRoute(source: string, origin: string): string | null {
 
 function parseLensRoute(address: string): {
     lens: string;
-    lensParams: URLSearchParams;
-    pageAddress: string;
+    lensParams?: URLSearchParams;
+    pageAddress?: string;
 } {
     const normalized = address.replace(/^\/+/, "");
     const { name: lens, query: lensQuery } = parseAddress(normalized);
     const { params: lensParams, address: pageAddress } = parseQuery(lensQuery);
     return {
         lens,
-        lensParams: lensParams ?? new URLSearchParams(),
-        pageAddress: pageAddress ?? "",
+        lensParams,
+        pageAddress,
     };
 }
 
@@ -246,8 +238,8 @@ const props = defineProps<{
 }>();
 
 const lens = ref("");
-const lensParams = ref(new URLSearchParams());
-const pageAddress = ref("");
+const lensParams = ref<URLSearchParams | undefined>(undefined);
+const pageAddress = ref<string | undefined>(undefined);
 watch(
     () => props.address,
     (newAddress) => {
@@ -260,7 +252,7 @@ watch(
         // to the view lens while preserving the raw page address.
         const normalized = newAddress.replace(/^\/+/, "");
         const normalizedPageAddress = normalized.replace(/\/+$/, "");
-        if (!parsed.pageAddress.length && normalizedPageAddress.length > 0) {
+        if (!parsed.pageAddress?.length && normalizedPageAddress.length > 0) {
             const redirectRoute = `/${composeAddress(
                 "v",
                 composeQuery(lensParams.value, normalizedPageAddress),
@@ -388,10 +380,8 @@ async function syncGuardPermissionsButtonVisibility() {
 // When input is submitted, the route changes
 function submitForm() {
     // Extract the page name from the input
-    const { name: inputPageNameRaw } = parseAddress(addressInput.value);
-    const { name: currentPageNameRaw } = parseAddress(pageAddress.value);
-    const inputPageName = safeDecodeComponent(inputPageNameRaw);
-    const currentPageName = safeDecodeComponent(currentPageNameRaw);
+    const { name: inputPageName } = parseAddress(addressInput.value);
+    const { name: currentPageName } = parseAddress(pageAddress.value);
     if (inputPageName === currentPageName) {
         // If the user only changed the query, keep the current lens/params
         // and just update the page address
