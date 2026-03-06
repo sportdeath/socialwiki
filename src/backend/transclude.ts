@@ -42,6 +42,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
     protected sendEvent = (_eventName: string, _payload?: unknown) => {};
     protected setQuery = (_query: string) => {};
     protected currentBlobUrl: string | null = null;
+    protected readonly loadingPageBlobUrl: string | null;
     protected currentFrameSourceKey = "";
 
     // We intentionally use both srcdoc and blob URLs:
@@ -57,6 +58,9 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
       this.origin = origin;
       this.transcludeIdTracker = transcludeIdTracker;
       this.shadowRootContainer = this.attachShadow({ mode: "closed" });
+      this.loadingPageBlobUrl = this.useBlobForSrcDoc
+        ? URL.createObjectURL(new Blob([LoadingPage], { type: "text/html" }))
+        : null;
 
       // Add styling
       const style = document.createElement("style");
@@ -188,9 +192,8 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
       if (!hadFrame) return;
 
       const previousIframe = this.displayedIframe;
-      // Keep the currently displayed frame alive until the replacement frame has
-      // fully loaded. This avoids showing a transient unstyled first paint
-      // (observed in Safari during lens navigations).
+      // Keep a visible status page while the replacement frame loads so users
+      // get immediate feedback without seeing stale page content.
       this.shadowRootContainer.querySelectorAll("iframe").forEach((iframe) => {
         if (iframe !== previousIframe) iframe.remove();
       });
@@ -204,6 +207,17 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
       this.pendingSwapTarget = null;
       this.iframe = nextIframe;
       this.attachIframeServices();
+      this.showLoadingPage(previousIframe);
+    }
+
+    protected showLoadingPage(targetIframe: HTMLIFrameElement) {
+      if (this.useBlobForSrcDoc && this.loadingPageBlobUrl) {
+        targetIframe.removeAttribute("srcdoc");
+        targetIframe.src = this.loadingPageBlobUrl;
+      } else {
+        targetIframe.srcdoc = LoadingPage;
+      }
+      this.setAttribute("status", "loading");
     }
 
     protected armSwapOnNextLoad(targetIframe: HTMLIFrameElement) {
@@ -242,6 +256,9 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
       this.transcludeIdTracker.untrack(this);
       this.destroyEvents();
       this.destroyNavigation();
+      if (this.loadingPageBlobUrl) {
+        URL.revokeObjectURL(this.loadingPageBlobUrl);
+      }
       if (this.currentBlobUrl) {
         URL.revokeObjectURL(this.currentBlobUrl);
         this.currentBlobUrl = null;
