@@ -23,6 +23,13 @@ function assertLens(x: string): asserts x is Lens {
   }
 }
 
+function extractHashRoute(source: string, origin: string): string | null {
+  if (source.startsWith("#/")) return source.slice(2);
+  if (source.startsWith("/#/")) return source.slice(3);
+  if (source.startsWith(`${origin}/#/`)) return source.slice(origin.length + 3);
+  return null;
+}
+
 export function installTransclude(graffiti: Graffiti, origin: string) {
   const transcludeIdTracker = createTranscludeIdTracker();
 
@@ -154,11 +161,10 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         }
 
         // Otherwise, parse the query from the source
-        const currentSrcUrl = new URL(currentSrc || "", this.origin).toString();
-        if (!currentSrcUrl.startsWith(this.origin + "/#/")) {
-          throw new Error(`Current src is not a valid route: ${currentSrcUrl}`);
+        const currentRoute = extractHashRoute(currentSrc, this.origin);
+        if (currentRoute === null) {
+          throw new Error(`Current src is not a valid route: ${currentSrc}`);
         }
-        const currentRoute = currentSrcUrl.slice(this.origin.length + 3);
 
         // Then inject the relative query
         const { name } = parseAddress(currentRoute);
@@ -313,15 +319,14 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         return;
       }
 
-      const url = new URL(src, origin).toString();
-      if (!url.startsWith(origin + "/#/")) {
+      const route = extractHashRoute(src, origin);
+      if (route === null) {
         this.replaceIframeForSourceChange(`src-invalid:${src}`);
         return this.setSrcDoc(
           ErrorPage(`Could not extract page name from src: ${src}`),
           "error",
         );
       }
-      const route = url.slice(origin.length + 3);
       if (this.currentRoute === route) return;
       this.currentRoute = route;
 

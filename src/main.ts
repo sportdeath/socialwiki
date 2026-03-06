@@ -1,15 +1,48 @@
 import "./style.css";
 import { createApp } from "vue";
-import {
-  createRouter,
-  createWebHashHistory,
-  RouterView,
-} from "vue-router";
+import { createRouter, createWebHashHistory, RouterView } from "vue-router";
 import App from "./App.vue";
 import { GraffitiPlugin } from "@graffiti-garden/wrapper-vue";
 import { serveGraffiti } from "./backend/graffiti-server";
 import { installTransclude } from "./backend/transclude";
 import { handleGraffitiGuardRequest } from "./guard/graffiti-guard";
+import {
+  composeAddress,
+  composeQuery,
+  parseAddress,
+  parseQuery,
+} from "./backend/route";
+
+function safeDecodeComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function decodeAddressForRouter(address?: string): string {
+  if (address === undefined) return "";
+
+  const { name, query } = parseAddress(address);
+  const decodedName = safeDecodeComponent(name);
+  if (!query.length) return composeAddress(decodedName, query);
+
+  const { params, address: nestedAddress } = parseQuery(query);
+  const decodedNestedAddress =
+    nestedAddress === undefined
+      ? undefined
+      : decodeAddressForRouter(nestedAddress);
+  return composeAddress(
+    decodedName,
+    composeQuery(params, decodedNestedAddress),
+  );
+}
+
+function decodeRouteForApp(route: string): string {
+  const normalized = route.replace(/^\/+/, "");
+  return decodeAddressForRouter(normalized);
+}
 
 // Set up a graffiti "server" that is served
 // to all the "client" pages
@@ -37,9 +70,7 @@ const router = createRouter({
         // that can alter reserved characters in lens params.
         const hash = window.location.hash;
         const route = hash.replace(/^#\/?/, "");
-        return {
-          address: route,
-        };
+        return { address: decodeRouteForApp(route) };
       },
     },
   ],

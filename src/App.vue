@@ -1,7 +1,7 @@
 <template>
     <GraffitiGuardPrompt />
     <header>
-        <RouterLink :to="{ name: 'home' }">
+        <RouterLink :to="encodeRouteForRouter('/')">
             <h1>
                 <span class="brand-full">Social.Wiki</span>
                 <span class="brand-short" aria-hidden="true">SW</span>
@@ -46,10 +46,14 @@
             >
                 <li>
                     <RouterLink
-                        :to="`/${composeAddress(
-                            lens,
-                            composeQuery(lensParams, pageAddress),
-                        )}`"
+                        :to="
+                            encodeRouteForRouter(
+                                `/${composeAddress(
+                                    lens,
+                                    composeQuery(lensParams, pageAddress),
+                                )}`,
+                            )
+                        "
                         @click="
                             addressInput = pageAddress;
                             isDropdownOpen = false;
@@ -69,7 +73,14 @@
                 <ul>
                     <li>
                         <RouterLink
-                            :to="`/${composeAddress('v', composeQuery(undefined, pageAddress))}`"
+                            :to="
+                                encodeRouteForRouter(
+                                    `/${composeAddress(
+                                        'v',
+                                        composeQuery(undefined, pageAddress),
+                                    )}`,
+                                )
+                            "
                             title="The current version of this page"
                         >
                             View
@@ -77,7 +88,7 @@
                     </li>
                     <li>
                         <RouterLink
-                            :to="editRoute"
+                            :to="encodeRouteForRouter(editRoute)"
                             title="Edit the source code of this page"
                         >
                             Edit
@@ -85,7 +96,14 @@
                     </li>
                     <li>
                         <RouterLink
-                            :to="`/${composeAddress('h', composeQuery(undefined, pageAddress))}`"
+                            :to="
+                                encodeRouteForRouter(
+                                    `/${composeAddress(
+                                        'h',
+                                        composeQuery(undefined, pageAddress),
+                                    )}`,
+                                )
+                            "
                             title="Past revisions of this page"
                         >
                             History
@@ -161,6 +179,50 @@ import GraffitiGuardPrompt from "./guard/GraffitiGuardPrompt.vue";
 import GraffitiGuardPermissionsPanel from "./guard/GraffitiGuardPermissionsPanel.vue";
 import { listGraffitiGuardApprovalRules } from "./guard/graffiti-guard-approval-rules";
 
+function safeDecodeComponent(value: string): string {
+    try {
+        return decodeURIComponent(value);
+    } catch {
+        return value;
+    }
+}
+
+function encodeNameForRoute(name: string): string {
+    // Keep path separators readable in names while encoding other reserved chars.
+    return encodeURIComponent(safeDecodeComponent(name)).replace(/%2F/gi, "/");
+}
+
+function encodeAddressForRoute(address?: string): string {
+    if (address === undefined) return "";
+
+    const { name, query } = parseAddress(address);
+    const encodedName = encodeNameForRoute(name);
+    if (!query.length) return composeAddress(encodedName, query);
+
+    const { params, address: nestedAddress } = parseQuery(query);
+    const encodedNestedAddress =
+        nestedAddress === undefined
+            ? undefined
+            : encodeAddressForRoute(nestedAddress);
+    return composeAddress(
+        encodedName,
+        composeQuery(params, encodedNestedAddress),
+    );
+}
+
+function encodeRouteForRouter(route: string): string {
+    const normalized = route.replace(/^\/+/, "");
+    return `/${encodeAddressForRoute(normalized)}`;
+}
+
+function extractHashRoute(source: string, origin: string): string | null {
+    if (source.startsWith("#/")) return source.slice(2);
+    if (source.startsWith("/#/")) return source.slice(3);
+    if (source.startsWith(`${origin}/#/`))
+        return source.slice(origin.length + 3);
+    return null;
+}
+
 function parseLensRoute(address: string): {
     lens: string;
     lensParams: URLSearchParams;
@@ -204,7 +266,7 @@ watch(
                 composeQuery(lensParams.value, normalizedPageAddress),
             )}`;
             if (`/${normalizedPageAddress}` !== redirectRoute) {
-                router.replace(redirectRoute);
+                router.replace(encodeRouteForRouter(redirectRoute));
             }
             return;
         }
@@ -239,17 +301,17 @@ function onTranscludeNavigate(e: Event) {
     // If it is relative, add the lens
     const to = e.detail.to;
     if (to.startsWith("?")) {
-        router.push(`/${composeAddress(lens.value, to)}`);
+        router.push(encodeRouteForRouter(`/${composeAddress(lens.value, to)}`));
+        return;
+    }
+
+    const internalRoute = extractHashRoute(e.detail.to, window.origin);
+    if (internalRoute !== null) {
+        router.push(encodeRouteForRouter(`/${internalRoute}`));
         return;
     }
 
     const url = new URL(e.detail.to, window.origin).toString();
-    if (url.startsWith(window.origin + "/#")) {
-        const route = url.slice(window.origin.length + 2);
-        router.push(route.startsWith("/") ? route : "/" + route);
-        return;
-    }
-
     window.location.href = url;
 }
 onMounted(() => {
@@ -326,21 +388,27 @@ async function syncGuardPermissionsButtonVisibility() {
 // When input is submitted, the route changes
 function submitForm() {
     // Extract the page name from the input
-    const { name: inputPageName } = parseAddress(addressInput.value);
-    const { name: currentPageName } = parseAddress(pageAddress.value);
+    const { name: inputPageNameRaw } = parseAddress(addressInput.value);
+    const { name: currentPageNameRaw } = parseAddress(pageAddress.value);
+    const inputPageName = safeDecodeComponent(inputPageNameRaw);
+    const currentPageName = safeDecodeComponent(currentPageNameRaw);
     if (inputPageName === currentPageName) {
         // If the user only changed the query, keep the current lens/params
         // and just update the page address
         router.push(
-            `/${composeAddress(
-                lens.value,
-                composeQuery(lensParams.value, addressInput.value),
-            )}`,
+            encodeRouteForRouter(
+                `/${composeAddress(
+                    lens.value,
+                    composeQuery(lensParams.value, addressInput.value),
+                )}`,
+            ),
         );
     } else {
         // Otherwise, navigate to the view lens
         router.push(
-            `/${composeAddress("v", composeQuery(undefined, addressInput.value))}`,
+            encodeRouteForRouter(
+                `/${composeAddress("v", composeQuery(undefined, addressInput.value))}`,
+            ),
         );
     }
     (document.activeElement as HTMLElement | null)?.blur();
