@@ -42,9 +42,12 @@
             </details>
             <ul
                 class="dropdown"
-                v-if="isDropdownOpen && addressInput !== pageAddress"
+                v-if="
+                    isDropdownOpen &&
+                    (addressInput !== pageAddress || historySuggestions.length)
+                "
             >
-                <li>
+                <li v-if="addressInput !== pageAddress">
                     <RouterLink
                         :to="
                             encodeRouteForRouter(
@@ -62,6 +65,18 @@
                     >
                         Current page: {{ pageAddress }}
                     </RouterLink>
+                </li>
+                <li v-for="suggestion in historySuggestions" :key="suggestion.address">
+                    <button
+                        type="button"
+                        @click="navigateToVisitedPage(suggestion.address)"
+                    >
+                        <span>{{ suggestion.address }}</span>
+                        <small>
+                            {{ suggestion.visits }}
+                            {{ suggestion.visits === 1 ? "visit" : "visits" }}
+                        </small>
+                    </button>
                 </li>
             </ul>
         </form>
@@ -178,6 +193,11 @@ import { getTranscludeId } from "./backend/transclude-ids";
 import GraffitiGuardPrompt from "./guard/GraffitiGuardPrompt.vue";
 import GraffitiGuardPermissionsPanel from "./guard/GraffitiGuardPermissionsPanel.vue";
 import { listGraffitiGuardApprovalRules } from "./guard/graffiti-guard-approval-rules";
+import {
+    listVisitedPages,
+    recordPageVisit,
+    type VisitedPage,
+} from "./browser-history";
 
 function encodeNameForRoute(name: string): string {
     // Keep path separators readable in names while encoding other reserved chars.
@@ -347,6 +367,36 @@ watch(pageAddress, (newVal) => (addressInput.value = newVal), {
     immediate: true,
 });
 
+const historySuggestions = ref<VisitedPage[]>([]);
+let historyLookupVersion = 0;
+
+async function refreshHistorySuggestions() {
+    const lookupVersion = ++historyLookupVersion;
+
+    try {
+        const suggestions = await listVisitedPages(addressInput.value ?? "");
+        if (lookupVersion !== historyLookupVersion) return;
+        historySuggestions.value = suggestions;
+    } catch {
+        if (lookupVersion !== historyLookupVersion) return;
+        historySuggestions.value = [];
+    }
+}
+
+function navigateToVisitedPage(address: string) {
+    addressInput.value = address;
+    isDropdownOpen.value = false;
+    submitForm();
+}
+
+watch(pageAddress, (address) => {
+    if (!address) return;
+    void recordPageVisit(address).then(() => {
+        if (!isDropdownOpen.value) return;
+        void refreshHistorySuggestions();
+    }).catch(() => {});
+}, { immediate: true });
+
 const isGuardPermissionsOpen = ref(false);
 const showGuardPermissionsButton = ref(false);
 const listConnectedWindows =
@@ -417,14 +467,26 @@ function submitForm() {
 }
 
 const isDropdownOpen = ref(false);
+watch(addressInput, () => {
+    if (!isDropdownOpen.value) return;
+    void refreshHistorySuggestions();
+});
+watch(isDropdownOpen, (open) => {
+    if (!open) return;
+    void refreshHistorySuggestions();
+});
+
 function onAddressFocusIn(event: FocusEvent) {
     if (isSmall.value) {
         navOpen.value = false;
     }
 
-    isDropdownOpen.value =
+    if (
         event.target instanceof HTMLInputElement &&
-        event.target.type === "text";
+        event.target.type === "text"
+    ) {
+        isDropdownOpen.value = true;
+    }
 }
 const addressForm = useTemplateRef("address-form");
 function onAddressLeave(event: FocusEvent) {
@@ -612,14 +674,38 @@ header {
 
             z-index: 10;
 
-            a {
+            :is(a, button) {
                 display: block;
+                width: 100%;
                 padding: 0.3rem;
                 border-radius: 0.3rem;
                 color: inherit;
+                border: none;
+                background: transparent;
+                text-align: left;
+                font: inherit;
+                cursor: pointer;
             }
 
-            a:hover {
+            button {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) auto;
+                align-items: baseline;
+                gap: 0.5rem;
+            }
+
+            button > span {
+                min-width: 0;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+
+            small {
+                color: var(--secondary-color);
+            }
+
+            :is(a, button):hover {
                 background: var(--background-color-interactive-hover);
                 text-decoration: none;
             }
