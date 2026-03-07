@@ -9,7 +9,7 @@
   "author": "Theia Henderson",
   "dependencies": {
     "@graffiti-garden/api": "^1.2.0",
-    "@graffiti-garden/implementation-decentralized": "^0.0.8",
+    "@graffiti-garden/implementation-decentralized": "^0.0.9",
     "@graffiti-garden/wrapper-vue": "^1.2.2",
     "@noble/hashes": "^2.0.1",
     "idb": "^8.0.3",
