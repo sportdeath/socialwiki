@@ -15,11 +15,13 @@
             @focusout="onAddressLeave"
         >
             <input
+                ref="address-input"
                 type="text"
                 v-model="addressInput"
                 placeholder="Enter page name"
                 @focus="isGuardPermissionsOpen = false"
                 @mousedown="selectAddress"
+                @keydown="onAddressInputKeydown"
                 @focusout="addressFocused = false"
                 @dragstart.prevent
             />
@@ -41,11 +43,13 @@
                 <GraffitiGuardPermissionsPanel v-if="isGuardPermissionsOpen" />
             </details>
             <ul
+                ref="address-dropdown"
                 class="dropdown"
                 v-if="
                     isDropdownOpen &&
                     (addressInput !== pageAddress || historySuggestions.length)
                 "
+                @keydown="onDropdownKeydown"
             >
                 <li v-if="addressInput !== pageAddress">
                     <RouterLink
@@ -501,6 +505,79 @@ function onAddressLeave(event: FocusEvent) {
     }
 }
 
+const addressInputEl = useTemplateRef<HTMLInputElement>("address-input");
+const addressDropdownEl = useTemplateRef<HTMLUListElement>("address-dropdown");
+
+function listDropdownOptions() {
+    const dropdown = addressDropdownEl.value;
+    if (!dropdown) return [] as HTMLElement[];
+
+    return Array.from(dropdown.querySelectorAll<HTMLElement>("a, button"));
+}
+
+function exitAddressBar() {
+    isDropdownOpen.value = false;
+    isGuardPermissionsOpen.value = false;
+    (document.activeElement as HTMLElement | null)?.blur();
+}
+
+function onAddressInputKeydown(event: KeyboardEvent) {
+    if (event.key === "Escape") {
+        event.preventDefault();
+        exitAddressBar();
+        return;
+    }
+
+    if (!isDropdownOpen.value) return;
+
+    const options = listDropdownOptions();
+    if (options.length === 0) return;
+
+    if (event.key === "ArrowDown") {
+        event.preventDefault();
+        options[0].focus();
+        return;
+    }
+
+    if (event.key === "ArrowUp") {
+        event.preventDefault();
+        options[options.length - 1].focus();
+    }
+}
+
+function onDropdownKeydown(event: KeyboardEvent) {
+    if (!(event.target instanceof HTMLElement)) return;
+
+    const option = event.target.closest("a, button");
+    if (!(option instanceof HTMLElement)) return;
+
+    const options = listDropdownOptions();
+    const currentIndex = options.indexOf(option);
+    if (currentIndex === -1) return;
+
+    if (event.key === "ArrowDown") {
+        event.preventDefault();
+        const nextIndex = (currentIndex + 1) % options.length;
+        options[nextIndex].focus();
+        return;
+    }
+
+    if (event.key === "ArrowUp") {
+        event.preventDefault();
+        if (currentIndex === 0) {
+            addressInputEl.value?.focus();
+            return;
+        }
+        options[currentIndex - 1].focus();
+        return;
+    }
+
+    if (event.key === "Escape") {
+        event.preventDefault();
+        exitAddressBar();
+    }
+}
+
 // Logic for open and closing navigation
 const navOpen = ref(true);
 const isSmall = ref(false);
@@ -708,6 +785,11 @@ header {
             :is(a, button):hover {
                 background: var(--background-color-interactive-hover);
                 text-decoration: none;
+            }
+
+            :is(a, button):focus-visible {
+                background: var(--background-color-interactive-hover);
+                outline: 1px solid var(--border-color);
             }
         }
     }
