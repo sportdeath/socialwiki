@@ -4,30 +4,16 @@
             <template #left-controls>
                 <nav>
                     <ul role="menubar">
-                        <li
-                            class="split-button-menu"
-                            :class="{ 'publish-shake': shouldShakePublish }"
-                        >
-                            <button :disabled="publishing" @click="publish()">
+                        <li role="none">
+                            <button
+                                type="button"
+                                class="publish-button"
+                                :class="{ 'publish-shake': shouldShakePublish }"
+                                :disabled="publishing"
+                                @click="openPublishDialog"
+                            >
                                 Publish
                             </button>
-                            <details
-                                ref="publishMenuDetails"
-                                :class="{ disabled: publishing }"
-                            >
-                                <summary :aria-disabled="publishing">▾</summary>
-                                <ul role="menu">
-                                    <li>
-                                        <button
-                                            :disabled="publishing"
-                                            role="menuitem"
-                                            @click="publish(true)"
-                                        >
-                                            Publish as…
-                                        </button>
-                                    </li>
-                                </ul>
-                            </details>
                         </li>
 
                         <li role="none">
@@ -179,6 +165,97 @@
         </TwoPaneLayout>
 
         <aside
+            v-if="showPublishDialog"
+            class="publish-dialog-overlay"
+            @click.self="cancelPublishDialog"
+        >
+            <dialog open class="publish-dialog">
+                <h2>Publish changes</h2>
+                <form class="publish-form" @submit.prevent="submitPublishDialog">
+                    <label class="publish-field">
+                        <span>Page name</span>
+                        <input
+                            v-model="publishDialogPageName"
+                            type="text"
+                            required
+                            autocomplete="off"
+                            @focus="selectAllPublishPageName"
+                            @click="selectAllPublishPageName"
+                            :disabled="publishing"
+                        />
+                    </label>
+
+                    <label class="publish-field">
+                        <span>Edit summary (Briefly describe your changes)</span>
+                        <input
+                            ref="publishSummaryInput"
+                            v-model="publishDialogSummary"
+                            type="text"
+                            required
+                            autocomplete="off"
+                            :disabled="publishing"
+                        />
+                    </label>
+
+                    <div class="publish-audience-checkbox">
+                        <input
+                            id="publish-audience-confirm"
+                            v-model="publishAudienceConfirmed"
+                            type="checkbox"
+                            required
+                            :disabled="publishing"
+                        />
+                        <span>
+                            <label
+                                for="publish-audience-confirm"
+                                class="publish-audience-label"
+                            >
+                                I understand this change will be seen by anyone
+                                who visits
+                            </label>
+                            <a
+                                class="publish-page-name-link"
+                                :href="publishPageHref"
+                                >{{
+                                normalizedPublishPageName || "this page"
+                            }}</a
+                            >.
+                        </span>
+                    </div>
+
+                    <p class="publish-license">
+                        By publishing changes, you irrevocably agree to release
+                        your contribution under the
+                        <a
+                            href="https://www.gnu.org/licenses/gpl-3.0.en.html"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            >GNU GPLv3 License</a
+                        >.
+                    </p>
+
+                    <footer>
+                        <button
+                            type="button"
+                            class="secondary"
+                            :disabled="publishing"
+                            @click="cancelPublishDialog"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            class="allow-button"
+                            :disabled="publishing || !isPublishDialogValid"
+                        >
+                            Publish
+                        </button>
+                    </footer>
+                </form>
+            </dialog>
+        </aside>
+
+        <aside
             v-if="showProtectedDialog"
             class="protected-dialog-overlay"
             @click.self="continueProtectedEdit"
@@ -259,6 +336,7 @@ import {
     shallowRef,
     watch,
     computed,
+    nextTick,
     onBeforeUnmount,
     onMounted,
     useTemplateRef,
@@ -287,6 +365,9 @@ import { sortProtectionHistory } from "../utils/protection";
 
 const previewTranscludeId = bytesToHex(randomBytes());
 const previewTransclude = useTemplateRef<HTMLElement>("previewTransclude");
+const publishSummaryInput = useTemplateRef<HTMLInputElement>(
+    "publishSummaryInput",
+);
 
 const template = (pageName: string) => `<!doctype html>
 <head>
@@ -415,6 +496,14 @@ const hasUnsavedChanges = computed(
 const hasShownPublishReminder = ref(false);
 const shouldShakePublish = ref(false);
 let publishShakeTimeout: number | null = null;
+function resetPublishReminderState() {
+    hasShownPublishReminder.value = false;
+    shouldShakePublish.value = false;
+    if (publishShakeTimeout !== null) {
+        clearTimeout(publishShakeTimeout);
+        publishShakeTimeout = null;
+    }
+}
 watch(
     draftHtml,
     (newHtml) => {
@@ -666,12 +755,7 @@ function onQueryChange() {
 
     if (publishedHtml.value === null) {
         publishedHtml.value = draftHtml.value;
-        hasShownPublishReminder.value = false;
-        shouldShakePublish.value = false;
-        if (publishShakeTimeout !== null) {
-            clearTimeout(publishShakeTimeout);
-            publishShakeTimeout = null;
-        }
+        resetPublishReminderState();
     }
 }
 window.addEventListener("addresschange", onQueryChange);
@@ -768,16 +852,41 @@ const onDiffChange = (value: string) => {
     editorHtml.value = value;
 };
 
-const publishMenuDetails = ref<HTMLDetailsElement | null>(null);
+const showPublishDialog = ref(false);
+const publishDialogPageName = ref("");
+const publishDialogSummary = ref("");
+const publishAudienceConfirmed = ref(false);
+const normalizedPublishPageName = computed(() =>
+    publishDialogPageName.value.trim(),
+);
+const normalizedPublishSummary = computed(() =>
+    publishDialogSummary.value.trim(),
+);
+const publishPageHref = computed(
+    () => `#/v?/${encodeURIComponent(normalizedPublishPageName.value)}`,
+);
+const isPublishDialogValid = computed(
+    () =>
+        normalizedPublishPageName.value.length > 0 &&
+        normalizedPublishSummary.value.length > 0 &&
+        publishAudienceConfirmed.value,
+);
+watch(
+    publishDialogPageName,
+    (nextPageName, previousPageName) => {
+        if (
+            nextPageName !== previousPageName &&
+            publishAudienceConfirmed.value
+        ) {
+            publishAudienceConfirmed.value = false;
+        }
+    },
+);
+
 const viewMenuDetails = ref<HTMLDetailsElement | null>(null);
 const onMenuPointerDown = (event: PointerEvent) => {
     const target = event.target;
     if (!(target instanceof Node)) return;
-
-    const publishMenu = publishMenuDetails.value;
-    if (publishMenu?.open && !publishMenu.contains(target)) {
-        publishMenu.open = false;
-    }
 
     const viewMenu = viewMenuDetails.value;
     if (viewMenu?.open && !viewMenu.contains(target)) {
@@ -907,32 +1016,60 @@ function setupLoginBypassListener() {
     };
     graffiti.sessionEvents.addEventListener("login", loginBypassListener);
 }
-async function publish(as?: boolean) {
+
+function openPublishDialog() {
     if (publishing.value) return;
+    if (viewMenuDetails.value?.open) {
+        viewMenuDetails.value.open = false;
+    }
+    showPublishDialog.value = true;
+    publishDialogPageName.value = pageName.value;
+    publishDialogSummary.value = "";
+    publishAudienceConfirmed.value = false;
+    void nextTick(() => publishSummaryInput.value?.focus());
+}
+
+function cancelPublishDialog() {
+    if (publishing.value) return;
+    showPublishDialog.value = false;
+}
+
+function selectAllPublishPageName(event: FocusEvent | MouseEvent) {
+    const target = event.currentTarget;
+    if (!(target instanceof HTMLInputElement)) return;
+    target.select();
+    target.setSelectionRange(0, target.value.length);
+}
+
+async function ensurePublishSession() {
+    if (session.value) return session.value;
+    bypassBeforeUnload.value = true;
+    setupLoginBypassListener();
+    try {
+        await graffiti.login();
+    } catch (error) {
+        clearLoginBypassListener();
+        bypassBeforeUnload.value = false;
+        throw error;
+    }
+
+    if (!session.value) {
+        clearLoginBypassListener();
+        bypassBeforeUnload.value = false;
+    }
+    return session.value;
+}
+
+async function submitPublishDialog() {
+    if (publishing.value || !isPublishDialogValid.value) return;
+
+    const publishName = normalizedPublishPageName.value;
+    const summary = normalizedPublishSummary.value;
     publishing.value = true;
     try {
-        if (!session.value) {
-            bypassBeforeUnload.value = true;
-            setupLoginBypassListener();
-            try {
-                await graffiti.login();
-            } catch (error) {
-                clearLoginBypassListener();
-                bypassBeforeUnload.value = false;
-                throw error;
-            }
-            return;
-        }
+        const publishSession = await ensurePublishSession();
+        if (!publishSession) return;
 
-        const publishName = as
-            ? prompt(
-                  "What page name do you want to publish to?",
-                  pageName.value,
-              )
-            : pageName.value;
-        if (publishName === null) return;
-        const summary = prompt("Edit summary (Briefly describe your changes)");
-        if (summary === null) return;
         const nextPublishedHtml = editorHtml.value;
         const existingVersions = await getPageVersions(graffiti, publishName);
         await createPageVersion(
@@ -941,17 +1078,13 @@ async function publish(as?: boolean) {
             nextPublishedHtml,
             existingVersions.map((version) => version.url),
             summary,
-            session.value,
+            publishSession,
         );
 
         draftHtml.value = nextPublishedHtml;
         publishedHtml.value = nextPublishedHtml;
-        hasShownPublishReminder.value = false;
-        shouldShakePublish.value = false;
-        if (publishShakeTimeout !== null) {
-            clearTimeout(publishShakeTimeout);
-            publishShakeTimeout = null;
-        }
+        resetPublishReminderState();
+        showPublishDialog.value = false;
         window.navigate(
             `#/${composeAddress(
                 "v",
@@ -992,7 +1125,8 @@ async function publish(as?: boolean) {
     justify-content: center;
 }
 
-.protected-dialog-overlay {
+.protected-dialog-overlay,
+.publish-dialog-overlay {
     position: fixed;
     inset: 0;
     z-index: 120;
@@ -1004,7 +1138,8 @@ async function publish(as?: boolean) {
     background: rgb(0 0 0 / 0.2);
 }
 
-.protected-dialog {
+.protected-dialog,
+.publish-dialog {
     position: static;
     inset: auto;
     margin: 0;
@@ -1023,21 +1158,25 @@ async function publish(as?: boolean) {
 }
 
 .protected-dialog h2,
-.protected-dialog p {
+.protected-dialog p,
+.publish-dialog h2,
+.publish-dialog p {
     margin: 0;
 }
 
-.protected-dialog h2 {
+.protected-dialog h2,
+.publish-dialog h2 {
     font-size: 2rem;
 }
 
-.protected-dialog footer {
+.protected-dialog footer,
+.publish-dialog footer {
     display: flex;
     justify-content: space-between;
     gap: 1rem;
 }
 
-.protected-dialog .allow-button {
+:is(.protected-dialog, .publish-dialog) .allow-button {
     border: 1px solid var(--border-color);
     background: var(--accent-button-background);
     color: var(--accent-button-text);
@@ -1046,11 +1185,81 @@ async function publish(as?: boolean) {
     font-weight: 600;
 }
 
-.protected-dialog .allow-button:hover {
+:is(.protected-dialog, .publish-dialog) .allow-button:hover {
     border-color: var(--border-color-hover);
     background: var(--accent-button-background-hover);
     color: var(--accent-button-text);
     text-decoration: none;
+}
+
+:is(.protected-dialog, .publish-dialog) .allow-button:disabled,
+:is(.protected-dialog, .publish-dialog) .allow-button:disabled:hover {
+    border-color: var(--border-color);
+    background: var(--background-color-interactive);
+    color: var(--text-color);
+    cursor: not-allowed;
+    text-decoration: none;
+}
+
+.publish-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.35rem;
+}
+
+.publish-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    font-size: 1.15rem;
+}
+
+.publish-field :is(input, textarea) {
+    width: 100%;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    background: var(--background-color);
+    color: var(--text-color);
+    padding: 0.5rem 0.65rem;
+    font: inherit;
+}
+
+.publish-field :is(input, textarea):focus-visible {
+    outline: 2px solid var(--border-color-hover);
+    outline-offset: 1px;
+}
+
+.publish-audience-checkbox {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.65rem;
+    line-height: 1.4;
+    font-size: 1.3rem;
+    cursor: pointer;
+}
+
+.publish-audience-label {
+    cursor: pointer;
+}
+
+.publish-audience-checkbox input {
+    width: 1.15rem;
+    height: 1.15rem;
+    flex: 0 0 auto;
+    margin-top: 0.25rem;
+    cursor: pointer;
+}
+
+.publish-page-name-link {
+    color: var(--link-color);
+    font-weight: 700;
+    text-decoration: underline 2px;
+    text-underline-offset: 0.12em;
+}
+
+.publish-license {
+    font-size: 1rem;
+    color: var(--secondary-color);
 }
 
 /* Editor menubar + dropdowns */
@@ -1060,7 +1269,7 @@ nav > ul[role="menubar"] > li {
 
 :is(
     nav summary[role="menuitem"],
-    nav > ul > li:not(.split-button-menu) > button,
+    nav > ul > li > button,
     nav > ul > li > :where(label.top-level-checkbox)
 ) {
     list-style: none; /* remove default marker in some browsers */
@@ -1078,6 +1287,29 @@ nav > ul[role="menubar"] > li {
         border-color: var(--border-color-hover);
         text-decoration: none;
     }
+}
+
+nav > ul > li > button.publish-button {
+    border-color: var(--border-color);
+    background: var(--accent-button-background);
+    color: var(--accent-button-text);
+}
+
+nav > ul > li > button.publish-button:hover {
+    border-color: var(--border-color-hover);
+    background: var(--accent-button-background-hover);
+    color: var(--accent-button-text);
+}
+
+nav > ul > li > button.publish-button:disabled {
+    background: var(--background-color-interactive);
+    color: var(--text-color);
+}
+
+nav > ul > li > button.publish-button:disabled:hover {
+    border-color: var(--border-color);
+    background: var(--background-color-interactive);
+    color: var(--text-color);
 }
 
 /* dropdown menu */
@@ -1158,7 +1390,7 @@ nav ul[role="menu"] > li[role="separator"] {
     margin: 0.25rem 0.25rem;
 }
 
-.split-button-menu.publish-shake {
+button.publish-button.publish-shake {
     animation: publish-shake 0.3s ease-in-out;
 }
 
