@@ -17,14 +17,41 @@
 
                     <p v-if="isProtected">
                         This page has been marked as
-                        <strong>protected</strong> by you or an editor you
-                        trust. Only changes made or endorsed by a trusted editor
-                        will be visible to you.
+                        <strong>protected</strong> by
+                        <template v-if="isProtectionBySessionActor">
+                            <strong>you</strong>.
+                        </template>
+                        <template v-else-if="activeProtection">
+                            <strong>
+                                <GraffitiActorToHandle
+                                    :actor="activeProtection.actor"
+                                /> </strong
+                            >,
+                            <template
+                                v-if="activeProtectionTrustSource === 'default'"
+                            >
+                                a default
+                                <a :href="trustedEditorsRoute">trusted editor</a
+                                >.
+                            </template>
+                            <template v-else>
+                                an
+                                <a :href="trustedEditorsRoute"
+                                    >editor you trust</a
+                                >.
+                            </template>
+                        </template>
+                        <template v-else>a trusted editor.</template>
+                        Only changes made or endorsed by your
+                        <a :href="trustedEditorsRoute">trusted editors</a>
+                        will be shown to you in the
+                        <a :href="viewAddress">View</a> tab.
                     </p>
                     <p v-else>
                         This page has <strong>not</strong> been marked as
-                        protected by your or an editor you trust. Anyone's
-                        changes to this page will be visible to you.
+                        protected by you or an
+                        <a :href="trustedEditorsRoute">editor you trust</a>.
+                        Anyone's changes to this page will be visible to you.
                     </p>
 
                     <p v-if="$graffitiSession.value">
@@ -71,6 +98,16 @@
                                             :actor="annotation.actor"
                                         />
                                     </strong>
+                                    <span
+                                        v-if="
+                                            isActorInDefaultTrustedList(
+                                                annotation.actor,
+                                            )
+                                        "
+                                        class="history-default-indicator"
+                                    >
+                                        (Default trusted editor)
+                                    </span>
                                 </p>
                                 <time
                                     :datetime="
@@ -178,7 +215,15 @@
                                                 ) === 'trusted'
                                             "
                                         >
-                                            <span>(Trusted editor.</span>
+                                            <span>
+                                                ({{
+                                                    isActorInDefaultTrustedList(
+                                                        version.actor,
+                                                    )
+                                                        ? "Default trusted editor."
+                                                        : "Trusted editor."
+                                                }}
+                                            </span>
                                             <button
                                                 class="secondary"
                                                 type="button"
@@ -505,6 +550,7 @@ const activeProtection = computed(() => {
     if (!latest || latest.value.activity !== "Protect") return null;
     return latest;
 });
+const trustedEditorsRoute = "#/v?/trusted-editors";
 
 const graffiti = useGraffiti();
 const restoringVersionUrl = ref<string | null>(null);
@@ -674,6 +720,16 @@ const previewAddress = computed(() => {
         ),
     )}`;
 });
+const viewAddress = computed(
+    () =>
+        `#/${composeAddress(
+            "v",
+            composeQuery(
+                undefined,
+                composeAddress(pageName.value, pageQuery.value),
+            ),
+        )}`,
+);
 const editAddress = computed(
     () =>
         `#/${composeAddress(
@@ -743,6 +799,7 @@ const trustAnnotationsByActor = computed(() => {
         defaultTrustedEditors,
     );
 });
+const defaultTrustedEditorSet = new Set(defaultTrustedEditors);
 const trustedEditors = computed(() => {
     if (trustAnnotationsByActor.value === undefined) return undefined;
     const trusted = new Set(
@@ -767,6 +824,18 @@ const getActorTrustStatus = (actor: string) => {
         ? "trusted"
         : "untrusted";
 };
+const isActorInDefaultTrustedList = (actor: string) =>
+    defaultTrustedEditorSet.has(actor);
+const isProtectionBySessionActor = computed(
+    () => activeProtection.value?.actor === session.value?.actor,
+);
+const activeProtectionTrustSource = computed(() => {
+    const actor = activeProtection.value?.actor;
+    if (!actor || isProtectionBySessionActor.value) return null;
+    return trustAnnotationsByActor.value?.get(actor) === true
+        ? "default"
+        : "trusted";
+});
 
 const trustMutationActor = ref<string | null>(null);
 const isUpdatingTrust = (actor: string) => trustMutationActor.value === actor;
@@ -930,6 +999,12 @@ async function toggleActorTrust(actor: string, session: GraffitiSession) {
 }
 
 .history-untrusted-indicator {
+    font-size: 0.78rem;
+    color: var(--secondary-color);
+    font-style: italic;
+}
+
+.history-default-indicator {
     font-size: 0.78rem;
     color: var(--secondary-color);
     font-style: italic;

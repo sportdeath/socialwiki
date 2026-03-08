@@ -181,13 +181,41 @@
         <aside
             v-if="showProtectedDialog"
             class="protected-dialog-overlay"
-            @click.self.prevent=""
+            @click.self="continueProtectedEdit"
         >
             <dialog open class="protected-dialog">
                 <h2>Protected Page</h2>
                 <p>
-                    This is a protected page. Only people who have marked you as
-                    a "trusted editor" will see changes you make here.
+                    This page has been marked as
+                    <strong>protected</strong> by
+                    <template v-if="isProtectionBySessionActor">
+                        <strong>you</strong>.
+                    </template>
+                    <template v-else-if="activeProtection">
+                        <strong>
+                            <GraffitiActorToHandle
+                                :actor="activeProtection.actor"
+                            /> </strong
+                        >,
+                        <template
+                            v-if="activeProtectionTrustSource === 'default'"
+                        >
+                            a default
+                            <a :href="trustedEditorsRoute">trusted editor</a>.
+                        </template>
+                        <template v-else>
+                            an
+                            <a :href="trustedEditorsRoute">editor you trust</a>.
+                        </template>
+                    </template>
+                    <template v-else>a trusted editor.</template>
+                </p>
+                <p>
+                    You can still edit this page. However, others may not see
+                    your changes unless they mark <strong>you</strong> as a
+                    <a :href="trustedEditorsRoute">trusted editor</a>
+                    <em> or </em> one of their trusted editors endorses your
+                    changes.
                 </p>
                 <p>
                     See this page's
@@ -196,6 +224,8 @@
                         @click.prevent="openProtectedPageHistory"
                         >History</a
                     >
+                    and your
+                    <a :href="trustedEditorsRoute">trusted editors</a>
                     for more information.
                 </p>
                 <footer>
@@ -206,7 +236,11 @@
                     >
                         Cancel
                     </button>
-                    <button type="button" @click="continueProtectedEdit">
+                    <button
+                        type="button"
+                        class="allow-button"
+                        @click="continueProtectedEdit"
+                    >
                         Continue to editor
                     </button>
                 </footer>
@@ -232,7 +266,11 @@ import {
 import * as monaco from "monaco-editor";
 import { CodeEditor, DiffEditor } from "monaco-editor-vue3";
 import TwoPaneLayout from "../utils/TwoPaneLayout.vue";
-import { useGraffiti, useGraffitiSession } from "@graffiti-garden/wrapper-vue";
+import {
+    GraffitiActorToHandle,
+    useGraffiti,
+    useGraffitiSession,
+} from "@graffiti-garden/wrapper-vue";
 import { createPageVersion, getPageVersions } from "../utils/page-versions";
 import { initVimMode, type VimAdapterInstance } from "monaco-vim";
 import {
@@ -419,17 +457,23 @@ const historyRoute = computed(
     () =>
         `#/${composeAddress("h", composeQuery(undefined, pageAddress.value))}`,
 );
+const trustedEditorsRoute = "#/v?/trusted-editors";
 const viewRoute = computed(
     () =>
         `#/${composeAddress("v", composeQuery(undefined, pageAddress.value))}`,
 );
 const isProtectionLoading = ref(false);
 const isProtectedPage = ref<boolean | undefined>(undefined);
+const activeProtection = ref<AnnotationObject | null>(null);
+const activeProtectionTrustSource = ref<"default" | "trusted" | null>(null);
 const showProtectedDialog = ref(false);
 let activeProtectionRequest = 0;
 let localDraftSeq = 0;
 const session = useGraffitiSession();
 const graffiti = useGraffiti();
+const isProtectionBySessionActor = computed(
+    () => activeProtection.value?.actor === session.value?.actor,
+);
 
 function continueProtectedEdit() {
     showProtectedDialog.value = false;
@@ -471,7 +515,7 @@ async function waitForSessionStatusKnown() {
     });
 }
 
-async function getTrustedEditors() {
+async function getTrustedEditorsContext() {
     const trustAnnotationsByUrl = new Map<string, AnnotationObject>();
     const currentSession = session.value;
     if (currentSession?.actor) {
@@ -512,7 +556,10 @@ async function getTrustedEditors() {
         trustedEditors.add(currentSession.actor);
     }
 
-    return [...trustedEditors];
+    return {
+        trustedEditors: [...trustedEditors],
+        trustByActor,
+    };
 }
 
 async function getProtectionAnnotations(page: string) {
@@ -541,29 +588,45 @@ async function getProtectionAnnotations(page: string) {
 async function refreshPageProtection(page: string, requestId: number) {
     isProtectionLoading.value = true;
     isProtectedPage.value = undefined;
+    activeProtection.value = null;
+    activeProtectionTrustSource.value = null;
     showProtectedDialog.value = false;
     try {
         await waitForSessionStatusKnown();
         if (requestId !== activeProtectionRequest) return;
 
-        const [trustedEditors, protectionAnnotations] = await Promise.all([
-            getTrustedEditors(),
-            getProtectionAnnotations(page),
-        ]);
+        const [trustedEditorsContext, protectionAnnotations] =
+            await Promise.all([
+                getTrustedEditorsContext(),
+                getProtectionAnnotations(page),
+            ]);
         if (requestId !== activeProtectionRequest) return;
 
         const protectionHistory = sortProtectionHistory(
             protectionAnnotations,
-            trustedEditors,
+            trustedEditorsContext.trustedEditors,
         );
-        const isProtected =
-            protectionHistory.at(0)?.value.activity === "Protect";
+        const latestProtection = protectionHistory.at(0);
+        const isProtected = latestProtection?.value.activity === "Protect";
         isProtectedPage.value = isProtected;
+        if (isProtected && latestProtection) {
+            activeProtection.value = latestProtection;
+            if (latestProtection.actor !== session.value?.actor) {
+                activeProtectionTrustSource.value =
+                    trustedEditorsContext.trustByActor.get(
+                        latestProtection.actor,
+                    ) === true
+                        ? "default"
+                        : "trusted";
+            }
+        }
         showProtectedDialog.value = isProtected;
     } catch (error) {
         console.error(`Error checking page protection: ${String(error)}`);
         if (requestId !== activeProtectionRequest) return;
         isProtectedPage.value = false;
+        activeProtection.value = null;
+        activeProtectionTrustSource.value = null;
         showProtectedDialog.value = false;
     } finally {
         if (requestId === activeProtectionRequest) {
@@ -956,6 +1019,7 @@ async function publish(as?: boolean) {
     display: flex;
     flex-direction: column;
     gap: 1rem;
+    font-size: 1.5rem;
 }
 
 .protected-dialog h2,
@@ -963,10 +1027,30 @@ async function publish(as?: boolean) {
     margin: 0;
 }
 
+.protected-dialog h2 {
+    font-size: 2rem;
+}
+
 .protected-dialog footer {
     display: flex;
     justify-content: space-between;
     gap: 1rem;
+}
+
+.protected-dialog .allow-button {
+    border: 1px solid var(--border-color);
+    background: var(--accent-button-background);
+    color: var(--accent-button-text);
+    border-radius: 0.5rem;
+    padding: 0.35rem 0.75rem;
+    font-weight: 600;
+}
+
+.protected-dialog .allow-button:hover {
+    border-color: var(--border-color-hover);
+    background: var(--accent-button-background-hover);
+    color: var(--accent-button-text);
+    text-decoration: none;
 }
 
 /* Editor menubar + dropdowns */
