@@ -1090,6 +1090,13 @@ async function submitPublishDialog() {
                 ),
             )}`,
         );
+    } catch (error) {
+        console.error("Error publishing changes:", error);
+        const reason =
+            error instanceof Error && error.message.length > 0
+                ? error.message
+                : String(error);
+        alert(`Publishing failed: ${reason}`);
     } finally {
         publishing.value = false;
     }
