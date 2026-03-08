@@ -171,7 +171,10 @@
         >
             <dialog open class="publish-dialog">
                 <h2>Publish changes</h2>
-                <form class="publish-form" @submit.prevent="submitPublishDialog">
+                <form
+                    class="publish-form"
+                    @submit.prevent="submitPublishDialog"
+                >
                     <label class="publish-field">
                         <span>Page name</span>
                         <input
@@ -186,7 +189,7 @@
                     </label>
 
                     <label class="publish-field">
-                        <span>Edit summary (Briefly describe your changes)</span>
+                        Edit summary (Briefly describe your changes)
                         <input
                             ref="publishSummaryInput"
                             v-model="publishDialogSummary"
@@ -205,22 +208,19 @@
                             required
                             :disabled="publishing"
                         />
-                        <span>
-                            <label
-                                for="publish-audience-confirm"
-                                class="publish-audience-label"
-                            >
-                                I understand this change will be seen by anyone
-                                who visits
-                            </label>
-                            <a
+                        <label
+                            for="publish-audience-confirm"
+                            class="publish-audience-label"
+                        >
+                            I understand this change will be seen by anyone who
+                            visits the page "<a
                                 class="publish-page-name-link"
                                 :href="publishPageHref"
                                 >{{
-                                normalizedPublishPageName || "this page"
-                            }}</a
-                            >.
-                        </span>
+                                    normalizedPublishPageName || "this page"
+                                }}</a
+                            >".
+                        </label>
                     </div>
 
                     <p class="publish-license">
@@ -871,17 +871,11 @@ const isPublishDialogValid = computed(
         normalizedPublishSummary.value.length > 0 &&
         publishAudienceConfirmed.value,
 );
-watch(
-    publishDialogPageName,
-    (nextPageName, previousPageName) => {
-        if (
-            nextPageName !== previousPageName &&
-            publishAudienceConfirmed.value
-        ) {
-            publishAudienceConfirmed.value = false;
-        }
-    },
-);
+watch(publishDialogPageName, (nextPageName, previousPageName) => {
+    if (nextPageName !== previousPageName && publishAudienceConfirmed.value) {
+        publishAudienceConfirmed.value = false;
+    }
+});
 
 const viewMenuDetails = ref<HTMLDetailsElement | null>(null);
 const onMenuPointerDown = (event: PointerEvent) => {
@@ -1231,7 +1225,7 @@ async function submitPublishDialog() {
 
 .publish-audience-checkbox {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 0.65rem;
     line-height: 1.4;
     font-size: 1.3rem;
@@ -1239,14 +1233,20 @@ async function submitPublishDialog() {
 }
 
 .publish-audience-label {
+    display: block;
+    flex: 1;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    background: var(--background-color-interactive);
     cursor: pointer;
 }
 
 .publish-audience-checkbox input {
-    width: 1.15rem;
-    height: 1.15rem;
+    width: 2rem;
+    height: 2rem;
     flex: 0 0 auto;
-    margin-top: 0.25rem;
+    margin-top: 0;
     cursor: pointer;
 }
 
