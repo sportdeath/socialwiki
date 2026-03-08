@@ -725,6 +725,8 @@ async function refreshPageProtection(page: string, requestId: number) {
 }
 
 function onQueryChange() {
+    if (window.address === undefined) return;
+
     const lensParams = new URLSearchParams(window.params);
     const { name: nextPageName, query: nextPageQuery } = parseAddress(
         window.address,
