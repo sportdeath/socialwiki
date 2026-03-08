@@ -40,7 +40,7 @@
                             :key="permission.id"
                         >
                             <span>{{
-                                describePermissionMethod(permission.method)
+                                describeCategory(permission.permissionCategory)
                             }}</span>
                             <button
                                 type="button"
@@ -66,6 +66,7 @@ import {
     listGraffitiGuardApprovalRules,
     type GraffitiGuardApprovalRule,
 } from "./graffiti-guard-approval-rules";
+import { describeCategory } from "./graffiti-guard-permission-categories";
 import GraffitiGuardPageIdentity from "./GraffitiGuardPageIdentity.vue";
 
 type ConnectedPagePermission = GraffitiGuardApprovalRule & { id: number };
@@ -92,29 +93,6 @@ function syncPanelViewportBounds() {
     if (!panel) return;
     const topOffset = Math.max(0, panel.getBoundingClientRect().top);
     panel.style.setProperty("--panel-top-offset", `${topOffset}px`);
-}
-
-function describePermissionMethod(method: GraffitiGuardApprovalRule["method"]) {
-    switch (method) {
-        case "post":
-            return "Post data";
-        case "delete":
-            return "Delete data";
-        case "postMedia":
-            return "Post files";
-        case "deleteMedia":
-            return "Delete files";
-        case "get":
-            return "Read private data";
-        case "getMedia":
-            return "Read private files";
-        case "discover":
-            return "Discover private data";
-        case "logout":
-            return "Log out";
-        default:
-            return method;
-    }
 }
 
 function togglePageVersion(pageKey: string) {

@@ -1,7 +1,11 @@
 <template>
     <details class="guard-details">
-        <summary>Show Data</summary>
+        <summary>{{ summary }}</summary>
         <dl v-if="object">
+            <dt>Action</dt>
+            <dd :class="{ warning }">
+                {{ action }}
+            </dd>
             <dt>Value</dt>
             <dd>
                 <pre>{{ JSON.stringify(object.value, null, 2) }}</pre>
@@ -86,7 +90,10 @@
 import type { GraffitiPostObject } from "@graffiti-garden/api";
 import "./details.css";
 
-const props = defineProps<{
+defineProps<{
     object: GraffitiPostObject<{}> | undefined | null;
+    summary: string;
+    action: string;
+    warning?: boolean;
 }>();
 </script>

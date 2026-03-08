@@ -1,13 +1,17 @@
 import { openDB } from "idb";
 import type { DBSchema, IDBPDatabase } from "idb";
 import type { GraffitiGuardRequest } from "../backend/graffiti-server";
+import {
+  methodToCategory,
+  type GraffitiPermissionCategory,
+} from "./graffiti-guard-permission-categories";
 
 type ApprovalRuleScope = "similar" | "all";
 
 export type GraffitiGuardApprovalRule = {
   id?: number;
   scope: ApprovalRuleScope;
-  method: GraffitiGuardRequest["method"];
+  permissionCategory: GraffitiPermissionCategory;
   transcludeId: string | null;
   argsFingerprint: string | null;
   createdAtMs: number;
@@ -21,7 +25,7 @@ interface GraffitiGuardApprovalDb extends DBSchema {
 }
 
 const DB_NAME = "socialwiki-graffiti-guard";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const RULES_STORE = "rules";
 
 let dbPromise: Promise<IDBPDatabase<GraffitiGuardApprovalDb>> | null = null;
@@ -33,7 +37,10 @@ function canUseIndexedDb() {
 function getDb() {
   if (dbPromise) return dbPromise;
   dbPromise = openDB<GraffitiGuardApprovalDb>(DB_NAME, DB_VERSION, {
-    upgrade(db) {
+    upgrade(db, oldVersion) {
+      if (oldVersion < 2 && db.objectStoreNames.contains(RULES_STORE)) {
+        db.deleteObjectStore(RULES_STORE);
+      }
       if (!db.objectStoreNames.contains(RULES_STORE)) {
         db.createObjectStore(RULES_STORE, {
           keyPath: "id",
@@ -69,32 +76,23 @@ function getArgsFingerprint(args: GraffitiGuardRequest["args"]): string | null {
 
 function baseRuleMatches(
   rule: GraffitiGuardApprovalRule,
+  requestCategory: GraffitiPermissionCategory,
   request: GraffitiGuardRequest,
 ) {
-  console.log("Comparing rule to request", { rule, request });
   return (
-    rule.method === request.method && rule.transcludeId === request.transcludeId
+    rule.permissionCategory === requestCategory &&
+    rule.transcludeId === request.transcludeId
   );
 }
 
 function matchesSimilarRule(
-  rule: GraffitiGuardApprovalRule,
-  request: GraffitiGuardRequest,
+  _rule: GraffitiGuardApprovalRule,
+  _request: GraffitiGuardRequest,
+  _requestCategory: GraffitiPermissionCategory,
 ) {
   // Scaffold for method-specific similarity matching. Intentionally conservative
   // for now so "similar" approvals are stored but not auto-applied yet.
-  switch (request.method) {
-    case "post":
-    case "postMedia":
-    case "delete":
-    case "deleteMedia":
-    case "get":
-    case "getMedia":
-    case "discover":
-    case "logout":
-    default:
-      return false;
-  }
+  return false;
 }
 
 export async function saveGraffitiGuardApprovalRule(
@@ -106,7 +104,7 @@ export async function saveGraffitiGuardApprovalRule(
   const db = await getDb();
   await db.add(RULES_STORE, {
     scope,
-    method: request.method,
+    permissionCategory: methodToCategory(request.method),
     transcludeId: request.transcludeId,
     argsFingerprint: getArgsFingerprint(request.args),
     createdAtMs: Date.now(),
@@ -120,11 +118,15 @@ export async function hasMatchingGraffitiGuardApprovalRule(
 
   const db = await getDb();
   const rules = await db.getAll(RULES_STORE);
+  const requestCategory = methodToCategory(request.method);
 
   for (const rule of rules) {
-    if (!baseRuleMatches(rule, request)) continue;
+    if (!baseRuleMatches(rule, requestCategory, request)) continue;
     if (rule.scope === "all") return true;
-    if (rule.scope === "similar" && matchesSimilarRule(rule, request)) {
+    if (
+      rule.scope === "similar" &&
+      matchesSimilarRule(rule, request, requestCategory)
+    ) {
       return true;
     }
   }

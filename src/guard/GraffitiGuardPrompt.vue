@@ -9,7 +9,11 @@
                 @toggle-page-version="togglePageVersion"
             />
             <template v-if="activeGuardRequest.method === 'post'">
-                <ObjectDetails :object="activeGuardRequest.args[0] as any" />
+                <ObjectDetails
+                    :object="activeGuardRequest.args[0] as any"
+                    summary="Show Modification"
+                    action="PUT"
+                />
             </template>
             <template v-else-if="activeGuardRequest.method === 'delete'">
                 <GraffitiGet
@@ -18,7 +22,12 @@
                     :session="activeGuardRequest.args[1] as any"
                     v-slot="{ object }"
                 >
-                    <ObjectDetails :object="object" />
+                    <ObjectDetails
+                        :object="object"
+                        summary="Show Modification"
+                        action="DELETE"
+                        :warning="true"
+                    />
                 </GraffitiGet>
             </template>
             <template v-else-if="activeGuardRequest.method === 'get'">
@@ -28,11 +37,19 @@
                     :session="activeGuardRequest.args[2] as any"
                     v-slot="{ object }"
                 >
-                    <ObjectDetails :object="object" />
+                    <ObjectDetails
+                        :object="object"
+                        summary="Show Request"
+                        action="GET"
+                    />
                 </GraffitiGet>
             </template>
             <template v-else-if="activeGuardRequest.method === 'postMedia'">
-                <MediaDetails :media="activeGuardRequest.args[0] as any" />
+                <MediaDetails
+                    :media="activeGuardRequest.args[0] as any"
+                    summary="Show Modification"
+                    action="PUT"
+                />
             </template>
             <template v-else-if="activeGuardRequest.method === 'deleteMedia'">
                 <GraffitiGetMedia
@@ -41,7 +58,12 @@
                     :session="activeGuardRequest.args[1] as any"
                     v-slot="{ media }"
                 >
-                    <MediaDetails :media="media" />
+                    <MediaDetails
+                        :media="media"
+                        summary="Show Modification"
+                        action="DELETE"
+                        :warning="true"
+                    />
                 </GraffitiGetMedia>
             </template>
             <template v-else-if="activeGuardRequest.method === 'getMedia'">
@@ -51,13 +73,18 @@
                     :session="activeGuardRequest.args[2] as any"
                     v-slot="{ media }"
                 >
-                    <MediaDetails :media="media" />
+                    <MediaDetails
+                        :media="media"
+                        summary="Show Request"
+                        action="GET"
+                    />
                 </GraffitiGetMedia>
             </template>
             <template v-else-if="activeGuardRequest.method === 'discover'">
                 <DiscoverDetails
                     :channels="activeGuardRequest.args[0] as any"
                     :schema="activeGuardRequest.args[1] as any"
+                    summary="Show Request"
                 />
             </template>
             <footer>
@@ -67,15 +94,6 @@
                     <details>
                         <summary>▾</summary>
                         <ul role="menu">
-                            <!-- <li>
-                                <button
-                                    @click.prevent="approveActiveSimilar"
-                                    role="menuitem"
-                                    type="button"
-                                >
-                                    Allow All <em>Similar</em> Requests
-                                </button>
-                            </li> -->
                             <li>
                                 <button
                                     @click.prevent="approveActiveAlways"
@@ -98,7 +116,6 @@ import { computed, ref, watch } from "vue";
 import {
     allowAlwaysGraffitiGuardRequest,
     allowGraffitiGuardRequest,
-    allowSimilarGraffitiGuardRequest,
     denyGraffitiGuardRequest,
     graffitiGuardState,
 } from "./graffiti-guard";
@@ -106,6 +123,13 @@ import MediaDetails from "./MediaDetails.vue";
 import ObjectDetails from "./ObjectDetails.vue";
 import DiscoverDetails from "./DiscoverDetails.vue";
 import GraffitiGuardPageIdentity from "./GraffitiGuardPageIdentity.vue";
+import { methodToCategory } from "./graffiti-guard-permission-categories";
+
+const titleByCategory = {
+    modify_data: "Allow this page to modify data?",
+    access_private_data: "Allow this page to access private data?",
+    logout: "Allow this page to log you out?",
+} as const;
 
 const activeGuardRequest = computed(
     () => graffitiGuardState.pending[0] ?? null,
@@ -115,29 +139,10 @@ const isPageVersionVisible = ref(false);
 const activeRequestTitle = computed(() => {
     const request = activeGuardRequest.value;
     if (!request) return "";
-    switch (request.method) {
-        case "post":
-            return "Allow this page to post data?";
-        case "delete":
-            return "Allow this page to delete data?";
-        case "get":
-            return "Allow this page to get private data?";
-        case "postMedia":
-            return "Allow this page to post a file?";
-        case "deleteMedia":
-            return "Allow this page to delete a file?";
-        case "getMedia":
-            return "Allow this page to access a private file?";
-        case "discover":
-            return "Allow this page to discover private data?";
-        case "logout":
-            return "Allow this page to log you out?";
-        default:
-            return "Allow this page?";
-    }
+    return titleByCategory[methodToCategory(request.method)];
 });
 
-function decodeTranscludeIdPath(path: string) {
+function decodePath(path: string) {
     return path.split("/").map((part) => {
         try {
             return decodeURIComponent(part);
@@ -154,7 +159,7 @@ const activeRequestPageParts = computed(() => {
         return request.transcludeName;
     }
     if (request.transcludeId) {
-        return decodeTranscludeIdPath(request.transcludeId);
+        return decodePath(request.transcludeId);
     }
     return [];
 });
@@ -180,12 +185,6 @@ function rejectActive() {
     const request = activeGuardRequest.value;
     if (!request) return;
     denyGraffitiGuardRequest(request.id);
-}
-
-function approveActiveSimilar() {
-    const request = activeGuardRequest.value;
-    if (!request) return;
-    void allowSimilarGraffitiGuardRequest(request.id);
 }
 
 function approveActiveAlways() {

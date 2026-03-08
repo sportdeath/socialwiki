@@ -1,7 +1,9 @@
 <template>
     <details class="guard-details">
-        <summary>Show Discover Details</summary>
+        <summary>{{ summary }}</summary>
         <dl v-if="channels || schema">
+            <dt>Action</dt>
+            <dd>DISCOVER</dd>
             <dt>Channels (where matching data may be found)</dt>
             <dd>
                 <p v-if="!channels.length">
@@ -31,8 +33,9 @@
 <script setup lang="ts">
 import "./details.css";
 
-const { channels, schema } = defineProps<{
+defineProps<{
     channels: string[];
     schema: unknown;
+    summary: string;
 }>();
 </script>

@@ -1,8 +1,12 @@
 <template>
     <details class="guard-details">
-        <summary>Show File Details</summary>
+        <summary>{{ summary }}</summary>
         <template v-if="media">
             <dl>
+                <dt>Action</dt>
+                <dd :class="{ warning }">
+                    {{ action }}
+                </dd>
                 <dt>Type</dt>
                 <dd>{{ media.data.type }}</dd>
                 <dt>Size</dt>
@@ -53,7 +57,9 @@
                         :data="mediaPreviewUrl"
                         type="application/pdf"
                         :aria-label="
-                            media.actor ? `PDF by ${media.actor}` : 'PDF preview'
+                            media.actor
+                                ? `PDF by ${media.actor}`
+                                : 'PDF preview'
                         "
                     />
                     <button v-else type="button" @click="downloadMedia(media)">
@@ -124,6 +130,9 @@ import "./details.css";
 
 const props = defineProps<{
     media: (GraffitiPostMedia & Partial<GraffitiMedia>) | undefined | null;
+    summary: string;
+    action: string;
+    warning?: boolean;
 }>();
 
 const mediaPreviewUrl = ref<string | null>(null);
