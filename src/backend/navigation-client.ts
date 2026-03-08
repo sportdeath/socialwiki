@@ -112,8 +112,10 @@ export function installNavigation(origin: string) {
     if (!(a instanceof HTMLAnchorElement)) return;
 
     if (a.hasAttribute("download")) return;
+    const href = a.getAttribute("href");
+    if (typeof href !== "string") return;
 
     e.preventDefault();
-    window.navigate(a.href);
+    window.navigate(href);
   });
 }
