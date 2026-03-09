@@ -36,6 +36,34 @@ let activeRenderVersion = 0;
 let graffitiSession: GraffitiSession | undefined | null = undefined;
 const transclude = document.querySelector("#transclude") as HTMLElement;
 
+window.addEventListener(
+  "sw-autosize-mode",
+  (event: Event) => {
+    if (!(event instanceof CustomEvent)) return;
+
+    const payload = event.detail;
+    const mode =
+      typeof payload === "object" && payload !== null
+        ? (payload as Record<string, unknown>).mode
+        : undefined;
+
+    if (mode === "off" || typeof mode !== "string") {
+      transclude.removeAttribute("autosize");
+    } else {
+      transclude.setAttribute("autosize", mode);
+    }
+
+    // Prevent the view shell document from autosizing to its own viewport.
+    event.stopImmediatePropagation();
+  },
+  { capture: true },
+);
+
+transclude.addEventListener("sw-autosize-size", (event: Event) => {
+  if (!(event instanceof CustomEvent)) return;
+  window.emit("sw-autosize-size", event.detail);
+});
+
 function setTranscludeSrcDoc(
   html: string,
   status: "loading" | "not-found" | "ok" | "error",

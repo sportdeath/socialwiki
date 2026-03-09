@@ -1,4 +1,9 @@
 import type { Graffiti } from "@graffiti-garden/api";
+import {
+  parseAutosizeMode,
+  serveAutosize,
+  type AutosizeMode,
+} from "./autosize-server";
 import { ErrorPage, LoadingPage } from "./status-pages";
 import { serveEvents } from "./events-server";
 import { serveNavigation } from "./navigation-server";
@@ -47,8 +52,11 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
     protected renderVersion = 0;
     protected destroyEvents = () => {};
     protected destroyNavigation = () => {};
+    protected destroyAutosize = () => {};
     protected sendEvent = (_eventName: string, _payload?: unknown) => {};
     protected setQuery = (_query: string) => {};
+    protected setAutosizeMode = (_mode: AutosizeMode) => {};
+    protected syncAutosizeMode = () => {};
     protected currentBlobUrl: string | null = null;
     protected currentFrameSourceKey = "";
 
@@ -115,15 +123,17 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         "clipboard-read *",
         "clipboard-write *",
       ].join("; ");
-      iframe.addEventListener("load", () =>
-        this.transcludeIdTracker.syncIframeWindow(this),
-      );
+      iframe.addEventListener("load", () => {
+        this.transcludeIdTracker.syncIframeWindow(this);
+        this.syncAutosizeMode();
+      });
       return iframe;
     }
 
     protected attachIframeServices() {
       this.destroyEvents();
       this.destroyNavigation();
+      this.destroyAutosize();
 
       const { destroy: destroyEvents, send } = serveEvents(
         (eventName, payload) => {
@@ -154,6 +164,11 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         this.iframe,
       );
 
+      const { destroy: destroyAutosize, setMode, syncMode } = serveAutosize(
+        this,
+        this.iframe,
+      );
+
       const { destroy, setQuery } = serveNavigation((to) => {
         // If the navigation is not relative, don't do anything.
         // The host will get the message and handle it if needed
@@ -180,8 +195,12 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
 
       this.destroyEvents = destroyEvents;
       this.destroyNavigation = destroy;
+      this.destroyAutosize = destroyAutosize;
       this.sendEvent = send;
       this.setQuery = setQuery;
+      this.setAutosizeMode = setMode;
+      this.syncAutosizeMode = syncMode;
+      this.setAutosizeMode(parseAutosizeMode(this.getAttribute("autosize")));
     }
 
     protected replaceIframeForSourceChange(sourceKey: string) {
@@ -258,6 +277,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
       this.transcludeIdTracker.untrack(this);
       this.destroyEvents();
       this.destroyNavigation();
+      this.destroyAutosize();
       if (this.currentBlobUrl) {
         URL.revokeObjectURL(this.currentBlobUrl);
         this.currentBlobUrl = null;
@@ -412,10 +432,11 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
 
     // Rerender on initialization or src/srcdoc changes
     static get observedAttributes(): string[] {
-      return ["src", "srcdoc", "query", "id", "name"];
+      return ["src", "srcdoc", "query", "id", "name", "autosize"];
     }
     connectedCallback() {
       this.transcludeIdTracker.track(this, this.iframe);
+      this.setAutosizeMode(parseAutosizeMode(this.getAttribute("autosize")));
       this.renderPage();
     }
     attributeChangedCallback(name: string) {
@@ -423,10 +444,15 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         this.transcludeIdTracker.notifyIdChanged(this);
         return;
       }
+      if (name === "autosize") {
+        this.setAutosizeMode(parseAutosizeMode(this.getAttribute("autosize")));
+        return;
+      }
       this.renderPage();
     }
     adoptedCallback() {
       this.transcludeIdTracker.syncIframeWindow(this);
+      this.setAutosizeMode(parseAutosizeMode(this.getAttribute("autosize")));
       this.renderPage();
     }
   }

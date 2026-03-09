@@ -3,6 +3,7 @@ import { GraffitiRpcClient } from "./graffiti-client";
 import { installTransclude } from "./transclude";
 import { installEventBridge } from "./events-client";
 import { installNavigation } from "./navigation-client";
+import { installAutosize } from "./autosize-client";
 
 declare global {
   interface Window {
@@ -38,6 +39,7 @@ if (window.top !== window) {
   installTransclude(new window.Graffiti(), window.topOrigin);
   installEventBridge();
   installNavigation(window.topOrigin);
+  installAutosize();
 } else {
   // If we are the top level window, wrap the content in an iframe
   // and spin up the RPC "server".
