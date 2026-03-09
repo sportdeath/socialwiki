@@ -22,34 +22,6 @@ export function installAutosize() {
   let lastWidth = -1;
   let lastHeight = -1;
   let pendingWidthShrink: number | null = null;
-  let overflowStyle: HTMLStyleElement | null = null;
-
-  const updateOverflowStyle = () => {
-    if (mode === "off") {
-      overflowStyle?.remove();
-      overflowStyle = null;
-      return;
-    }
-
-    if (overflowStyle === null) {
-      overflowStyle = document.createElement("style");
-      overflowStyle.dataset.swAutosizeOverflow = "true";
-    }
-
-    if (mode === "both") {
-      // Suppress scrollbars on controlled axes to avoid scrollbar-width feedback.
-      overflowStyle.textContent =
-        "html, body { overflow-x: hidden !important; overflow-y: hidden !important; }";
-    } else if (mode === "height") {
-      overflowStyle.textContent =
-        "html, body { overflow-y: hidden !important; }";
-    } else {
-      overflowStyle.textContent =
-        "html, body { overflow-x: hidden !important; }";
-    }
-
-    (document.head || document.documentElement).append(overflowStyle);
-  };
 
   const observeBody = () => {
     // body may appear after the bridge is installed; observe lazily.
@@ -94,8 +66,8 @@ export function installAutosize() {
       const childStyle = window.getComputedStyle(child);
       if (childStyle.position === "fixed") continue;
 
-      // Include descendant overflow containers (e.g. `main { overflow: auto; }`)
-      // without depending on body/doc viewport-sized scroll floors.
+      // Keep this loop: without child overflow extents, some pages under-report
+      // height by a few pixels and produce nested scrollbars.
       const childWidth = Math.max(
         child.scrollWidth,
         child.offsetWidth,
@@ -141,8 +113,8 @@ export function installAutosize() {
       return width;
     }
 
-    // Width autosize can oscillate between responsive layouts. Require a
-    // shrink to be observed in two consecutive frames before applying it.
+    // Keep this guard: without it, autosize="width" can enter a responsive
+    // feedback loop and repeatedly shrink toward zero.
     if (lastWidth < 0 || width >= lastWidth) {
       pendingWidthShrink = null;
       return width;
@@ -217,7 +189,6 @@ export function installAutosize() {
     }
 
     mode = nextMode;
-    updateOverflowStyle();
     if (mode === "off") {
       stopAutosize();
       return;

@@ -35,13 +35,11 @@ let currentContentKey = "";
 let activeRenderVersion = 0;
 let graffitiSession: GraffitiSession | undefined | null = undefined;
 const transclude = document.querySelector("#transclude") as HTMLElement;
-let allowingInternalAutosizeReset = false;
 
 window.addEventListener(
   "sw-autosize-mode",
   (event: Event) => {
     if (!(event instanceof CustomEvent)) return;
-    if (allowingInternalAutosizeReset) return;
 
     const payload = event.detail;
     const mode =
@@ -60,18 +58,6 @@ window.addEventListener(
   },
   { capture: true },
 );
-
-// init-client runs before this script, so an initial autosize mode can be
-// applied to the view shell before passthrough interception is active.
-// Force the shell autosizer off once here, then continue forwarding mode only
-// to the inner transclude.
-allowingInternalAutosizeReset = true;
-window.dispatchEvent(
-  new CustomEvent("sw-autosize-mode", {
-    detail: { mode: "off" },
-  }),
-);
-allowingInternalAutosizeReset = false;
 
 transclude.addEventListener("sw-autosize-size", (event: Event) => {
   if (!(event instanceof CustomEvent)) return;
