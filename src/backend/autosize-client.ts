@@ -77,8 +77,6 @@ export function installAutosize() {
     const style = window.getComputedStyle(body);
     const marginX = parsePx(style.marginLeft) + parsePx(style.marginRight);
     const marginY = parsePx(style.marginTop) + parsePx(style.marginBottom);
-    const viewportWidth = Math.max(1, window.innerWidth || doc.clientWidth);
-    const viewportHeight = Math.max(1, window.innerHeight || doc.clientHeight);
     let width = 0;
     let height = 0;
 
@@ -92,19 +90,24 @@ export function installAutosize() {
       height = Math.max(height, rangeRect.height);
     }
 
-    // Scroll dimensions are useful for overflowed content, but when content is
-    // smaller than the viewport they collapse to viewport size and block shrink.
-    if (body.scrollWidth > viewportWidth) {
-      width = Math.max(width, body.scrollWidth);
-    }
-    if (body.scrollHeight > viewportHeight) {
-      height = Math.max(height, body.scrollHeight);
-    }
-    if (doc.scrollWidth > viewportWidth) {
-      width = Math.max(width, doc.scrollWidth);
-    }
-    if (doc.scrollHeight > viewportHeight) {
-      height = Math.max(height, doc.scrollHeight);
+    for (const child of Array.from(body.children) as HTMLElement[]) {
+      const childStyle = window.getComputedStyle(child);
+      if (childStyle.position === "fixed") continue;
+
+      // Include descendant overflow containers (e.g. `main { overflow: auto; }`)
+      // without depending on body/doc viewport-sized scroll floors.
+      const childWidth = Math.max(
+        child.scrollWidth,
+        child.offsetWidth,
+        child.clientWidth,
+      );
+      const childHeight = Math.max(
+        child.scrollHeight,
+        child.offsetHeight,
+        child.clientHeight,
+      );
+      width = Math.max(width, child.offsetLeft + childWidth);
+      height = Math.max(height, child.offsetTop + childHeight);
     }
 
     return {
