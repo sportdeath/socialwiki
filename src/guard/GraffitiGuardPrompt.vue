@@ -126,7 +126,7 @@ import GraffitiGuardPageIdentity from "./GraffitiGuardPageIdentity.vue";
 import { methodToCategory } from "./graffiti-guard-permission-categories";
 
 const titleByCategory = {
-    modify_data: "Allow this page to modify data?",
+    modify_data: "Allow this page to modify your data?",
     access_private_data: "Allow this page to access private data?",
     logout: "Allow this page to log you out?",
 } as const;

@@ -70,7 +70,10 @@
                         Current page: {{ pageAddress }}
                     </RouterLink>
                 </li>
-                <li v-for="suggestion in historySuggestions" :key="suggestion.address">
+                <li
+                    v-for="suggestion in historySuggestions"
+                    :key="suggestion.address"
+                >
                     <button
                         type="button"
                         @click="navigateToVisitedPage(suggestion.address)"
@@ -393,13 +396,19 @@ function navigateToVisitedPage(address: string) {
     submitForm();
 }
 
-watch(pageAddress, (address) => {
-    if (!address) return;
-    void recordPageVisit(address).then(() => {
-        if (!isDropdownOpen.value) return;
-        void refreshHistorySuggestions();
-    }).catch(() => {});
-}, { immediate: true });
+watch(
+    pageAddress,
+    (address) => {
+        if (!address) return;
+        void recordPageVisit(address)
+            .then(() => {
+                if (!isDropdownOpen.value) return;
+                void refreshHistorySuggestions();
+            })
+            .catch(() => {});
+    },
+    { immediate: true },
+);
 
 const isGuardPermissionsOpen = ref(false);
 const showGuardPermissionsButton = ref(false);

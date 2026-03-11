@@ -22,6 +22,8 @@
     --accent-button-background: #36c;
     --accent-button-background-hover: #3056a9;
     --accent-button-text: #fff;
+    --backdrop-color: rgb(255 255 255 / 0.8);
+    --backdrop-subtle-color: rgb(255 255 255 / 0.4);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -40,6 +42,8 @@
         --warning-hover-color: #fea898;
         --background-color-interactive: #27292d;
         --background-color-interactive-hover: #404244;
+        --backdrop-color: rgb(0 0 0 / 0.8);
+        --backdrop-subtle-color: rgb(0 0 0 / 0.4);
     }
 }
 

@@ -1013,10 +1013,17 @@ function setupLoginBypassListener() {
     graffiti.sessionEvents.addEventListener("login", loginBypassListener);
 }
 
-function openPublishDialog() {
+async function openPublishDialog() {
     if (publishing.value) return;
     if (viewMenuDetails.value?.open) {
         viewMenuDetails.value.open = false;
+    }
+    try {
+        const publishSession = await ensurePublishSession();
+        if (!publishSession) return;
+    } catch (error) {
+        console.error("Error opening publish dialog:", error);
+        return;
     }
     showPublishDialog.value = true;
     publishDialogPageName.value = pageName.value;
@@ -1062,6 +1069,7 @@ async function submitPublishDialog() {
     const publishName = normalizedPublishPageName.value;
     const summary = normalizedPublishSummary.value;
     publishing.value = true;
+    showPublishDialog.value = false;
     try {
         const publishSession = await ensurePublishSession();
         if (!publishSession) return;
@@ -1080,7 +1088,6 @@ async function submitPublishDialog() {
         draftHtml.value = nextPublishedHtml;
         publishedHtml.value = nextPublishedHtml;
         resetPublishReminderState();
-        showPublishDialog.value = false;
         window.navigate(
             `#/${composeAddress(
                 "v",
@@ -1121,7 +1128,7 @@ async function submitPublishDialog() {
     left: 0;
     right: 0;
     bottom: 0;
-    background: #000000cc;
+    background: var(--backdrop-color);
     z-index: 100;
     display: flex;
     align-items: center;
@@ -1138,7 +1145,7 @@ async function submitPublishDialog() {
     align-items: start;
     overflow: auto;
     padding: 1rem;
-    background: rgb(0 0 0 / 0.2);
+    background: var(--backdrop-subtle-color);
 }
 
 .protected-dialog,

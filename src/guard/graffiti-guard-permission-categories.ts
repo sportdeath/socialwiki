@@ -34,7 +34,7 @@ export function methodToCategory(
 export function describeCategory(category: GraffitiPermissionCategory): string {
   switch (category) {
     case "modify_data":
-      return "Modify data";
+      return "Modify your data";
     case "access_private_data":
       return "Access private data";
     case "logout":
