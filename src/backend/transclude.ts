@@ -164,10 +164,11 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         this.iframe,
       );
 
-      const { destroy: destroyAutosize, setMode, syncMode } = serveAutosize(
-        this,
-        this.iframe,
-      );
+      const {
+        destroy: destroyAutosize,
+        setMode,
+        syncMode,
+      } = serveAutosize(this, this.iframe);
 
       const { destroy, setQuery } = serveNavigation((to) => {
         // If the navigation is not relative, don't do anything.
@@ -365,7 +366,10 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         const lensSource = lenses[lens];
 
         this.lensReadyPromise = (async () => {
-          this.setUrl(`${origin}/${lensSource}`, "loading");
+          // Add a random param to bust URL identity so deeply nested lens
+          // iframes do not intermittently fail to start when reusin
+          // the exact same source URL.
+          this.setUrl(`${origin}/${lensSource}?r=${Math.random()}`, "loading");
           await new Promise((resolve) => {
             this.iframe.addEventListener("load", resolve, { once: true });
           });
