@@ -57,6 +57,46 @@ export function installNavigation(origin: string) {
     return;
   }
 
+  const paramsMutators = new Set(["append", "delete", "set", "sort"]);
+
+  function applyParamsChange(params?: URLSearchParams | string) {
+    const nextParamsSerialized = normalizeParams(params);
+    const { didParamsChange } = updateQueryState(
+      nextParamsSerialized,
+      currentAddress,
+    );
+    if (!didParamsChange) return;
+    navigateForQueryChange();
+  }
+
+  function createParamsProxy() {
+    const params = new URLSearchParams(currentParamsSerialized);
+
+    return new Proxy(params, {
+      get: (target, prop) => {
+        const value = Reflect.get(target, prop, target);
+        if (typeof value !== "function") return value;
+
+        if (typeof prop === "string" && paramsMutators.has(prop)) {
+          return (...args: unknown[]) => {
+            const previous = target.toString();
+            const result = Reflect.apply(
+              value as (...args: unknown[]) => unknown,
+              target,
+              args,
+            );
+            if (target.toString() !== previous) {
+              applyParamsChange(target);
+            }
+            return result;
+          };
+        }
+
+        return (value as (...args: unknown[]) => unknown).bind(target);
+      },
+    });
+  }
+
   Object.defineProperties(window, {
     address: {
       configurable: true,
@@ -73,16 +113,8 @@ export function installNavigation(origin: string) {
     },
     params: {
       configurable: true,
-      get: () => new URLSearchParams(currentParamsSerialized),
-      set: (value?: URLSearchParams | string) => {
-        const nextParamsSerialized = normalizeParams(value);
-        const { didParamsChange } = updateQueryState(
-          nextParamsSerialized,
-          currentAddress,
-        );
-        if (!didParamsChange) return;
-        navigateForQueryChange();
-      },
+      get: () => createParamsProxy(),
+      set: (value?: URLSearchParams | string) => applyParamsChange(value),
     },
   });
 
