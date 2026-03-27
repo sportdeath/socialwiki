@@ -104,11 +104,6 @@
                                 )
                             "
                             title="The current version of this page"
-                            @pointerdown="onLensLinkPressStart($event, 'v')"
-                            @pointerup="onLensLinkPointerUp('v')"
-                            @pointerleave="onLensLinkPressCancel"
-                            @pointercancel="onLensLinkPressCancel"
-                            @click.capture="onLensLinkClick($event, 'v')"
                         >
                             View
                         </RouterLink>
@@ -117,11 +112,6 @@
                         <RouterLink
                             :to="encodeRouteForRouter(editRoute)"
                             title="Edit the source code of this page"
-                            @pointerdown="onLensLinkPressStart($event, 'e')"
-                            @pointerup="onLensLinkPointerUp('e')"
-                            @pointerleave="onLensLinkPressCancel"
-                            @pointercancel="onLensLinkPressCancel"
-                            @click.capture="onLensLinkClick($event, 'e')"
                         >
                             Edit
                         </RouterLink>
@@ -137,11 +127,6 @@
                                 )
                             "
                             title="Past revisions of this page"
-                            @pointerdown="onLensLinkPressStart($event, 'h')"
-                            @pointerup="onLensLinkPointerUp('h')"
-                            @pointerleave="onLensLinkPressCancel"
-                            @pointercancel="onLensLinkPressCancel"
-                            @click.capture="onLensLinkClick($event, 'h')"
                         >
                             History
                         </RouterLink>
@@ -156,11 +141,10 @@
                     </li>
                     <li v-else>
                         <button
-                            :class="{ selected: loggingOut }"
-                            @click="logout($graffitiSession.value)"
+                            @click="openSettingsDialog"
                             class="secondary"
                         >
-                            {{ loggingOut ? "Logging out..." : "Log Out" }}
+                            Settings
                         </button>
                     </li>
                 </ul>
@@ -174,6 +158,40 @@
             @pointerdown.prevent="onBackdropClick"
         ></div>
     </header>
+    <aside
+        v-if="showSettingsDialog"
+        class="settings-dialog-overlay"
+        @click.self="closeSettingsDialog"
+    >
+        <dialog open class="settings-dialog">
+            <h2>Settings</h2>
+            <div class="settings-actions">
+                <button
+                    v-if="$graffitiSession.value"
+                    type="button"
+                    class="warning"
+                    :disabled="loggingOut"
+                    @click="logoutFromSettings($graffitiSession.value)"
+                >
+                    {{ loggingOut ? "Logging out..." : "Log Out" }}
+                </button>
+                <button type="button" @click="openMetaLensFromSettings('v')">
+                    Modify View
+                </button>
+                <button type="button" @click="openMetaLensFromSettings('e')">
+                    Modify Edit
+                </button>
+                <button type="button" @click="openMetaLensFromSettings('h')">
+                    Modify History
+                </button>
+            </div>
+            <footer>
+                <button type="button" class="secondary" @click="closeSettingsDialog">
+                    Close
+                </button>
+            </footer>
+        </dialog>
+    </aside>
     <main>
         <MetaLensEditor
             v-if="metaLens !== null"
@@ -309,30 +327,9 @@ const metaLens = ref<EditableLens | null>(null);
 const metaLensQuery = ref("");
 const lensParams = ref<URLSearchParams | undefined>(undefined);
 const pageAddress = ref<string | undefined>(undefined);
-
-const LENS_EDITOR_LONG_PRESS_MS = 600;
-let lensPressTimer: number | undefined;
-let pressedLens: EditableLens | null = null;
-let longPressedLens: EditableLens | null = null;
-let consumedLensClick: EditableLens | null = null;
-
-function clearLensPressTimer() {
-    if (lensPressTimer === undefined) return;
-    clearTimeout(lensPressTimer);
-    lensPressTimer = undefined;
-}
-
-function lensDisplayName(lens: EditableLens): string {
-    return lens === "v" ? "View" : lens === "e" ? "Edit" : "History";
-}
+const showSettingsDialog = ref(false);
 
 function openMetaLensEditor(lens: EditableLens) {
-    const proceed = window.confirm(
-        `You are about to edit the "${lensDisplayName(
-            lens,
-        )}" functionality. Continue?`,
-    );
-    if (!proceed) return;
     const shortHoldRoute =
         lens === "e"
             ? editRoute.value
@@ -343,45 +340,19 @@ function openMetaLensEditor(lens: EditableLens) {
     );
 }
 
-function onLensLinkPressStart(event: PointerEvent, lens: EditableLens) {
-    if (event.pointerType === "mouse" && event.button !== 0) return;
-
-    clearLensPressTimer();
-    consumedLensClick = null;
-    pressedLens = lens;
-    longPressedLens = null;
-    lensPressTimer = window.setTimeout(() => {
-        lensPressTimer = undefined;
-        if (pressedLens !== lens) return;
-        // Mark as long-press. We defer opening confirm until pointerup so the
-        // initial press/release doesn't interfere with dialog interaction.
-        longPressedLens = lens;
-        consumedLensClick = lens;
-    }, LENS_EDITOR_LONG_PRESS_MS);
+function openSettingsDialog() {
+    showSettingsDialog.value = true;
+    isDropdownOpen.value = false;
+    isGuardPermissionsOpen.value = false;
 }
 
-function onLensLinkPointerUp(lens: EditableLens) {
-    const shouldOpenMetaEditor =
-        pressedLens === lens && longPressedLens === lens;
-    pressedLens = null;
-    clearLensPressTimer();
-    longPressedLens = null;
-    if (shouldOpenMetaEditor) {
-        openMetaLensEditor(lens);
-    }
+function closeSettingsDialog() {
+    showSettingsDialog.value = false;
 }
 
-function onLensLinkPressCancel() {
-    pressedLens = null;
-    longPressedLens = null;
-    clearLensPressTimer();
-}
-
-function onLensLinkClick(event: MouseEvent, lens: EditableLens) {
-    if (consumedLensClick !== lens) return;
-    consumedLensClick = null;
-    event.preventDefault();
-    event.stopPropagation();
+function openMetaLensFromSettings(lens: EditableLens) {
+    closeSettingsDialog();
+    openMetaLensEditor(lens);
 }
 
 watch(
@@ -442,6 +413,11 @@ function logout(session: GraffitiSession) {
     });
 }
 
+function logoutFromSettings(session: GraffitiSession) {
+    closeSettingsDialog();
+    logout(session);
+}
+
 // Watch transclude srcdoc for draft updates and listen for explicit
 // navigation events from the transclude element.
 const transclude = useTemplateRef<HTMLElement>("transclude");
@@ -499,7 +475,6 @@ watch(
 );
 onBeforeUnmount(() => {
     detachObservedTransclude();
-    clearLensPressTimer();
 });
 
 const editRoute = computed(() => {
@@ -804,6 +779,7 @@ function selectAddress(event: MouseEvent) {
 
 function onBackdropClick() {
     isGuardPermissionsOpen.value = false;
+    closeSettingsDialog();
     syncNav();
     (document.activeElement as HTMLElement | null)?.blur();
 }
@@ -983,6 +959,87 @@ header {
     height: calc(100dvh - 100%);
     background: #00000066;
     z-index: 1;
+}
+
+.settings-dialog-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: grid;
+    justify-items: center;
+    align-items: start;
+    overflow: auto;
+    padding: 1rem;
+    background: var(--backdrop-subtle-color);
+}
+
+.settings-dialog {
+    position: static;
+    inset: auto;
+    margin: 0;
+    width: min(30rem, calc(100vw - 2rem));
+    overflow: visible;
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    background: var(--background-color);
+    color: var(--text-color);
+    box-shadow: 0 0 2.5rem rgb(0 0 0 / 0.9);
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    font-size: 1.2rem;
+}
+
+.settings-dialog h2 {
+    margin: 0;
+    font-size: 1.6rem;
+}
+
+.settings-actions {
+    display: grid;
+    gap: 0.5rem;
+}
+
+.settings-actions > button {
+    width: 100%;
+    text-align: left;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    background: var(--background-color-interactive);
+    color: var(--text-color);
+    padding: 0.45rem 0.65rem;
+    text-decoration: none;
+}
+
+.settings-actions > button:hover {
+    background: var(--background-color-interactive-hover);
+    border-color: var(--border-color-hover);
+    color: var(--text-color);
+    text-decoration: none;
+}
+
+.settings-actions > button.secondary {
+    color: var(--secondary-color);
+}
+
+.settings-actions > button.secondary:hover {
+    color: var(--secondary-hover-color);
+}
+
+.settings-actions > button.warning {
+    color: var(--warning-color);
+    border-color: var(--warning-color);
+}
+
+.settings-actions > button.warning:hover {
+    color: var(--warning-hover-color);
+    border-color: var(--warning-hover-color);
+}
+
+.settings-dialog footer {
+    display: flex;
+    justify-content: flex-end;
 }
 
 nav .router-link-exact-active {
