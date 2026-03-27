@@ -1,6 +1,6 @@
 import { defineConfig, type Plugin } from "vite";
 import vue from "@vitejs/plugin-vue";
-import { resolve, isAbsolute, join } from "node:path";
+import { resolve, isAbsolute, join, dirname } from "node:path";
 import { build, type Plugin as EsbuildPlugin } from "esbuild";
 import fs from "node:fs/promises";
 
@@ -14,6 +14,7 @@ const initScriptEntries = [
     output: "/init-server.js",
   },
 ];
+const standaloneStylePath = "src/style.css";
 
 // Standalone lens HTML files import these absolute module paths directly.
 // We emit them as stable, unhashed files so checked-in HTML remains valid.
@@ -139,6 +140,13 @@ function buildInitJs(): Plugin {
           },
         });
       }
+
+      // Standalone lens HTML files link to /src/style.css directly.
+      // Keep that URL valid in production by copying the stylesheet to dist.
+      const sourceStyle = resolve(__dirname, standaloneStylePath);
+      const distStyle = resolve(__dirname, `dist/${standaloneStylePath}`);
+      await fs.mkdir(dirname(distStyle), { recursive: true });
+      await fs.copyFile(sourceStyle, distStyle);
     },
   };
 }
