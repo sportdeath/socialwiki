@@ -959,14 +959,13 @@
               previewHtml.value = newHtml;
               const draftSeq = ++localDraftSeq;
               window.navigate(
-                  "e",
-                  composeQuery(
-                    new URLSearchParams({
-                      draft: newHtml,
-                      draftSeq: String(draftSeq),
-                    }),
-                    composeAddress(pageName.value, pageQuery.value),
-                  )
+                composeQuery(
+                  new URLSearchParams({
+                    draft: newHtml,
+                    draftSeq: String(draftSeq),
+                  }),
+                  composeAddress(pageName.value, pageQuery.value),
+                )
               );
 
               debouncing.value = false;
