@@ -14,7 +14,10 @@ const initScriptEntries = [
     output: "/init-server.js",
   },
 ];
-const standaloneStylePath = "src/style.css";
+const standaloneStylePaths = [
+  "src/style.css",
+  "src/lenses/utils/TwoPaneLayout.css",
+];
 
 // Standalone lens HTML files import these absolute module paths directly.
 // We emit them as stable, unhashed files so checked-in HTML remains valid.
@@ -141,12 +144,14 @@ function buildInitJs(): Plugin {
         });
       }
 
-      // Standalone lens HTML files link to /src/style.css directly.
-      // Keep that URL valid in production by copying the stylesheet to dist.
-      const sourceStyle = resolve(__dirname, standaloneStylePath);
-      const distStyle = resolve(__dirname, `dist/${standaloneStylePath}`);
-      await fs.mkdir(dirname(distStyle), { recursive: true });
-      await fs.copyFile(sourceStyle, distStyle);
+      // Standalone lens HTML files link to these stylesheet paths directly.
+      // Keep those URLs valid in production by copying files to dist verbatim.
+      for (const stylePath of standaloneStylePaths) {
+        const sourceStyle = resolve(__dirname, stylePath);
+        const distStyle = resolve(__dirname, `dist/${stylePath}`);
+        await fs.mkdir(dirname(distStyle), { recursive: true });
+        await fs.copyFile(sourceStyle, distStyle);
+      }
     },
   };
 }

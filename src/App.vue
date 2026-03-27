@@ -105,9 +105,9 @@
                             "
                             title="The current version of this page"
                             @pointerdown="onLensLinkPressStart($event, 'v')"
-                            @pointerup="onLensLinkPressEnd"
-                            @pointerleave="onLensLinkPressEnd"
-                            @pointercancel="onLensLinkPressEnd"
+                            @pointerup="onLensLinkPointerUp('v')"
+                            @pointerleave="onLensLinkPressCancel"
+                            @pointercancel="onLensLinkPressCancel"
                             @click.capture="onLensLinkClick($event, 'v')"
                         >
                             View
@@ -118,9 +118,9 @@
                             :to="encodeRouteForRouter(editRoute)"
                             title="Edit the source code of this page"
                             @pointerdown="onLensLinkPressStart($event, 'e')"
-                            @pointerup="onLensLinkPressEnd"
-                            @pointerleave="onLensLinkPressEnd"
-                            @pointercancel="onLensLinkPressEnd"
+                            @pointerup="onLensLinkPointerUp('e')"
+                            @pointerleave="onLensLinkPressCancel"
+                            @pointercancel="onLensLinkPressCancel"
                             @click.capture="onLensLinkClick($event, 'e')"
                         >
                             Edit
@@ -138,9 +138,9 @@
                             "
                             title="Past revisions of this page"
                             @pointerdown="onLensLinkPressStart($event, 'h')"
-                            @pointerup="onLensLinkPressEnd"
-                            @pointerleave="onLensLinkPressEnd"
-                            @pointercancel="onLensLinkPressEnd"
+                            @pointerup="onLensLinkPointerUp('h')"
+                            @pointerleave="onLensLinkPressCancel"
+                            @pointercancel="onLensLinkPressCancel"
                             @click.capture="onLensLinkClick($event, 'h')"
                         >
                             History
@@ -313,6 +313,7 @@ const pageAddress = ref<string | undefined>(undefined);
 const LENS_EDITOR_LONG_PRESS_MS = 600;
 let lensPressTimer: number | undefined;
 let pressedLens: EditableLens | null = null;
+let longPressedLens: EditableLens | null = null;
 let consumedLensClick: EditableLens | null = null;
 
 function clearLensPressTimer() {
@@ -348,16 +349,31 @@ function onLensLinkPressStart(event: PointerEvent, lens: EditableLens) {
     clearLensPressTimer();
     consumedLensClick = null;
     pressedLens = lens;
+    longPressedLens = null;
     lensPressTimer = window.setTimeout(() => {
         lensPressTimer = undefined;
         if (pressedLens !== lens) return;
+        // Mark as long-press. We defer opening confirm until pointerup so the
+        // initial press/release doesn't interfere with dialog interaction.
+        longPressedLens = lens;
         consumedLensClick = lens;
-        openMetaLensEditor(lens);
     }, LENS_EDITOR_LONG_PRESS_MS);
 }
 
-function onLensLinkPressEnd() {
+function onLensLinkPointerUp(lens: EditableLens) {
+    const shouldOpenMetaEditor =
+        pressedLens === lens && longPressedLens === lens;
     pressedLens = null;
+    clearLensPressTimer();
+    longPressedLens = null;
+    if (shouldOpenMetaEditor) {
+        openMetaLensEditor(lens);
+    }
+}
+
+function onLensLinkPressCancel() {
+    pressedLens = null;
+    longPressedLens = null;
     clearLensPressTimer();
 }
 
