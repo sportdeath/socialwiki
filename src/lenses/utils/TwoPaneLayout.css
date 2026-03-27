@@ -1,4 +1,4 @@
-.two-panes {
+.sw-two-panes {
     height: 100%;
     flex: 1;
     min-height: 0;
@@ -6,16 +6,16 @@
     overflow: hidden;
 }
 
-.two-panes.resizing,
-.two-panes.resizing * {
+.sw-two-panes.is-resizing,
+.sw-two-panes.is-resizing * {
     cursor: col-resize;
 }
 
-.two-panes.resizing * {
+.sw-two-panes.is-resizing * {
     pointer-events: none;
 }
 
-.pane {
+.sw-two-pane {
     display: flex;
     flex-direction: column;
     min-width: 0;
@@ -25,11 +25,11 @@
         max-height 0.25s ease;
 }
 
-.pane:last-of-type {
+.sw-two-pane:last-of-type {
     flex: 1;
 }
 
-.pane > header {
+.sw-two-pane > header {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
@@ -40,7 +40,7 @@
     background: var(--background-color-interactive);
 }
 
-.pane > header h2 {
+.sw-two-pane > header h2 {
     margin: 0;
     font-size: inherit;
     text-transform: uppercase;
@@ -48,66 +48,66 @@
     font-weight: 600;
 }
 
-.pane > .controls {
+.sw-two-pane > header > .sw-two-pane-controls {
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
 }
 
-.pane > .body {
+.sw-two-pane > .sw-two-pane-body {
     flex: 1;
     min-height: 0;
     display: flex;
     overflow-y: auto;
 }
 
-.divider {
+.sw-two-pane-divider {
     width: 4px;
     cursor: col-resize;
     background: var(--border-color);
 }
 
-.divider:hover,
-.resizing .divider {
+.sw-two-pane-divider:hover,
+.is-resizing .sw-two-pane-divider {
     background: var(--border-color-hover);
 }
 
 /* Responsive / mobile */
 @media (max-width: 768px) {
-    .two-panes {
+    .sw-two-panes {
         flex-direction: column;
     }
 
-    .divider {
+    .sw-two-pane-divider {
         display: none;
     }
 
-    .pane {
+    .sw-two-pane {
         width: 100% !important;
     }
 
     /* Active pane takes remaining height */
-    .pane.active {
+    .sw-two-pane.is-active {
         flex: 1 1 auto;
         max-height: 100vh;
     }
 
-    .pane:not(.active) > header:hover {
+    .sw-two-pane:not(.is-active) > header:hover {
         background: var(--background-color-interactive-hover);
         cursor: pointer;
     }
 
-    .pane:last-of-type:not(.active) {
+    .sw-two-pane:last-of-type:not(.is-active) {
         border-top: 1px solid var(--border-color);
     }
 
     /** Inactive collapses to its header bar */
-    .pane:not(.active) {
+    .sw-two-pane:not(.is-active) {
         flex: 0 0 auto;
     }
 
     /* Collapse the panel (hide body) and hide the controls */
-    .pane:not(.active) :is(.body, .controls) {
+    .sw-two-pane:not(.is-active) :is(.sw-two-pane-body, .sw-two-pane-controls) {
         display: none;
     }
 }

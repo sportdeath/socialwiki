@@ -16,6 +16,8 @@ const initScriptEntries = [
 ];
 const standaloneStylePaths = [
   "src/style.css",
+  // Keep compatibility with previously saved lens overrides that still link
+  // this stylesheet directly from HTML.
   "src/lenses/utils/TwoPaneLayout.css",
 ];
 
@@ -38,7 +40,7 @@ const standaloneLensDependencyInputs = {
   ),
   "src/lenses/utils/TwoPaneLayout": resolve(
     __dirname,
-    "src/lenses/utils/TwoPaneLayout.vue",
+    "src/lenses/utils/TwoPaneLayout.ts",
   ),
   "src/lenses/utils/schemas": resolve(__dirname, "src/lenses/utils/schemas.ts"),
   "src/lenses/utils/trust": resolve(__dirname, "src/lenses/utils/trust.ts"),

@@ -1,35 +1,39 @@
 <template>
-    <div class="two-panes" :class="{ resizing: isResizing }" ref="containerRef">
+    <div
+        class="sw-two-panes"
+        :class="{ 'is-resizing': isResizing }"
+        ref="containerRef"
+    >
         <section
-            class="pane"
-            :class="{ active: activePane === 'left' }"
+            class="sw-two-pane"
+            :class="{ 'is-active': activePane === 'left' }"
             :style="{ width: leftWidth + '%' }"
         >
             <header @click="setActive('left')">
                 <h2>{{ leftTitle }}</h2>
 
-                <div class="controls">
+                <div class="sw-two-pane-controls">
                     <slot name="left-controls" />
                 </div>
             </header>
 
-            <div class="body">
+            <div class="sw-two-pane-body">
                 <slot name="left-pane" />
             </div>
         </section>
 
-        <div class="divider" @mousedown="startResize"></div>
+        <div class="sw-two-pane-divider" @mousedown="startResize"></div>
 
-        <section class="pane" :class="{ active: activePane === 'right' }">
+        <section class="sw-two-pane" :class="{ 'is-active': activePane === 'right' }">
             <header @click="setActive('right')">
                 <h2>{{ rightTitle }}</h2>
 
-                <div class="controls">
+                <div class="sw-two-pane-controls">
                     <slot name="right-controls" />
                 </div>
             </header>
 
-            <div class="body">
+            <div class="sw-two-pane-body">
                 <slot name="right-pane" />
             </div>
         </section>
