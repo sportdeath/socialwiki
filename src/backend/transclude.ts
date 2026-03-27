@@ -14,19 +14,13 @@ import {
   composeAddress,
 } from "./route";
 import { createTranscludeIdTracker } from "./transclude-ids";
+import {
+  getLensSource,
+  installLensSourceApi,
+  installLensSourceBridge,
+  isLens,
+} from "./lens-sources";
 export { getTranscludeId } from "./transclude-ids";
-
-const lenses = {
-  v: "src/lenses/view/index.html",
-  e: "src/lenses/edit/index.html",
-  h: "src/lenses/history/index.html",
-};
-type Lens = keyof typeof lenses;
-function assertLens(x: string): asserts x is Lens {
-  if (!(x in lenses)) {
-    throw new Error("Unrecognized lens");
-  }
-}
 
 function extractHashRoute(source: string, origin: string): string | null {
   if (source.startsWith("#/")) return source.slice(2);
@@ -36,6 +30,9 @@ function extractHashRoute(source: string, origin: string): string | null {
 }
 
 export function installTransclude(graffiti: Graffiti, origin: string) {
+  installLensSourceBridge();
+  installLensSourceApi(origin);
+
   const transcludeIdTracker = createTranscludeIdTracker();
 
   class SocialWikiTransclude extends HTMLElement {
@@ -146,6 +143,9 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
           );
 
           if (eventName !== "sw-lens-output") return;
+          // Some hosts (like the meta lens editor preview) intentionally ignore
+          // lens output events so their own srcdoc remains authoritative.
+          if (this.hasAttribute("ignore-lens-output")) return;
           if (typeof payload !== "object" || payload === null) return;
           const p = payload as Record<string, unknown>;
           if (
@@ -333,7 +333,7 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
         return;
       }
 
-      const route = extractHashRoute(src, origin);
+      const route = extractHashRoute(src, this.origin);
       if (route === null) {
         this.replaceIframeForSourceChange(`src-invalid:${src}`);
         return this.setSrcDoc(
@@ -362,14 +362,13 @@ export function installTransclude(graffiti: Graffiti, origin: string) {
       this.setAttribute("status", "loading");
 
       try {
-        assertLens(lens);
-        const lensSource = lenses[lens];
+        if (!isLens(lens)) {
+          throw new Error(`Unrecognized lens: ${lens}`);
+        }
 
         this.lensReadyPromise = (async () => {
-          // Add a random param to bust URL identity so deeply nested lens
-          // iframes do not intermittently fail to start when reusin
-          // the exact same source URL.
-          this.setUrl(`${origin}/${lensSource}?r=${Math.random()}`, "loading");
+          const lensSource = await getLensSource(lens, this.origin);
+          this.setSrcDoc(lensSource, "loading");
           await new Promise((resolve) => {
             this.iframe.addEventListener("load", resolve, { once: true });
           });

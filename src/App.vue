@@ -104,6 +104,11 @@
                                 )
                             "
                             title="The current version of this page"
+                            @pointerdown="onLensLinkPressStart($event, 'v')"
+                            @pointerup="onLensLinkPressEnd"
+                            @pointerleave="onLensLinkPressEnd"
+                            @pointercancel="onLensLinkPressEnd"
+                            @click.capture="onLensLinkClick($event, 'v')"
                         >
                             View
                         </RouterLink>
@@ -112,6 +117,11 @@
                         <RouterLink
                             :to="encodeRouteForRouter(editRoute)"
                             title="Edit the source code of this page"
+                            @pointerdown="onLensLinkPressStart($event, 'e')"
+                            @pointerup="onLensLinkPressEnd"
+                            @pointerleave="onLensLinkPressEnd"
+                            @pointercancel="onLensLinkPressEnd"
+                            @click.capture="onLensLinkClick($event, 'e')"
                         >
                             Edit
                         </RouterLink>
@@ -127,6 +137,11 @@
                                 )
                             "
                             title="Past revisions of this page"
+                            @pointerdown="onLensLinkPressStart($event, 'h')"
+                            @pointerup="onLensLinkPressEnd"
+                            @pointerleave="onLensLinkPressEnd"
+                            @pointercancel="onLensLinkPressEnd"
+                            @click.capture="onLensLinkClick($event, 'h')"
                         >
                             History
                         </RouterLink>
@@ -160,7 +175,13 @@
         ></div>
     </header>
     <main>
+        <MetaLensEditor
+            v-if="metaLens !== null"
+            :lens="metaLens"
+            :query="metaLensQuery"
+        />
         <sw-transclude
+            v-else
             :id="lens"
             :name="
                 lens === 'v'
@@ -205,6 +226,7 @@ import {
     recordPageVisit,
     type VisitedPage,
 } from "./browser-history";
+import MetaLensEditor from "./lenses/meta/MetaLensEditor.vue";
 
 function encodeNameForRoute(name: string): string {
     // Keep path separators readable in names while encoding other reserved chars.
@@ -261,6 +283,20 @@ function getLegacyLensRedirect(address: string): string | null {
     return null;
 }
 
+type EditableLens = "v" | "e" | "h";
+
+function parseMetaLensRoute(
+    address: string,
+): { lens: EditableLens; query: string } | null {
+    const { name, query } = parseAddress(address);
+    const match = name.match(/^meta\/([veh])$/);
+    if (!match) return null;
+    return {
+        lens: match[1] as EditableLens,
+        query: query.startsWith("?") ? query.slice(1) : query,
+    };
+}
+
 const graffiti = useGraffiti();
 const router = useRouter();
 
@@ -269,11 +305,83 @@ const props = defineProps<{
 }>();
 
 const lens = ref("");
+const metaLens = ref<EditableLens | null>(null);
+const metaLensQuery = ref("");
 const lensParams = ref<URLSearchParams | undefined>(undefined);
 const pageAddress = ref<string | undefined>(undefined);
+
+const LENS_EDITOR_LONG_PRESS_MS = 600;
+let lensPressTimer: number | undefined;
+let pressedLens: EditableLens | null = null;
+let consumedLensClick: EditableLens | null = null;
+
+function clearLensPressTimer() {
+    if (lensPressTimer === undefined) return;
+    clearTimeout(lensPressTimer);
+    lensPressTimer = undefined;
+}
+
+function lensDisplayName(lens: EditableLens): string {
+    return lens === "v" ? "View" : lens === "e" ? "Edit" : "History";
+}
+
+function openMetaLensEditor(lens: EditableLens) {
+    const proceed = window.confirm(
+        `You are about to edit the "${lensDisplayName(
+            lens,
+        )}" functionality. Continue?`,
+    );
+    if (!proceed) return;
+    const shortHoldRoute =
+        lens === "e"
+            ? editRoute.value
+            : composeAddress(lens, composeQuery(undefined, pageAddress.value));
+    const { query } = parseAddress(shortHoldRoute);
+    router.push(
+        encodeRouteForRouter(composeAddress(`meta/${lens}`, query)),
+    );
+}
+
+function onLensLinkPressStart(event: PointerEvent, lens: EditableLens) {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+
+    clearLensPressTimer();
+    consumedLensClick = null;
+    pressedLens = lens;
+    lensPressTimer = window.setTimeout(() => {
+        lensPressTimer = undefined;
+        if (pressedLens !== lens) return;
+        consumedLensClick = lens;
+        openMetaLensEditor(lens);
+    }, LENS_EDITOR_LONG_PRESS_MS);
+}
+
+function onLensLinkPressEnd() {
+    pressedLens = null;
+    clearLensPressTimer();
+}
+
+function onLensLinkClick(event: MouseEvent, lens: EditableLens) {
+    if (consumedLensClick !== lens) return;
+    consumedLensClick = null;
+    event.preventDefault();
+    event.stopPropagation();
+}
+
 watch(
     () => props.address,
     (newAddress) => {
+        const metaRouteLens = parseMetaLensRoute(newAddress);
+        if (metaRouteLens !== null) {
+            metaLens.value = metaRouteLens.lens;
+            metaLensQuery.value = metaRouteLens.query;
+            lens.value = `meta/${metaRouteLens.lens}`;
+            lensParams.value = undefined;
+            return;
+        }
+
+        metaLens.value = null;
+        metaLensQuery.value = "";
         const { name: lens_, query } = parseAddress(newAddress);
         lens.value = lens_;
         const { params: lensParams_, address: pageAddress_ } =
@@ -323,6 +431,15 @@ function logout(session: GraffitiSession) {
 const transclude = useTemplateRef<HTMLElement>("transclude");
 const srcdoc = ref<string | null>(null);
 let observer: MutationObserver | undefined;
+let observedTransclude: HTMLElement | null = null;
+
+function detachObservedTransclude() {
+    observer?.disconnect();
+    observer = undefined;
+    observedTransclude?.removeEventListener("sw-navigate", onTranscludeNavigate);
+    observedTransclude = null;
+}
+
 function onTranscludeNavigate(e: Event) {
     if (!(e instanceof CustomEvent) || typeof e.detail?.to !== "string") return;
 
@@ -342,22 +459,31 @@ function onTranscludeNavigate(e: Event) {
     const url = new URL(e.detail.to, window.origin).toString();
     window.location.href = url;
 }
-onMounted(() => {
-    if (!transclude.value) return;
-    observer = new MutationObserver(() => {
-        srcdoc.value = transclude.value?.getAttribute("srcdoc") ?? null;
-    });
-    transclude.value.addEventListener("sw-navigate", onTranscludeNavigate);
-    observer.observe(transclude.value, {
-        attributes: true,
-        attributeFilter: ["srcdoc"],
-    });
-    // initialize value
-    srcdoc.value = transclude.value?.getAttribute("srcdoc") ?? null;
-});
+watch(
+    transclude,
+    (nextTransclude) => {
+        detachObservedTransclude();
+        if (!nextTransclude) {
+            srcdoc.value = null;
+            return;
+        }
+
+        observedTransclude = nextTransclude;
+        observedTransclude.addEventListener("sw-navigate", onTranscludeNavigate);
+        observer = new MutationObserver(() => {
+            srcdoc.value = observedTransclude?.getAttribute("srcdoc") ?? null;
+        });
+        observer.observe(observedTransclude, {
+            attributes: true,
+            attributeFilter: ["srcdoc"],
+        });
+        srcdoc.value = observedTransclude.getAttribute("srcdoc") ?? null;
+    },
+    { immediate: true },
+);
 onBeforeUnmount(() => {
-    observer?.disconnect();
-    transclude.value?.removeEventListener("sw-navigate", onTranscludeNavigate);
+    detachObservedTransclude();
+    clearLensPressTimer();
 });
 
 const editRoute = computed(() => {
@@ -451,8 +577,23 @@ async function syncGuardPermissionsButtonVisibility() {
 
 // When input is submitted, the route changes
 function submitForm() {
+    const normalizedInputAddress =
+        addressInput.value && addressInput.value.length > 0
+            ? addressInput.value
+            : "Social.Wiki";
+
+    if (metaLens.value !== null) {
+        router.push(
+            encodeRouteForRouter(
+                composeAddress("v", composeQuery(undefined, normalizedInputAddress)),
+            ),
+        );
+        (document.activeElement as HTMLElement | null)?.blur();
+        return;
+    }
+
     // Extract the page name from the input
-    const { name: inputPageName } = parseAddress(addressInput.value);
+    const { name: inputPageName } = parseAddress(normalizedInputAddress);
     const { name: currentPageName } = parseAddress(pageAddress.value);
     if (inputPageName === currentPageName) {
         // If the user only changed the query, keep the current lens/params
@@ -461,7 +602,7 @@ function submitForm() {
             encodeRouteForRouter(
                 composeAddress(
                     lens.value,
-                    composeQuery(lensParams.value, addressInput.value),
+                    composeQuery(lensParams.value, normalizedInputAddress),
                 ),
             ),
         );
@@ -471,7 +612,7 @@ function submitForm() {
             encodeRouteForRouter(
                 composeAddress(
                     "v",
-                    composeQuery(undefined, addressInput.value),
+                    composeQuery(undefined, normalizedInputAddress),
                 ),
             ),
         );

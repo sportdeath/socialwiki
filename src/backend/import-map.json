@@ -1,8 +1,13 @@
 {
   "imports": {
-    "vue": "https://cdn.jsdelivr.net/npm/vue@3.5/dist/vue.esm-browser.prod.js",
+    "vue": "/src/lenses/utils/vue-runtime.js",
     "@graffiti-garden/api": "https://cdn.jsdelivr.net/npm/@graffiti-garden/api@1.2.0/dist/browser/index.js",
     "@graffiti-garden/wrapper-synchronize": "https://cdn.jsdelivr.net/npm/@graffiti-garden/wrapper-synchronize@1.2.1/dist/browser/index.js",
-    "@graffiti-garden/wrapper-vue": "https://cdn.jsdelivr.net/npm/@graffiti-garden/wrapper-vue@1.2.2/dist/browser/plugin.mjs"
+    "@graffiti-garden/wrapper-vue": "https://cdn.jsdelivr.net/npm/@graffiti-garden/wrapper-vue@1.2.2/dist/browser/plugin.mjs",
+    "monaco-editor": "https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/+esm",
+    "monaco-editor-vue3": "/src/lenses/utils/monaco-editor-vue3.js",
+    "monaco-vim": "https://cdn.jsdelivr.net/npm/monaco-vim@0.4.4/+esm",
+    "@noble/hashes/sha2.js": "https://cdn.jsdelivr.net/npm/@noble/hashes@2.0.1/sha2.js/+esm",
+    "@noble/hashes/utils.js": "https://cdn.jsdelivr.net/npm/@noble/hashes@2.0.1/utils.js/+esm"
   }
 }
