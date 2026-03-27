@@ -31,17 +31,17 @@
                                       Publish
                                   </button>
                               </li>
-      
+
                               <li role="none">
                                   <button type="button" @click="download()">
                                       Download
                                   </button>
                               </li>
-      
+
                               <li role="none">
                                   <details ref="viewMenuDetails">
                                       <summary role="menuitem">▾ View</summary>
-      
+
                                       <ul role="menu">
                                           <li>
                                               <label class="menu-checkbox">
@@ -52,9 +52,9 @@
                                                   Show changes
                                               </label>
                                           </li>
-      
+
                                           <li role="separator"></li>
-      
+
                                           <li>
                                               <label class="menu-checkbox">
                                                   <input
@@ -64,7 +64,7 @@
                                                   Dark mode
                                               </label>
                                           </li>
-      
+
                                           <li>
                                               <label class="menu-checkbox">
                                                   <input
@@ -74,7 +74,7 @@
                                                   Word wrap
                                               </label>
                                           </li>
-      
+
                                           <li>
                                               <label class="menu-checkbox">
                                                   <input
@@ -84,7 +84,7 @@
                                                   Show minimap
                                               </label>
                                           </li>
-      
+
                                           <li>
                                               <label class="menu-checkbox">
                                                   <input
@@ -94,7 +94,7 @@
                                                   Show whitespace
                                               </label>
                                           </li>
-      
+
                                           <li>
                                               <label class="menu-checkbox">
                                                   <input
@@ -110,7 +110,7 @@
                           </ul>
                       </nav>
                   </template>
-      
+
                   <template #right-controls>
                       <nav>
                           <ul>
@@ -137,7 +137,7 @@
                           </ul>
                       </nav>
                   </template>
-      
+
                   <!-- Left pane body (Editor) -->
                   <template #left-pane>
                       <div class="pane">
@@ -150,7 +150,7 @@
                               @editor-did-mount="onEditorDidMount"
                               class="code-editor"
                           ></code-editor>
-      
+
                           <diff-editor
                               v-else
                               :value="diffHtml"
@@ -164,7 +164,7 @@
                           ></diff-editor>
                       </div>
                   </template>
-      
+
                   <!-- Right pane body (Preview) -->
                   <template #right-pane>
                       <div class="pane">
@@ -175,11 +175,12 @@
                               :query="pageQuery"
                               :key="refreshKey"
                               :srcdoc="previewHtml"
+                              ignore-lens-output
                           ></sw-transclude>
                       </div>
                   </template>
               </two-pane-layout>
-      
+
               <aside
                   v-if="showPublishDialog"
                   class="publish-dialog-overlay"
@@ -203,7 +204,7 @@
                                   :disabled="publishing"
                               />
                           </label>
-      
+
                           <label class="publish-field">
                               Edit summary (Briefly describe your changes)
                               <input
@@ -215,7 +216,7 @@
                                   :disabled="publishing"
                               />
                           </label>
-      
+
                           <div class="publish-audience-checkbox">
                               <input
                                   id="publish-audience-confirm"
@@ -238,7 +239,7 @@
                                   >".
                               </label>
                           </div>
-      
+
                           <p class="publish-license">
                               By publishing changes, you irrevocably agree to release
                               your contribution under the
@@ -249,7 +250,7 @@
                                   >GNU GPLv3 License</a
                               >.
                           </p>
-      
+
                           <footer>
                               <button
                                   type="button"
@@ -270,7 +271,7 @@
                       </form>
                   </dialog>
               </aside>
-      
+
               <aside
                   v-if="showProtectedDialog"
                   class="protected-dialog-overlay"
@@ -339,7 +340,7 @@
                       </footer>
                   </dialog>
               </aside>
-      
+
               <div v-if="publishing" class="backdrop" @click.prevent="">
                   <h1 class="dots">Publishing</h1>
               </div>
@@ -958,7 +959,6 @@
               previewHtml.value = newHtml;
               const draftSeq = ++localDraftSeq;
               window.navigate(
-                `#/${composeAddress(
                   "e",
                   composeQuery(
                     new URLSearchParams({
@@ -966,8 +966,7 @@
                       draftSeq: String(draftSeq),
                     }),
                     composeAddress(pageName.value, pageQuery.value),
-                  ),
-                )}`,
+                  )
               );
 
               debouncing.value = false;
@@ -1200,12 +1199,12 @@
           display: flex;
           flex-direction: column;
       }
-      
+
       .code-editor {
           flex: 1;
           min-height: 0;
       }
-      
+
       .backdrop {
           position: absolute;
           top: 0;
@@ -1218,7 +1217,7 @@
           align-items: center;
           justify-content: center;
       }
-      
+
       .protected-dialog-overlay,
       .publish-dialog-overlay {
           position: fixed;
@@ -1231,7 +1230,7 @@
           padding: 1rem;
           background: var(--backdrop-subtle-color);
       }
-      
+
       .protected-dialog,
       .publish-dialog {
           position: static;
@@ -1250,26 +1249,26 @@
           gap: 1rem;
           font-size: 1.5rem;
       }
-      
+
       .protected-dialog h2,
       .protected-dialog p,
       .publish-dialog h2,
       .publish-dialog p {
           margin: 0;
       }
-      
+
       .protected-dialog h2,
       .publish-dialog h2 {
           font-size: 2rem;
       }
-      
+
       .protected-dialog footer,
       .publish-dialog footer {
           display: flex;
           justify-content: space-between;
           gap: 1rem;
       }
-      
+
       :is(.protected-dialog, .publish-dialog) .allow-button {
           border: 1px solid var(--border-color);
           background: var(--accent-button-background);
@@ -1278,14 +1277,14 @@
           padding: 0.35rem 0.75rem;
           font-weight: 600;
       }
-      
+
       :is(.protected-dialog, .publish-dialog) .allow-button:hover {
           border-color: var(--border-color-hover);
           background: var(--accent-button-background-hover);
           color: var(--accent-button-text);
           text-decoration: none;
       }
-      
+
       :is(.protected-dialog, .publish-dialog) .allow-button:disabled,
       :is(.protected-dialog, .publish-dialog) .allow-button:disabled:hover {
           border-color: var(--border-color);
@@ -1294,20 +1293,20 @@
           cursor: not-allowed;
           text-decoration: none;
       }
-      
+
       .publish-form {
           display: flex;
           flex-direction: column;
           gap: 1.35rem;
       }
-      
+
       .publish-field {
           display: flex;
           flex-direction: column;
           gap: 0.45rem;
           font-size: 1.15rem;
       }
-      
+
       .publish-field :is(input, textarea) {
           width: 100%;
           border: 1px solid var(--border-color);
@@ -1317,12 +1316,12 @@
           padding: 0.5rem 0.65rem;
           font: inherit;
       }
-      
+
       .publish-field :is(input, textarea):focus-visible {
           outline: 2px solid var(--border-color-hover);
           outline-offset: 1px;
       }
-      
+
       .publish-audience-checkbox {
           display: flex;
           align-items: center;
@@ -1331,7 +1330,7 @@
           font-size: 1.3rem;
           cursor: pointer;
       }
-      
+
       .publish-audience-label {
           display: block;
           flex: 1;
@@ -1341,7 +1340,7 @@
           background: var(--background-color-interactive);
           cursor: pointer;
       }
-      
+
       .publish-audience-checkbox input {
           width: 2rem;
           height: 2rem;
@@ -1349,24 +1348,24 @@
           margin-top: 0;
           cursor: pointer;
       }
-      
+
       .publish-page-name-link {
           color: var(--link-color);
           font-weight: 700;
           text-decoration: underline 2px;
           text-underline-offset: 0.12em;
       }
-      
+
       .publish-license {
           font-size: 1rem;
           color: var(--secondary-color);
       }
-      
+
       /* Editor menubar + dropdowns */
       nav > ul[role="menubar"] > li {
           position: relative;
       }
-      
+
       :is(
           nav summary[role="menuitem"],
           nav > ul > li > button,
@@ -1381,7 +1380,7 @@
           padding: 0.25rem 0.5rem;
           border-radius: 0.5rem;
       }
-      
+
       :is(
           nav summary[role="menuitem"],
           nav > ul > li > button,
@@ -1392,64 +1391,64 @@
               border-color: var(--border-color-hover);
               text-decoration: none;
       }
-      
+
       nav > ul > li > button.publish-button {
           border-color: var(--border-color);
           background: var(--accent-button-background);
           color: var(--accent-button-text);
       }
-      
+
       nav > ul > li > button.publish-button:hover {
           border-color: var(--border-color-hover);
           background: var(--accent-button-background-hover);
           color: var(--accent-button-text);
       }
-      
+
       nav > ul > li > button.publish-button:disabled {
           background: var(--background-color-interactive);
           color: var(--text-color);
       }
-      
+
       nav > ul > li > button.publish-button:disabled:hover {
           border-color: var(--border-color);
           background: var(--background-color-interactive);
           color: var(--text-color);
       }
-      
+
       /* dropdown menu */
       nav ul[role="menu"] {
           position: absolute;
           top: calc(100% + 0.25rem);
           left: 0;
-      
+
           padding: 0.25rem;
           list-style: none;
-      
+
           background: var(--background-color);
           border: 1px solid var(--border-color);
           border-radius: 0.5rem;
           box-shadow: 0 10px 30px #000000aa;
           z-index: 50;
-      
+
           width: max-content;
       }
-      
+
       nav ul[role="menu"] > li > button[role="menuitem"] {
           color: inherit;
           padding: 0.25rem 0.25rem;
           border-radius: 0.5rem;
           cursor: pointer;
       }
-      
+
       nav ul[role="menu"] > li > button[role="menuitem"]:hover {
           background: var(--background-color-interactive);
           text-decoration: none;
       }
-      
+
       nav ul[role="menu"] > li > button[role="menuitem"]:focus-visible {
           outline: 2px solid var(--border-color-hover);
       }
-      
+
       nav ul[role="menu"] > li > label.menu-checkbox {
           display: inline-flex;
           align-items: center;
@@ -1459,21 +1458,21 @@
           cursor: pointer;
           user-select: none;
       }
-      
+
       nav ul[role="menu"] > li > label.menu-checkbox:hover {
           background: var(--background-color-interactive);
       }
-      
+
       nav .top-level-checkbox {
           display: inline-flex;
           align-items: center;
           gap: 0.4rem;
       }
-      
+
       nav .refresh-button {
           position: relative;
       }
-      
+
       nav .refresh-spinner {
           position: absolute;
           top: -0.1rem;
@@ -1486,18 +1485,18 @@
           animation: refresh-spin 1s linear infinite;
           pointer-events: none;
       }
-      
+
       /* separators */
       nav ul[role="menu"] > li[role="separator"] {
           height: 1px;
           background: var(--border-color);
           margin: 0.25rem 0.25rem;
       }
-      
+
       button.publish-button.publish-shake {
           animation: publish-shake 0.3s ease-in-out;
       }
-      
+
       @keyframes publish-shake {
           0% {
               transform: translateX(0);
@@ -1515,7 +1514,7 @@
               transform: translateX(0);
           }
       }
-      
+
       @keyframes refresh-spin {
           to {
               transform: rotate(360deg);

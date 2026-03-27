@@ -262,6 +262,7 @@
             name="Preview"
             ref="transclude"
             :src="previewAddress"
+            ignore-lens-output
           ></sw-transclude>
         </template>
       </two-pane-layout>
@@ -297,7 +298,6 @@
         updatePageProtection,
       } from "/src/lenses/utils/protection.js";
 
-      if (window.top !== window) {
         function setup() {
           function emitLensOutput(status, srcdoc) {
             window.emit("sw-lens-output", { status, srcdoc });
@@ -760,7 +760,6 @@
         })
           .use(GraffitiPlugin, { graffiti: new window.Graffiti() })
           .mount("#app");
-      }
     </script>
 
     <style>

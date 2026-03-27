@@ -1,335 +1,353 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>Social Wiki View Lens</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="light dark" />
-    <link rel="stylesheet" href="/src/style.css" />
-    <script src="/init.js"></script>
-  </head>
-  <body>
-    <sw-transclude id="transclude">
-      <h1 class="status dots">Page loading</h1>
-    </sw-transclude>
-    <script type="module">
-      import {
-        pageVersionSchema,
-        sortPageVersions,
-      } from "/src/lenses/utils/page-versions.js";
-      import {
-        ErrorPage,
-        LoadingPage,
-        PageNotFound,
-      } from "/src/backend/status-pages.js";
-      import {
-        composeAddress,
-        composeQuery,
-        parseAddress,
-      } from "/src/backend/route.js";
-      import { annotationSchema } from "/src/lenses/utils/schemas.js";
-      import { computeTrustAnnotationsByActor } from "/src/lenses/utils/trust.js";
-      import { defaultTrustedEditors } from "/src/lenses/utils/default-trusted-editors.js";
-      import { sortProtectionHistory } from "/src/lenses/utils/protection.js";
-      import { sha256 } from "@noble/hashes/sha2.js";
-      import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
+    <head>
+        <meta charset="utf-8" />
+        <title>Social Wiki View Lens</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="color-scheme" content="light dark" />
+        <link rel="stylesheet" href="/src/style.css" />
+        <script src="/init.js"></script>
+    </head>
+    <body>
+        <sw-transclude id="transclude" ignore-lens-output>
+            <h1 class="status dots">Page loading</h1>
+        </sw-transclude>
+        <script type="module">
+            import {
+                pageVersionSchema,
+                sortPageVersions,
+            } from "/src/lenses/utils/page-versions.js";
+            import {
+                ErrorPage,
+                LoadingPage,
+                PageNotFound,
+            } from "/src/backend/status-pages.js";
+            import {
+                composeAddress,
+                composeQuery,
+                parseAddress,
+            } from "/src/backend/route.js";
+            import { annotationSchema } from "/src/lenses/utils/schemas.js";
+            import { computeTrustAnnotationsByActor } from "/src/lenses/utils/trust.js";
+            import { defaultTrustedEditors } from "/src/lenses/utils/default-trusted-editors.js";
+            import { sortProtectionHistory } from "/src/lenses/utils/protection.js";
+            import { sha256 } from "@noble/hashes/sha2.js";
+            import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 
-      if (window.top !== window) {
-        const graffiti = new window.Graffiti();
-        const transclude = document.querySelector("#transclude");
+            const graffiti = new window.Graffiti();
+            const transclude = document.querySelector("#transclude");
 
-        if (!(transclude instanceof HTMLElement)) {
-          throw new Error("Missing #transclude");
-        }
-
-        let requestedAddress = undefined;
-        let requestedLensParams = undefined;
-        let renderedAddress = "";
-        let currentContentKey = "";
-        let activeRenderVersion = 0;
-        let graffitiSession = undefined;
-
-        window.addEventListener(
-          "sw-autosize-mode",
-          (event) => {
-            if (!(event instanceof CustomEvent)) return;
-
-            const payload = event.detail;
-            const mode =
-              typeof payload === "object" && payload !== null
-                ? payload.mode
-                : undefined;
-
-            if (mode === "height" || mode === "width" || mode === "both") {
-              transclude.setAttribute("autosize", mode);
-            } else {
-              transclude.removeAttribute("autosize");
+            if (!(transclude instanceof HTMLElement)) {
+                throw new Error("Missing #transclude");
             }
 
-            event.stopImmediatePropagation();
-          },
-          { capture: true },
-        );
+            let requestedAddress = undefined;
+            let requestedLensParams = undefined;
+            let renderedAddress = "";
+            let currentContentKey = "";
+            let activeRenderVersion = 0;
+            let graffitiSession = undefined;
 
-        transclude.addEventListener("sw-autosize-size", (event) => {
-          if (!(event instanceof CustomEvent)) return;
-          window.emit("sw-autosize-size", event.detail);
-        });
+            window.addEventListener(
+                "sw-autosize-mode",
+                (event) => {
+                    if (!(event instanceof CustomEvent)) return;
 
-        function setTranscludeSrcDoc(html, status) {
-          transclude.setAttribute(
-            "id",
-            status === "ok" ? bytesToHex(sha256(utf8ToBytes(html))) : status,
-          );
-          transclude.setAttribute("srcdoc", html);
-        }
+                    const payload = event.detail;
+                    const mode =
+                        typeof payload === "object" && payload !== null
+                            ? payload.mode
+                            : undefined;
 
-        setTranscludeSrcDoc(LoadingPage, "loading");
+                    if (
+                        mode === "height" ||
+                        mode === "width" ||
+                        mode === "both"
+                    ) {
+                        transclude.setAttribute("autosize", mode);
+                    } else {
+                        transclude.removeAttribute("autosize");
+                    }
 
-        transclude.addEventListener("sw-navigate", (event) => {
-          if (
-            !(event instanceof CustomEvent) ||
-            typeof event.detail?.to !== "string"
-          )
-            return;
-          const to = event.detail.to;
-
-          if (!to.startsWith("?")) return window.navigate(to);
-
-          const { name: pageName } = parseAddress(requestedAddress);
-          const newQuery = composeQuery(
-            requestedLensParams,
-            composeAddress(pageName, to),
-          );
-          window.navigate(newQuery);
-        });
-
-        function emitLensOutput(status, srcdoc) {
-          window.emit("sw-lens-output", { status, srcdoc });
-        }
-
-        function maybeRenderForSessionChange() {
-          if (!requestedAddress?.length) return;
-          void renderLens({ force: true });
-        }
-
-        graffiti.sessionEvents.addEventListener("initialized", (evt) => {
-          const detail = evt.detail;
-          if (detail?.error) {
-            console.error(detail.error);
-          }
-
-          if (graffitiSession === undefined) {
-            graffitiSession = null;
-            maybeRenderForSessionChange();
-          }
-        });
-
-        graffiti.sessionEvents.addEventListener("login", (evt) => {
-          const detail = evt.detail;
-          if (detail.error) {
-            console.error("Error logging in:");
-            console.error(detail.error);
-            return;
-          }
-          graffitiSession = detail.session;
-          maybeRenderForSessionChange();
-        });
-
-        graffiti.sessionEvents.addEventListener("logout", (evt) => {
-          const detail = evt.detail;
-          if (detail.error) {
-            console.error("Error logging out:");
-            console.error(detail.error);
-            return;
-          }
-          graffitiSession = null;
-          maybeRenderForSessionChange();
-        });
-
-        async function getTrustedEditors() {
-          const trustAnnotationsByUrl = new Map();
-          const session = graffitiSession;
-          if (session?.actor) {
-            for await (const result of graffiti.discover(
-              [session.actor],
-              annotationSchema(["Trust", "Untrust"], { actor: session.actor }),
-            )) {
-              if (result.error) {
-                console.error(result.error);
-                continue;
-              }
-              if (result.tombstone) {
-                trustAnnotationsByUrl.delete(result.object.url);
-              } else {
-                trustAnnotationsByUrl.set(result.object.url, result.object);
-              }
-            }
-          }
-
-          const trustByActor = computeTrustAnnotationsByActor(
-            [...trustAnnotationsByUrl.values()],
-            defaultTrustedEditors,
-          );
-          const trusted = new Set(
-            [...trustByActor.entries()]
-              .filter(
-                ([_, trust]) =>
-                  trust === true || trust?.value.activity === "Trust",
-              )
-              .map(([actor]) => actor),
-          );
-          if (session?.actor) {
-            trusted.add(session.actor);
-          }
-          return [...trusted];
-        }
-
-        async function getPageVersionsAndProtection(pageName) {
-          const objects = new Map();
-          for await (const result of graffiti.discover([pageName], {
-            anyOf: [
-              pageVersionSchema(pageName),
-              annotationSchema(["Protect", "Remove"]),
-            ],
-          })) {
-            if (result.error) {
-              console.error(result.error);
-              continue;
-            }
-            if (result.tombstone) {
-              objects.delete(result.object.url);
-            } else {
-              objects.set(result.object.url, result.object);
-            }
-          }
-
-          const values = [...objects.values()];
-          const pageVersions = sortPageVersions(
-            values.filter((o) => o.value.activity === "Update"),
-          );
-          const protectionAnnotations = values.filter(
-            (o) =>
-              o.value.activity === "Protect" || o.value.activity === "Remove",
-          );
-
-          return { pageVersions, protectionAnnotations };
-        }
-
-        function pickVersion(pageVersions, trustedEditors, isProtected) {
-          if (!isProtected) return pageVersions.at(0) || null;
-          return (
-            pageVersions.find((version) =>
-              trustedEditors.includes(version.actor),
-            ) || null
-          );
-        }
-
-        async function renderLens(options) {
-          const address = requestedAddress;
-          if (!address?.length) return;
-
-          const lensParams = requestedLensParams;
-          const { name: pageName, query: pageQuery } = parseAddress(address);
-          const requestedVersion = lensParams?.get("version") ?? "";
-          transclude.setAttribute("name", pageName);
-          const contentKey = requestedVersion || pageName;
-
-          if (
-            !options?.force &&
-            address === renderedAddress &&
-            contentKey === currentContentKey
-          ) {
-            return;
-          }
-
-          if (!options?.force && contentKey === currentContentKey) {
-            renderedAddress = address;
-            transclude.setAttribute("query", pageQuery);
-            return;
-          }
-
-          renderedAddress = address;
-          currentContentKey = contentKey;
-
-          if (!requestedVersion.length && graffitiSession === undefined) {
-            setTranscludeSrcDoc(LoadingPage, "loading");
-            return;
-          }
-
-          const renderVersion = ++activeRenderVersion;
-          setTranscludeSrcDoc(LoadingPage, "loading");
-
-          try {
-            let mediaAddress = requestedVersion;
-
-            if (!mediaAddress.length) {
-              const [trustedEditors, pageData] = await Promise.all([
-                getTrustedEditors(),
-                getPageVersionsAndProtection(pageName),
-              ]);
-              if (renderVersion !== activeRenderVersion) return;
-
-              const protectionHistory = sortProtectionHistory(
-                pageData.protectionAnnotations,
-                trustedEditors,
-              );
-              const isProtected =
-                protectionHistory.at(0)?.value.activity === "Protect";
-
-              const selectedVersion = pickVersion(
-                pageData.pageVersions,
-                trustedEditors,
-                isProtected,
-              );
-              if (!selectedVersion) {
-                emitLensOutput("not-found");
-                setTranscludeSrcDoc(
-                  PageNotFound(
-                    address,
-                    window.topOrigin ?? window.location.origin,
-                  ),
-                  "not-found",
-                );
-                return;
-              }
-
-              mediaAddress = selectedVersion.value.result.media;
-            }
-
-            const media = await graffiti.getMedia(mediaAddress, {
-              types: ["text/html"],
-            });
-            if (renderVersion !== activeRenderVersion) return;
-
-            const html = await media.data.text();
-            if (renderVersion !== activeRenderVersion) return;
-
-            emitLensOutput("ok", html);
-            setTranscludeSrcDoc(html, "ok");
-
-            const { query: renderedPageQuery } = parseAddress(renderedAddress);
-            transclude.setAttribute("query", renderedPageQuery);
-          } catch (error) {
-            if (renderVersion !== activeRenderVersion) return;
-            emitLensOutput("error");
-            setTranscludeSrcDoc(
-              ErrorPage(error instanceof Error ? error.message : String(error)),
-              "error",
+                    event.stopImmediatePropagation();
+                },
+                { capture: true },
             );
-          }
-        }
 
-        async function onQueryChange() {
-          requestedAddress = window.address;
-          requestedLensParams = new URLSearchParams(window.params);
-          await renderLens();
-        }
+            transclude.addEventListener("sw-autosize-size", (event) => {
+                if (!(event instanceof CustomEvent)) return;
+                window.emit("sw-autosize-size", event.detail);
+            });
 
-        window.addEventListener("addresschange", onQueryChange);
-        window.addEventListener("paramschange", onQueryChange);
-        void onQueryChange();
-      }
-    </script>
-  </body>
+            function setTranscludeSrcDoc(html, status) {
+                transclude.setAttribute(
+                    "id",
+                    status === "ok"
+                        ? bytesToHex(sha256(utf8ToBytes(html)))
+                        : status,
+                );
+                transclude.setAttribute("srcdoc", html);
+            }
+
+            setTranscludeSrcDoc(LoadingPage, "loading");
+
+            transclude.addEventListener("sw-navigate", (event) => {
+                if (
+                    !(event instanceof CustomEvent) ||
+                    typeof event.detail?.to !== "string"
+                )
+                    return;
+                const to = event.detail.to;
+
+                if (!to.startsWith("?")) return window.navigate(to);
+
+                const { name: pageName } = parseAddress(requestedAddress);
+                const newQuery = composeQuery(
+                    requestedLensParams,
+                    composeAddress(pageName, to),
+                );
+                window.navigate(newQuery);
+            });
+
+            function emitLensOutput(status, srcdoc) {
+                window.emit("sw-lens-output", { status, srcdoc });
+            }
+
+            function maybeRenderForSessionChange() {
+                if (!requestedAddress?.length) return;
+                void renderLens({ force: true });
+            }
+
+            graffiti.sessionEvents.addEventListener("initialized", (evt) => {
+                const detail = evt.detail;
+                if (detail?.error) {
+                    console.error(detail.error);
+                }
+
+                if (graffitiSession === undefined) {
+                    graffitiSession = null;
+                    maybeRenderForSessionChange();
+                }
+            });
+
+            graffiti.sessionEvents.addEventListener("login", (evt) => {
+                const detail = evt.detail;
+                if (detail.error) {
+                    console.error("Error logging in:");
+                    console.error(detail.error);
+                    return;
+                }
+                graffitiSession = detail.session;
+                maybeRenderForSessionChange();
+            });
+
+            graffiti.sessionEvents.addEventListener("logout", (evt) => {
+                const detail = evt.detail;
+                if (detail.error) {
+                    console.error("Error logging out:");
+                    console.error(detail.error);
+                    return;
+                }
+                graffitiSession = null;
+                maybeRenderForSessionChange();
+            });
+
+            async function getTrustedEditors() {
+                const trustAnnotationsByUrl = new Map();
+                const session = graffitiSession;
+                if (session?.actor) {
+                    for await (const result of graffiti.discover(
+                        [session.actor],
+                        annotationSchema(["Trust", "Untrust"], {
+                            actor: session.actor,
+                        }),
+                    )) {
+                        if (result.error) {
+                            console.error(result.error);
+                            continue;
+                        }
+                        if (result.tombstone) {
+                            trustAnnotationsByUrl.delete(result.object.url);
+                        } else {
+                            trustAnnotationsByUrl.set(
+                                result.object.url,
+                                result.object,
+                            );
+                        }
+                    }
+                }
+
+                const trustByActor = computeTrustAnnotationsByActor(
+                    [...trustAnnotationsByUrl.values()],
+                    defaultTrustedEditors,
+                );
+                const trusted = new Set(
+                    [...trustByActor.entries()]
+                        .filter(
+                            ([_, trust]) =>
+                                trust === true ||
+                                trust?.value.activity === "Trust",
+                        )
+                        .map(([actor]) => actor),
+                );
+                if (session?.actor) {
+                    trusted.add(session.actor);
+                }
+                return [...trusted];
+            }
+
+            async function getPageVersionsAndProtection(pageName) {
+                const objects = new Map();
+                for await (const result of graffiti.discover([pageName], {
+                    anyOf: [
+                        pageVersionSchema(pageName),
+                        annotationSchema(["Protect", "Remove"]),
+                    ],
+                })) {
+                    if (result.error) {
+                        console.error(result.error);
+                        continue;
+                    }
+                    if (result.tombstone) {
+                        objects.delete(result.object.url);
+                    } else {
+                        objects.set(result.object.url, result.object);
+                    }
+                }
+
+                const values = [...objects.values()];
+                const pageVersions = sortPageVersions(
+                    values.filter((o) => o.value.activity === "Update"),
+                );
+                const protectionAnnotations = values.filter(
+                    (o) =>
+                        o.value.activity === "Protect" ||
+                        o.value.activity === "Remove",
+                );
+
+                return { pageVersions, protectionAnnotations };
+            }
+
+            function pickVersion(pageVersions, trustedEditors, isProtected) {
+                if (!isProtected) return pageVersions.at(0) || null;
+                return (
+                    pageVersions.find((version) =>
+                        trustedEditors.includes(version.actor),
+                    ) || null
+                );
+            }
+
+            async function renderLens(options) {
+                const address = requestedAddress;
+                if (!address?.length) return;
+
+                const lensParams = requestedLensParams;
+                const { name: pageName, query: pageQuery } =
+                    parseAddress(address);
+                const requestedVersion = lensParams?.get("version") ?? "";
+                transclude.setAttribute("name", pageName);
+                const contentKey = requestedVersion || pageName;
+
+                if (
+                    !options?.force &&
+                    address === renderedAddress &&
+                    contentKey === currentContentKey
+                ) {
+                    return;
+                }
+
+                if (!options?.force && contentKey === currentContentKey) {
+                    renderedAddress = address;
+                    transclude.setAttribute("query", pageQuery);
+                    return;
+                }
+
+                renderedAddress = address;
+                currentContentKey = contentKey;
+
+                if (!requestedVersion.length && graffitiSession === undefined) {
+                    setTranscludeSrcDoc(LoadingPage, "loading");
+                    return;
+                }
+
+                const renderVersion = ++activeRenderVersion;
+                setTranscludeSrcDoc(LoadingPage, "loading");
+
+                try {
+                    let mediaAddress = requestedVersion;
+
+                    if (!mediaAddress.length) {
+                        const [trustedEditors, pageData] = await Promise.all([
+                            getTrustedEditors(),
+                            getPageVersionsAndProtection(pageName),
+                        ]);
+                        if (renderVersion !== activeRenderVersion) return;
+
+                        const protectionHistory = sortProtectionHistory(
+                            pageData.protectionAnnotations,
+                            trustedEditors,
+                        );
+                        const isProtected =
+                            protectionHistory.at(0)?.value.activity ===
+                            "Protect";
+
+                        const selectedVersion = pickVersion(
+                            pageData.pageVersions,
+                            trustedEditors,
+                            isProtected,
+                        );
+                        if (!selectedVersion) {
+                            emitLensOutput("not-found");
+                            setTranscludeSrcDoc(
+                                PageNotFound(
+                                    address,
+                                    window.topOrigin ?? window.location.origin,
+                                ),
+                                "not-found",
+                            );
+                            return;
+                        }
+
+                        mediaAddress = selectedVersion.value.result.media;
+                    }
+
+                    const media = await graffiti.getMedia(mediaAddress, {
+                        types: ["text/html"],
+                    });
+                    if (renderVersion !== activeRenderVersion) return;
+
+                    const html = await media.data.text();
+                    if (renderVersion !== activeRenderVersion) return;
+
+                    emitLensOutput("ok", html);
+                    setTranscludeSrcDoc(html, "ok");
+
+                    const { query: renderedPageQuery } =
+                        parseAddress(renderedAddress);
+                    transclude.setAttribute("query", renderedPageQuery);
+                } catch (error) {
+                    if (renderVersion !== activeRenderVersion) return;
+                    emitLensOutput("error");
+                    setTranscludeSrcDoc(
+                        ErrorPage(
+                            error instanceof Error
+                                ? error.message
+                                : String(error),
+                        ),
+                        "error",
+                    );
+                }
+            }
+
+            async function onQueryChange() {
+                requestedAddress = window.address;
+                requestedLensParams = new URLSearchParams(window.params);
+                await renderLens();
+            }
+
+            window.addEventListener("addresschange", onQueryChange);
+            window.addEventListener("paramschange", onQueryChange);
+            void onQueryChange();
+        </script>
+    </body>
 </html>
