@@ -17,9 +17,11 @@ const simpleMethods = [
   "deleteMedia",
   "login",
   "logout",
-  "actorToHandle",
-  "handleToActor",
+  // TODO: remove this after review
+  // "actorToHandle",
+  // "handleToActor",
 ] as const;
+const ANON_REVIEW_HANDLE_PREFIX = "anon.for.review.";
 
 type GuardedGraffitiMethod =
   | (typeof simpleMethods)[number]
@@ -186,6 +188,13 @@ export function serveGraffiti(onGuardRequest?: GraffitiGuardRequestHandler) {
       messenger,
       methods: {
         ...rpcSimpleMethods,
+        // TODO: remove this after review
+        async actorToHandle(actor: string) {
+          return `${ANON_REVIEW_HANDLE_PREFIX}${actor}`;
+        },
+        async handleToActor(handle: string) {
+          return handle.replace(/^anon\.for\.review\./, "");
+        },
         async postMedia(
           media: {
             data: { buffer: ArrayBuffer; type: string };
