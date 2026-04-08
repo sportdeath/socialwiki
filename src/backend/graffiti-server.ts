@@ -22,6 +22,19 @@ const simpleMethods = [
   // "handleToActor",
 ] as const;
 const ANON_REVIEW_HANDLE_PREFIX = "anon.for.review.";
+const HANDLE_ANONYMIZATION_DISABLED_STORAGE_KEY =
+  "socialwiki:disable-handle-anonymization:v1";
+
+function isHandleAnonymizationDisabled(): boolean {
+  try {
+    return (
+      window.localStorage.getItem(HANDLE_ANONYMIZATION_DISABLED_STORAGE_KEY) ===
+      "1"
+    );
+  } catch {
+    return false;
+  }
+}
 
 type GuardedGraffitiMethod =
   | (typeof simpleMethods)[number]
@@ -190,9 +203,15 @@ export function serveGraffiti(onGuardRequest?: GraffitiGuardRequestHandler) {
         ...rpcSimpleMethods,
         // TODO: remove this after review
         async actorToHandle(actor: string) {
+          if (isHandleAnonymizationDisabled()) {
+            return graffiti.actorToHandle(actor);
+          }
           return `${ANON_REVIEW_HANDLE_PREFIX}${actor}`;
         },
         async handleToActor(handle: string) {
+          if (isHandleAnonymizationDisabled()) {
+            return graffiti.handleToActor(handle);
+          }
           return handle.replace(/^anon\.for\.review\./, "");
         },
         async postMedia(

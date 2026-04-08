@@ -184,6 +184,13 @@
                 <button type="button" @click="openMetaLensFromSettings('h')">
                     Modify History
                 </button>
+                <button type="button" class="secondary" @click="toggleHandleReveal">
+                    {{
+                        revealHandlesEnabled
+                            ? "Use anonymized handles"
+                            : "Reveal handles (password)"
+                    }}
+                </button>
             </div>
             <footer>
                 <button type="button" class="secondary" @click="closeSettingsDialog">
@@ -322,12 +329,36 @@ const props = defineProps<{
     address: string;
 }>();
 
+const HANDLE_REVEAL_STORAGE_KEY = "socialwiki:disable-handle-anonymization:v1";
+const HANDLE_REVEAL_PASSWORD = "haystack";
+
+function readHandleRevealEnabled(): boolean {
+    try {
+        return window.localStorage.getItem(HANDLE_REVEAL_STORAGE_KEY) === "1";
+    } catch {
+        return false;
+    }
+}
+
+function writeHandleRevealEnabled(enabled: boolean) {
+    try {
+        if (enabled) {
+            window.localStorage.setItem(HANDLE_REVEAL_STORAGE_KEY, "1");
+            return;
+        }
+        window.localStorage.removeItem(HANDLE_REVEAL_STORAGE_KEY);
+    } catch {
+        // Ignore localStorage errors in restricted contexts.
+    }
+}
+
 const lens = ref("");
 const metaLens = ref<EditableLens | null>(null);
 const metaLensQuery = ref("");
 const lensParams = ref<URLSearchParams | undefined>(undefined);
 const pageAddress = ref<string | undefined>(undefined);
 const showSettingsDialog = ref(false);
+const revealHandlesEnabled = ref(readHandleRevealEnabled());
 
 function openMetaLensEditor(lens: EditableLens) {
     const shortHoldRoute =
@@ -353,6 +384,24 @@ function closeSettingsDialog() {
 function openMetaLensFromSettings(lens: EditableLens) {
     closeSettingsDialog();
     openMetaLensEditor(lens);
+}
+
+function toggleHandleReveal() {
+    if (revealHandlesEnabled.value) {
+        revealHandlesEnabled.value = false;
+        writeHandleRevealEnabled(false);
+        return;
+    }
+
+    const password = window.prompt("Password required to reveal handles:");
+    if (password === null) return;
+    if (password !== HANDLE_REVEAL_PASSWORD) {
+        window.alert("Incorrect password.");
+        return;
+    }
+
+    revealHandlesEnabled.value = true;
+    writeHandleRevealEnabled(true);
 }
 
 watch(
