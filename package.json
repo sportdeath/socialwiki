@@ -6,7 +6,6 @@
     "build": "vite build",
     "preview": "vite preview"
   },
-  "author": "Theia Henderson",
   "dependencies": {
     "@graffiti-garden/api": "^1.2.0",
     "@graffiti-garden/implementation-decentralized": "^0.0.9",

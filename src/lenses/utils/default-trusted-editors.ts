@@ -1,3 +1,3 @@
 export const defaultTrustedEditors = [
-  "did:plc:numtqzbw74lmrguyvpzq6uf5", // Theia
+  "did:plc:numtqzbw74lmrguyvpzq6uf5",
 ];
