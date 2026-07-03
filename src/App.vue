@@ -184,7 +184,6 @@
                 <button type="button" @click="openMetaLensFromSettings('h')">
                     Modify History
                 </button>
-                <ReviewerDoNotOpen />
             </div>
             <footer>
                 <button type="button" class="secondary" @click="closeSettingsDialog">
@@ -246,7 +245,6 @@ import {
     type VisitedPage,
 } from "./browser-history";
 import MetaLensEditor from "./lenses/meta/MetaLensEditor.vue";
-import ReviewerDoNotOpen from "./.unimportant/ReviewerDoNotOpen.vue";
 
 function encodeNameForRoute(name: string): string {
     // Keep path separators readable in names while encoding other reserved chars.
