@@ -56,11 +56,6 @@ export function defineTranscludeElement(graffiti: Graffiti) {
       this.#frame.disconnect();
     }
 
-    adoptedCallback() {
-      this.#frame.adopted();
-      void this.#render();
-    }
-
     attributeChangedCallback(name: string) {
       // Attribute callbacks also run on detached elements. connectedCallback
       // will render the latest values once this element is in the document.
@@ -71,11 +66,11 @@ export function defineTranscludeElement(graffiti: Graffiti) {
       } else if (name === "query" && this.#resolvedDocument) {
         // A query changes state inside the current document;
         // it does not need to re-resolve the document or replace the iframe.
-        const { key, srcdoc, query } = this.#resolvedDocument;
+        const query =
+          this.getAttribute("query") ?? this.#resolvedDocument.query;
         this.#frame.render({
-          key,
-          srcdoc,
-          query: this.getAttribute("query") ?? query,
+          ...this.#resolvedDocument,
+          query,
         });
       } else if (name === "srcdoc" && this.hasAttribute("src")) {
         // src selects the running lens. While it is present, srcdoc is an
@@ -134,8 +129,7 @@ export function defineTranscludeElement(graffiti: Graffiti) {
       const query = this.getAttribute("query") ?? resolvedDocument.query;
       this.setAttribute("status", resolvedDocument.status);
       this.#frame.render({
-        key: resolvedDocument.key,
-        srcdoc: resolvedDocument.srcdoc,
+        ...resolvedDocument,
         query,
       });
     }
