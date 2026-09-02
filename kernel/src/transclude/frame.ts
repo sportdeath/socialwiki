@@ -60,7 +60,13 @@ export class TranscludeFrame {
   }
 
   disconnect() {
+    this.showLoading();
+  }
+
+  /** Stops the current document and shows the loading page. */
+  showLoading() {
     this.#disposeFrame();
+    this.#loadingIframe.style.removeProperty("display");
   }
 
   autosizeChanged() {
@@ -89,8 +95,7 @@ export class TranscludeFrame {
   }
 
   #replaceFrame(next: ResolvedDocument) {
-    this.#disposeFrame();
-    this.#loadingIframe.style.removeProperty("display");
+    this.showLoading();
 
     const iframe = createIframe();
     iframe.style.display = "none";

@@ -13,7 +13,9 @@ export function defineTranscludeElement(graffiti: Graffiti) {
    * - srcdoc: directly supplies a document via its HTML source code. When src
    *   is present, it may be an output of what is displayed rather than an
    *   input to the transclude.
-   * - query: is state passed to the document, such as "?mode=edit&section=2".
+   * - query: is state passed to a direct srcdoc, such as
+   *   "?mode=edit&section=2". It is ignored when src is present because src
+   *   contains its own query.
    * - autosize: controls the host's size; it accepts "off" (the default),
    *   "width", "height", or "both". A bare autosize attribute means "both".
    * - ignore-lens-output: lets lens output events bubble without copying their
@@ -36,6 +38,7 @@ export function defineTranscludeElement(graffiti: Graffiti) {
     // what is fetched and resolved from src using `resolveWithBrowser`.
     #resolvedDocument: ResolvedDocument | null = null;
     #renderVersion = 0;
+    #browserRequest: AbortController | null = null;
 
     constructor() {
       super();
@@ -53,6 +56,8 @@ export function defineTranscludeElement(graffiti: Graffiti) {
 
     disconnectedCallback() {
       this.#renderVersion++;
+      this.#browserRequest?.abort();
+      this.#browserRequest = null;
       this.#frame.disconnect();
     }
 
@@ -63,15 +68,17 @@ export function defineTranscludeElement(graffiti: Graffiti) {
 
       if (name === "autosize") {
         this.#frame.autosizeChanged();
-      } else if (name === "query" && this.#resolvedDocument) {
-        // A query changes state inside the current document;
-        // it does not need to re-resolve the document or replace the iframe.
-        const query =
-          this.getAttribute("query") ?? this.#resolvedDocument.query;
-        this.#frame.render({
-          ...this.#resolvedDocument,
-          query,
-        });
+      } else if (name === "query") {
+        // query only belongs to a directly supplied document.
+        if (!this.hasAttribute("srcdoc") || this.hasAttribute("src")) return;
+        if (this.#resolvedDocument) {
+          // A query changes state inside the current document;
+          // it does not need to re-resolve the document or replace the iframe.
+          this.#frame.render({
+            ...this.#resolvedDocument,
+            query: this.getAttribute("query") ?? "",
+          });
+        }
       } else if (name === "srcdoc" && this.hasAttribute("src")) {
         // src selects the running lens. While it is present, srcdoc is an
         // output reflected by that lens, not a replacement for the lens.
@@ -92,6 +99,8 @@ export function defineTranscludeElement(graffiti: Graffiti) {
       // Maintain a render version so that async operations that complete
       // after a newer render is requested are ignored.
       const version = ++this.#renderVersion;
+      this.#browserRequest?.abort();
+      this.#browserRequest = null;
 
       const src = this.getAttribute("src");
       if (src === null) {
@@ -99,16 +108,23 @@ export function defineTranscludeElement(graffiti: Graffiti) {
         this.#display({
           key: `srcdoc:${srcdoc ?? ""}`,
           srcdoc: srcdoc ?? LoadingPage,
-          query: this.getAttribute("query") ?? "",
+          query: srcdoc === null ? "" : (this.getAttribute("query") ?? ""),
           status: srcdoc === null ? "loading" : "ok",
         });
         return;
       }
 
+      // Stop the old document before asking the browser for its replacement.
+      // Apart from making the transition visible, this prevents an obsolete
+      // lens from navigating or reporting output while the request is pending.
+      this.#resolvedDocument = null;
+      this.#frame.showLoading();
       this.setAttribute("status", "loading");
+      const request = new AbortController();
+      this.#browserRequest = request;
       try {
         // Let the top-level document (the "browser") interpret src.
-        const resolvedDocument = await resolveWithBrowser(src);
+        const resolvedDocument = await resolveWithBrowser(src, request.signal);
         if (!this.isConnected || version !== this.#renderVersion) return;
         this.#display(resolvedDocument);
       } catch (error) {
@@ -121,37 +137,23 @@ export function defineTranscludeElement(graffiti: Graffiti) {
           query: "",
           status: "error",
         });
+      } finally {
+        if (this.#browserRequest === request) this.#browserRequest = null;
       }
     }
 
     #display(resolvedDocument: ResolvedDocument) {
       this.#resolvedDocument = resolvedDocument;
-      const query = this.getAttribute("query") ?? resolvedDocument.query;
       this.setAttribute("status", resolvedDocument.status);
-      this.#frame.render({
-        ...resolvedDocument,
-        query,
-      });
+      this.#frame.render(resolvedDocument);
     }
 
     #receiveFrameEvent(name: string, detail: unknown) {
-      if (name === "sw-navigate") this.#navigate(detail);
       if (name === "sw-lens-output") this.#acceptLensOutput(detail);
 
       this.dispatchEvent(
         new CustomEvent(name, { detail, bubbles: true, composed: true }),
       );
-    }
-
-    #navigate(detail: unknown) {
-      if (typeof detail !== "object" || detail === null) return;
-      const to = (detail as Record<string, unknown>).to;
-      if (typeof to !== "string") return;
-
-      // Query-only navigation changes this frame. Everything else continues
-      // toward the top-level browser.
-      if (to.startsWith("?")) this.setAttribute("query", to);
-      else if (window.top !== window) window.navigate(to);
     }
 
     #acceptLensOutput(output: unknown) {
