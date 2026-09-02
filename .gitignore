@@ -2,3 +2,4 @@ node_modules/
 trash
 dist
 .DS_Store
+*.d.ts
