@@ -1,16 +1,10 @@
-import { installAutosize } from "./bridges/autosize/client";
-import { installEventBridge } from "./bridges/events/client";
-import { SocialWikiGraffiti } from "./bridges/graffiti/client";
-import { installLensSourceApi } from "./bridges/lens-sources/client";
-import { installNavigation } from "./bridges/navigation/client";
-import importMap from "./import-map.json";
 import { installTransclude } from "./transclude";
-
-declare global {
-  interface Window {
-    Graffiti: typeof SocialWikiGraffiti;
-  }
-}
+import { installGraffitiChild } from "./bridges/graffiti/child";
+import { installEventsChild } from "./bridges/events/child";
+import { installAutosizeChild } from "./bridges/autosize/child";
+import { installNavigationChild } from "./bridges/navigation/child";
+import importMap from "./import-map.json";
+import { installLensSourceApi } from "./lens-sources/client";
 
 const isClassic = document.currentScript !== null;
 const currentScriptSrc = isClassic
@@ -30,17 +24,16 @@ if (window.top !== window) {
   }
 
   // Each nested frame receives Graffiti from its immediate parent.
-  window.Graffiti = SocialWikiGraffiti;
-  const graffiti = new window.Graffiti();
+  const graffiti = installGraffitiChild();
 
   // Enable transclusion
   installTransclude(graffiti);
   installLensSourceApi(kernelUrl.origin);
 
   // Install message-passing bridges between transcluded frames
-  installEventBridge();
-  installNavigation();
-  installAutosize();
+  const events = installEventsChild();
+  installNavigationChild(events);
+  installAutosizeChild(events);
 } else {
   // If we are the top level window, wrap the content in an iframe
   // and spin up the RPC "server".

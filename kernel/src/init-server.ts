@@ -1,7 +1,8 @@
 import { GraffitiGuarded } from "@graffiti-garden/wrapper-data-guard";
-import { installBrowserResolverHost } from "./bridges/browser-resolver/host";
-import { installLensSourceHost } from "./bridges/lens-sources/host";
-import { serveNavigation } from "./bridges/navigation/host";
+import { installBrowserResolverHost } from "./browser-resolver/host";
+import { installEventsParent } from "./bridges/events/parent";
+import { installNavigationParent } from "./bridges/navigation/parent";
+import { installLensSourceHost } from "./lens-sources/host";
 import {
   createDefaultBrowserResolver,
   installTransclude,
@@ -25,9 +26,9 @@ installLensSourceHost(kernelUrl.origin);
 installBrowserResolverHost(createDefaultBrowserResolver(kernelUrl.origin));
 installTransclude(graffiti);
 
-serveNavigation((to) => {
-  // Query-only navigation belongs to the host for the specific transclude.
-  // This root host handles navigation that has propagated out of that frame.
+installNavigationParent(undefined, installEventsParent(), (to) => {
+  // Query-only navigation belongs to the parent of the specific transclude.
+  // This root handles navigation that has propagated out of that frame.
   if (to.startsWith("?")) return;
 
   const url = new URL(to, navigationBaseUrl);

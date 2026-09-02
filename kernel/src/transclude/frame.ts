@@ -1,11 +1,9 @@
 import type { Graffiti } from "@graffiti-garden/api";
-import {
-  parseAutosizeMode,
-  serveAutosize,
-} from "../bridges/autosize/host";
-import { serveEvents } from "../bridges/events/host";
-import { serveGraffitiToIframe } from "../bridges/graffiti/host";
-import type { ResolvedDocument } from "../bridges/browser-resolver/shared";
+import type { ResolvedDocument } from "../browser-resolver/shared";
+import { installEventsParent } from "../bridges/events/parent";
+import { installGraffitiParent } from "../bridges/graffiti/parent";
+import { installAutosizeParent } from "../bridges/autosize/parent";
+import { installNavigationParent } from "../bridges/navigation/parent";
 import { LoadingPage } from "../status-pages";
 
 /** The state and resources tied to the current physical iframe. */
@@ -15,7 +13,6 @@ type DisplayedFrame = {
   blobUrl: string | null;
   key: string;
   srcdoc: string;
-  query: string;
 };
 
 /**
@@ -69,12 +66,6 @@ export class TranscludeFrame {
     this.#loadingIframe.style.removeProperty("display");
   }
 
-  autosizeChanged() {
-    this.#displayedFrame?.bridges.setAutosizeMode(
-      parseAutosizeMode(this.#host.getAttribute("autosize")),
-    );
-  }
-
   render(next: ResolvedDocument) {
     // The key and HTML identify the document,
     // while the query is state within it.
@@ -82,7 +73,6 @@ export class TranscludeFrame {
       this.#displayedFrame?.key === next.key &&
       this.#displayedFrame.srcdoc === next.srcdoc
     ) {
-      this.#displayedFrame.query = next.query;
       this.#displayedFrame.bridges.setQuery(next.query);
       return;
     }
@@ -116,10 +106,6 @@ export class TranscludeFrame {
 
         iframe.style.removeProperty("display");
         this.#loadingIframe.style.display = "none";
-        // Messages sent before the child installed its kernel may have been
-        // missed, so resend the state once its document has loaded.
-        displayedFrame.bridges.syncAutosizeMode();
-        displayedFrame.bridges.setQuery(displayedFrame.query);
       },
       { once: true },
     );
@@ -142,16 +128,13 @@ export class TranscludeFrame {
       blobUrl,
       key: next.key,
       srcdoc: next.srcdoc,
-      query: next.query,
     };
-    bridges.setAutosizeMode(
-      parseAutosizeMode(this.#host.getAttribute("autosize")),
-    );
+    bridges.setQuery(next.query);
   }
 
   #disposeFrame() {
     if (!this.#displayedFrame) return;
-    this.#displayedFrame.bridges.destroy();
+    void this.#displayedFrame.bridges.destroy();
     this.#displayedFrame.iframe.remove();
     if (this.#displayedFrame.blobUrl) {
       URL.revokeObjectURL(this.#displayedFrame.blobUrl);
@@ -194,19 +177,21 @@ function connectIframeBridges(
 ) {
   // The bridge implementations are independent modules. They are connected
   // together here because they all live and die with this particular iframe.
-  const destroyGraffiti = serveGraffitiToIframe(graffiti, host, iframe);
-  const events = serveEvents(onEvent, iframe);
-  const autosize = serveAutosize(host, iframe);
+  const events = installEventsParent(iframe);
+  const stopForwardingEvents = events.listen(onEvent);
+  const navigation = installNavigationParent(iframe, events);
+  const autosize = installAutosizeParent(iframe, host, events);
+  const graffitiBridge = installGraffitiParent(iframe, host, graffiti);
 
   return {
     destroy: () => {
-      events.destroy();
+      stopForwardingEvents();
+      navigation.destroy();
       autosize.destroy();
-      void destroyGraffiti();
+      events.destroy();
+      void graffitiBridge.destroy();
     },
     send: events.send,
-    setQuery: (query: string) => events.send("sw-query", { query }),
-    setAutosizeMode: autosize.setMode,
-    syncAutosizeMode: autosize.syncMode,
+    setQuery: navigation.setQuery,
   };
 }

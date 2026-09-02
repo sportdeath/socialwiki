@@ -1,6 +1,6 @@
 import type { Graffiti } from "@graffiti-garden/api";
-import { resolveWithBrowser } from "../bridges/browser-resolver/client";
-import type { ResolvedDocument } from "../bridges/browser-resolver/shared";
+import { resolveWithBrowser } from "../browser-resolver/client";
+import type { ResolvedDocument } from "../browser-resolver/shared";
 import { ErrorPage, LoadingPage } from "../status-pages";
 import { TranscludeFrame } from "./frame";
 
@@ -27,7 +27,7 @@ export function defineTranscludeElement(graffiti: Graffiti) {
     // ignore-lens-output is checked when an output event arrives, while status
     // is only written by this element.
     static get observedAttributes() {
-      return ["src", "srcdoc", "query", "autosize"];
+      return ["src", "srcdoc", "query"];
     }
 
     // The frame is where the document is actually rendered using an iframe.
@@ -66,9 +66,7 @@ export function defineTranscludeElement(graffiti: Graffiti) {
       // will render the latest values once this element is in the document.
       if (!this.isConnected) return;
 
-      if (name === "autosize") {
-        this.#frame.autosizeChanged();
-      } else if (name === "query") {
+      if (name === "query") {
         // query only belongs to a directly supplied document.
         if (!this.hasAttribute("srcdoc") || this.hasAttribute("src")) return;
         if (this.#resolvedDocument) {
