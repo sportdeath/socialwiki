@@ -20,7 +20,7 @@ export function installEventsParent(iframe: HTMLIFrameElement) {
   };
 
   window.addEventListener("message", onMessage);
-  const emit = (eventName: string, payload?: unknown) => {
+  const send = (eventName: string, payload?: unknown) => {
     if (destroyed) return;
     iframe.contentWindow?.postMessage(
       {
@@ -45,7 +45,7 @@ export function installEventsParent(iframe: HTMLIFrameElement) {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    emit,
+    send,
   };
 }
 
