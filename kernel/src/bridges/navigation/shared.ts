@@ -1,11 +1,21 @@
 export const NAVIGATE_EVENT = "sw-navigate";
+export const NAVIGATION_READY_EVENT = "sw-navigation-ready";
 export const QUERY_EVENT = "sw-query";
-export const BASE_URL_REQUEST_EVENT = "sw-base-url-request";
 export const BASE_URL_RESPONSE_EVENT = "sw-base-url-response";
 
 declare global {
   interface Window {
+    /**
+     * Requests navigation from the containing document. `to` is emitted
+     * unchanged so each ancestor may interpret, rewrite, or forward it.
+     */
     navigate: (to: string) => void;
+
+    /**
+     * Intercepts navigation that reaches this document. Without a handler the
+     * event continues bubbling; a handler may forward it with `navigate()`.
+     * Returns a function which removes the handler.
+     */
     handleNavigation: typeof handleNavigation;
 
     /**
@@ -58,6 +68,8 @@ export function handleNavigation(
       return;
     }
 
+    // Installing a handler means interception. It must explicitly call
+    // window.navigate(to) if the request should continue to an ancestor.
     event.stopImmediatePropagation();
     onNavigate(to, event.target);
   };

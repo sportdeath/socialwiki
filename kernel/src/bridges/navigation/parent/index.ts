@@ -1,27 +1,32 @@
 import type { EventsParent } from "../../events/parent";
 import {
-  BASE_URL_REQUEST_EVENT,
   BASE_URL_RESPONSE_EVENT,
+  NAVIGATION_READY_EVENT,
   QUERY_EVENT,
 } from "../shared";
 
 export function installNavigationParent(
-  iframe: HTMLIFrameElement,
   events: EventsParent,
   baseUrl: Promise<string>,
 ) {
   let query: string | undefined;
+  let ready = false;
 
   const sendQuery = () => {
-    if (query === undefined) return;
+    if (!ready || query === undefined) return;
     events.send(QUERY_EVENT, { query });
   };
-  iframe.addEventListener("load", sendQuery);
 
   const stopListening = events.listen((eventName) => {
-    if (eventName !== BASE_URL_REQUEST_EVENT) return;
-    // A nested document may ask before this document has received its own
-    // base. Waiting on the inherited value keeps one base for the whole tree.
+    if (eventName !== NAVIGATION_READY_EVENT) return;
+
+    // setQuery may run before the child is ready. Send its latest stored value
+    // now and push subsequent changes directly.
+    ready = true;
+    sendQuery();
+
+    // A nested document may become ready before this document has received its
+    // own base. Waiting keeps one stable inherited base for the whole tree.
     void baseUrl.then((value) => {
       events.send(BASE_URL_RESPONSE_EVENT, { baseUrl: value });
     });
@@ -30,7 +35,6 @@ export function installNavigationParent(
   return {
     destroy() {
       stopListening();
-      iframe.removeEventListener("load", sendQuery);
     },
     setQuery(nextQuery: string) {
       query = nextQuery;

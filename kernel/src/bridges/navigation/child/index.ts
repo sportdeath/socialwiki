@@ -1,9 +1,9 @@
 import { composeQuery, parseQuery } from "../../../route";
 import type { EventsChild } from "../../events/child";
 import {
-  BASE_URL_REQUEST_EVENT,
   BASE_URL_RESPONSE_EVENT,
   NAVIGATE_EVENT,
+  NAVIGATION_READY_EVENT,
   QUERY_EVENT,
   handleNavigation,
 } from "../shared";
@@ -137,9 +137,14 @@ export function installNavigationChild(events: EventsChild) {
     if (typeof p.query !== "string") return;
 
     const { params, address } = parseQuery(p.query);
+    // Parent updates are observations, not new navigation requests. Updating
+    // the underlying state directly avoids echoing the query back upward.
     updateQueryState(params, address);
   });
 
+  // The base is stable document context, independent of resolution and query
+  // changes. Keep it as a promise so early descendants can wait for and then
+  // inherit the same value without a separate initialization phase.
   const inheritedBaseUrl = new Promise<string>((resolve) => {
     const stopListening = events.listen(BASE_URL_RESPONSE_EVENT, (payload) => {
       if (typeof payload !== "object" || payload === null) return;
@@ -156,7 +161,7 @@ export function installNavigationChild(events: EventsChild) {
 
       const baseUrl = url.href;
       // Social.Wiki documents are originless and must use absolute URLs for
-      // resources. This base exists only for links and navigation.
+      // resources. This base exists only for native link resolution.
       const baseElement = document.createElement("base");
       baseElement.href = baseUrl;
       document.head.prepend(baseElement);
@@ -165,11 +170,11 @@ export function installNavigationChild(events: EventsChild) {
     });
   });
 
-  // The parent endpoint is installed after the iframe is inserted. Requesting
-  // on load guarantees it is listening without introducing a ready handshake.
-  const requestBaseUrl = () => events.emit(BASE_URL_REQUEST_EVENT);
-  if (document.readyState === "complete") requestBaseUrl();
-  else window.addEventListener("load", requestBaseUrl, { once: true });
+  // The parent endpoint is installed after the iframe is inserted. Announcing
+  // readiness on load guarantees it is listening before sending initial state.
+  const announceReady = () => events.emit(NAVIGATION_READY_EVENT);
+  if (document.readyState === "complete") announceReady();
+  else window.addEventListener("load", announceReady, { once: true });
 
   document.addEventListener("click", (e) => {
     if (e.defaultPrevented) return;
@@ -182,10 +187,9 @@ export function installNavigationChild(events: EventsChild) {
     const a = target.closest("a[href]");
     if (!(a instanceof HTMLAnchorElement)) return;
 
-    // TODO: what about target="_blank" or target="_top"?
-    if (a.hasAttribute("download") || (a.target && a.target !== "_self")) {
-      return;
-    }
+    // Downloads remain native. Other ordinary clicks use the bridge because
+    // the sandbox cannot reliably navigate explicit ancestor targets.
+    if (a.hasAttribute("download")) return;
     const href = a.getAttribute("href");
     if (typeof href !== "string") return;
 

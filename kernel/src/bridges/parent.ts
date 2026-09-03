@@ -16,7 +16,7 @@ export function createParentBridgeEndpointInstaller(bridgedServices: BridgedServ
   ) => {
     const events = installEventsParent(iframe);
     const stopForwardingEvents = events.listen(onEvent);
-    const navigation = installNavigationParent(iframe, events, baseUrl);
+    const navigation = installNavigationParent(events, baseUrl);
     const autosize = installAutosizeParent(iframe, host, events);
     const resolution = installResolutionParent(events, resolve);
     const graffitiBridge = installGraffitiParent(iframe, host, graffiti);
