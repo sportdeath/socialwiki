@@ -1,23 +1,16 @@
-type AutosizeMode = "off" | "height" | "width" | "both";
+import type { EventsChild } from "../../events/child";
+import {
+  AUTOSIZE_MODE_EVENT,
+  AUTOSIZE_SIZE_EVENT,
+  type AutosizeMode,
+  autosizesHeight,
+  autosizesWidth,
+  parseAutosizeMode,
+} from "../shared";
 
-function parseAutosizeMode(value: unknown): AutosizeMode {
-  // Autosize mode arrives over postMessage and may be malformed.
-  if (typeof value !== "string") return "off";
-  const normalized = value.trim().toLowerCase();
-  if (
-    normalized === "height" ||
-    normalized === "width" ||
-    normalized === "both"
-  ) {
-    return normalized;
-  }
-  return "off";
-}
-
-export function installAutosize() {
+export function installAutosizeChild(events: EventsChild) {
   let mode: AutosizeMode = "off";
   let resizeObserver: ResizeObserver | null = null;
-  let isBodyObserved = false;
   let rafId: number | null = null;
   let lastWidth = -1;
   let lastHeight = -1;
@@ -25,9 +18,8 @@ export function installAutosize() {
 
   const observeBody = () => {
     // body may appear after the bridge is installed; observe lazily.
-    if (!resizeObserver || isBodyObserved || !document.body) return;
+    if (!resizeObserver || !document.body) return;
     resizeObserver.observe(document.body);
-    isBodyObserved = true;
   };
 
   const parsePx = (value: string) => {
@@ -62,7 +54,8 @@ export function installAutosize() {
       height = Math.max(height, rangeRect.height);
     }
 
-    for (const child of Array.from(body.children) as HTMLElement[]) {
+    for (const child of Array.from(body.children)) {
+      if (!(child instanceof HTMLElement)) continue;
       const childStyle = window.getComputedStyle(child);
       if (childStyle.position === "fixed") continue;
 
@@ -94,21 +87,15 @@ export function installAutosize() {
     const viewportHeight = Math.max(1, window.innerHeight || doc.clientHeight);
     const content = measureIntrinsicBodySize();
 
-    const width =
-      mode === "width" || mode === "both"
-        ? content.width
-        // For inactive axes, send viewport so payload shape stays stable.
-        : viewportWidth;
-    const height =
-      mode === "height" || mode === "both"
-        ? content.height
-        : viewportHeight;
+    // For inactive axes, send viewport so payload shape stays stable.
+    const width = autosizesWidth(mode) ? content.width : viewportWidth;
+    const height = autosizesHeight(mode) ? content.height : viewportHeight;
 
     return { width, height };
   };
 
   const stabilizeWidth = (width: number) => {
-    if (mode !== "width" && mode !== "both") {
+    if (!autosizesWidth(mode)) {
       pendingWidthShrink = null;
       return width;
     }
@@ -141,7 +128,8 @@ export function installAutosize() {
 
     lastWidth = width;
     lastHeight = height;
-    window.emit("sw-autosize-size", { width, height });
+    // Size remains observable so a containing lens can propagate it outward.
+    events.emit(AUTOSIZE_SIZE_EVENT, { width, height });
   };
 
   const scheduleEmit = () => {
@@ -160,8 +148,6 @@ export function installAutosize() {
       observeBody();
     }
 
-    // Avoid duplicate listeners when switching between autosize modes.
-    window.removeEventListener("resize", scheduleEmit);
     window.addEventListener("resize", scheduleEmit);
     scheduleEmit();
   };
@@ -175,7 +161,6 @@ export function installAutosize() {
     window.removeEventListener("resize", scheduleEmit);
     resizeObserver?.disconnect();
     resizeObserver = null;
-    isBodyObserved = false;
     lastWidth = -1;
     lastHeight = -1;
     pendingWidthShrink = null;
@@ -197,9 +182,7 @@ export function installAutosize() {
     startAutosize();
   };
 
-  window.addEventListener("sw-autosize-mode", (event: Event) => {
-    if (!(event instanceof CustomEvent)) return;
-    const payload = event.detail;
+  events.listen(AUTOSIZE_MODE_EVENT, (payload) => {
     const nextMode =
       typeof payload === "object" && payload !== null
         ? parseAutosizeMode((payload as Record<string, unknown>).mode)

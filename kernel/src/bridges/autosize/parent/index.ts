@@ -1,25 +1,18 @@
-import { serveEvents } from "./events-server";
+import type { EventsParent } from "../../events/parent";
+import {
+  AUTOSIZE_MODE_EVENT,
+  AUTOSIZE_SIZE_EVENT,
+  type AutosizeMode,
+  autosizesHeight,
+  autosizesWidth,
+  parseAutosizeMode,
+} from "../shared";
 
-export type AutosizeMode = "off" | "height" | "width" | "both";
-
-export function parseAutosizeMode(value: string | null): AutosizeMode {
-  if (value === null) return "off";
-
-  const normalized = value.trim().toLowerCase();
-  // A bare `autosize` attribute (`autosize=""`) follows HTML boolean-style
-  // usage and enables both axes.
-  if (normalized === "") return "both";
-  if (
-    normalized === "height" ||
-    normalized === "width" ||
-    normalized === "both"
-  ) {
-    return normalized;
-  }
-  return "off";
-}
-
-export function serveAutosize(host: HTMLElement, iframe?: HTMLIFrameElement) {
+export function installAutosizeParent(
+  iframe: HTMLIFrameElement,
+  element: HTMLElement,
+  events: EventsParent,
+) {
   let mode: AutosizeMode = "off";
 
   const applySize = (payload: unknown) => {
@@ -39,42 +32,49 @@ export function serveAutosize(host: HTMLElement, iframe?: HTMLIFrameElement) {
       return;
     }
 
-    if (mode === "height" || mode === "both") {
-      host.style.height = `${p.height}px`;
+    if (autosizesHeight(mode)) {
+      element.style.height = `${p.height}px`;
     }
-    if (mode === "width" || mode === "both") {
-      host.style.width = `${p.width}px`;
+    if (autosizesWidth(mode)) {
+      element.style.width = `${p.width}px`;
     }
   };
 
-  const { destroy, send } = serveEvents((eventName, payload) => {
-    if (eventName !== "sw-autosize-size") return;
+  const stopListening = events.listen((eventName, payload) => {
+    if (eventName !== AUTOSIZE_SIZE_EVENT) return;
     applySize(payload);
-  }, iframe);
+  });
 
   const sendMode = () => {
     // Child can reload/recreate documents; mode must be resent on demand.
-    send("sw-autosize-mode", { mode });
+    events.send(AUTOSIZE_MODE_EVENT, { mode });
   };
 
-  const setMode = (nextMode: AutosizeMode) => {
-    mode = nextMode;
+  const setAutosizeMode = () => {
+    const value = element.getAttribute("autosize");
+    // A bare `autosize` attribute (`autosize=""`) follows HTML boolean-style
+    // usage and enables both axes.
+    mode = value === "" ? "both" : parseAutosizeMode(value);
 
-    if (mode === "off") {
-      host.style.removeProperty("width");
-      host.style.removeProperty("height");
-    } else if (mode === "height") {
-      host.style.removeProperty("width");
-    } else if (mode === "width") {
-      host.style.removeProperty("height");
-    }
+    if (!autosizesWidth(mode)) element.style.removeProperty("width");
+    if (!autosizesHeight(mode)) element.style.removeProperty("height");
 
     sendMode();
   };
 
+  const observer = new MutationObserver(setAutosizeMode);
+  observer.observe(element, {
+    attributes: true,
+    attributeFilter: ["autosize"],
+  });
+  iframe.addEventListener("load", sendMode);
+  setAutosizeMode();
+
   return {
-    destroy,
-    setMode,
-    syncMode: sendMode,
+    destroy() {
+      stopListening();
+      observer.disconnect();
+      iframe.removeEventListener("load", sendMode);
+    },
   };
 }
