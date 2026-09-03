@@ -1,10 +1,15 @@
-import type { Graffiti } from "@graffiti-garden/api";
-import { resolveWithBrowser } from "../browser-resolver/client";
-import type { ResolvedDocument } from "../browser-resolver/shared";
+import type { ParentBridgeEndpointInstaller } from "../bridges/parent";
+import type {
+  DocumentResolver,
+  ResolvedDocument,
+} from "../bridges/resolution/shared";
 import { ErrorPage, LoadingPage } from "../status-pages";
 import { TranscludeFrame } from "./frame";
 
-export function defineTranscludeElement(graffiti: Graffiti) {
+export function defineTranscludeElement(
+  resolve: DocumentResolver,
+  installParentBridgeEndpoints: ParentBridgeEndpointInstaller,
+) {
   /**
    * Displays a document inside a sandboxed iframe.
    *
@@ -35,16 +40,16 @@ export function defineTranscludeElement(graffiti: Graffiti) {
     // what the iframe should display.
     readonly #frame: TranscludeFrame;
     // The resolved document is either what is passed into srcdoc or
-    // what is fetched and resolved from src using `resolveWithBrowser`.
+    // what is fetched and resolved from src using the document resolver.
     #resolvedDocument: ResolvedDocument | null = null;
     #renderVersion = 0;
-    #browserRequest: AbortController | null = null;
+    #resolutionRequest: AbortController | null = null;
 
     constructor() {
       super();
       this.#frame = new TranscludeFrame(
         this,
-        graffiti,
+        installParentBridgeEndpoints,
         // Route events from the iframe back to this element
         (name, detail) => this.#receiveFrameEvent(name, detail),
       );
@@ -56,8 +61,8 @@ export function defineTranscludeElement(graffiti: Graffiti) {
 
     disconnectedCallback() {
       this.#renderVersion++;
-      this.#browserRequest?.abort();
-      this.#browserRequest = null;
+      this.#resolutionRequest?.abort();
+      this.#resolutionRequest = null;
       this.#frame.disconnect();
     }
 
@@ -97,14 +102,13 @@ export function defineTranscludeElement(graffiti: Graffiti) {
       // Maintain a render version so that async operations that complete
       // after a newer render is requested are ignored.
       const version = ++this.#renderVersion;
-      this.#browserRequest?.abort();
-      this.#browserRequest = null;
+      this.#resolutionRequest?.abort();
+      this.#resolutionRequest = null;
 
       const src = this.getAttribute("src");
       if (src === null) {
         const srcdoc = this.getAttribute("srcdoc");
         this.#display({
-          key: `srcdoc:${srcdoc ?? ""}`,
           srcdoc: srcdoc ?? LoadingPage,
           query: srcdoc === null ? "" : (this.getAttribute("query") ?? ""),
           status: srcdoc === null ? "loading" : "ok",
@@ -112,23 +116,19 @@ export function defineTranscludeElement(graffiti: Graffiti) {
         return;
       }
 
-      // Stop the old document before asking the browser for its replacement.
-      // Apart from making the transition visible, this prevents an obsolete
-      // lens from navigating or reporting output while the request is pending.
+      // Keep the current iframe alive while resolving. If the resolver returns
+      // the same srcdoc, TranscludeFrame can reuse the lens with its new query.
       this.#resolvedDocument = null;
-      this.#frame.showLoading();
       this.setAttribute("status", "loading");
       const request = new AbortController();
-      this.#browserRequest = request;
+      this.#resolutionRequest = request;
       try {
-        // Let the top-level document (the "browser") interpret src.
-        const resolvedDocument = await resolveWithBrowser(src, request.signal);
+        const resolvedDocument = await resolve(src, request.signal);
         if (!this.isConnected || version !== this.#renderVersion) return;
         this.#display(resolvedDocument);
       } catch (error) {
         if (!this.isConnected || version !== this.#renderVersion) return;
         this.#display({
-          key: `error:${src}`,
           srcdoc: ErrorPage(
             error instanceof Error ? error.message : String(error),
           ),
@@ -136,7 +136,9 @@ export function defineTranscludeElement(graffiti: Graffiti) {
           status: "error",
         });
       } finally {
-        if (this.#browserRequest === request) this.#browserRequest = null;
+        if (this.#resolutionRequest === request) {
+          this.#resolutionRequest = null;
+        }
       }
     }
 

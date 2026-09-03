@@ -1,289 +1,90 @@
-import { connect, Reply, WindowMessenger } from "penpal";
-import type {
-  Graffiti,
-  GraffitiLoginEvent,
-  GraffitiLogoutEvent,
-  GraffitiObjectStream,
-  GraffitiSession,
-  GraffitiSessionInitializedEvent,
-} from "@graffiti-garden/api";
-import { GraffitiDecentralized } from "@graffiti-garden/implementation-decentralized";
-import { getTranscludeId, getTranscludeName } from "./transclude-ids";
+import type { Graffiti, GraffitiSession } from "@graffiti-garden/api";
+import { serveGraffiti } from "@graffiti-garden/wrapper-iframe-rpc/host";
 
-const simpleMethods = [
-  "post",
-  "get",
-  "delete",
-  "deleteMedia",
-  "login",
-  "logout",
-  "actorToHandle",
-  "handleToActor",
-] as const;
+type SourceSegment = { id: string; name: string };
+type SessionWithSource = GraffitiSession & { source?: SourceSegment[] };
 
-type GuardedGraffitiMethod =
-  (typeof simpleMethods)[number] | "postMedia" | "getMedia" | "discover";
+// TypeScript parameter types do not exist at runtime. Keep the session slots
+// explicit so a sessionless schema containing `actor` is not mistaken for one.
+const sessionArgumentIndex = new Map<keyof Graffiti, number>([
+  ["post", 1],
+  ["get", 2],
+  ["delete", 1],
+  ["discover", 2],
+  ["continueDiscover", 1],
+  ["postMedia", 1],
+  ["getMedia", 2],
+  ["deleteMedia", 1],
+  ["logout", 0],
+]);
 
-export interface GraffitiGuardRequest {
-  method: GuardedGraffitiMethod;
-  args: unknown[];
-  createdAtMs: number;
-  transcludeId: string;
-  transcludeName: string[];
+const fallbackIds = new WeakMap<HTMLElement, string>();
+
+function sourceFromElement(element: HTMLElement): SourceSegment {
+  // Read attributes for each call, so changing them needs no frame bookkeeping.
+  let id = element.id || fallbackIds.get(element);
+  if (!id) {
+    id = Math.random().toString(36).slice(2, 10);
+    fallbackIds.set(element, id);
+  }
+  return { id, name: element.getAttribute("name") || "Unnamed" };
 }
 
-export type GraffitiGuardRequestHandler = (
-  request: GraffitiGuardRequest,
-) => void | Promise<void>;
-
-function hasSession(args: unknown[]): boolean {
-  const session = args[2];
+function isSession(value: unknown): value is SessionWithSource {
   return (
-    typeof session === "object" &&
-    session !== null &&
-    !Array.isArray(session) &&
-    typeof (session as { actor?: unknown }).actor === "string"
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as Partial<GraffitiSession>).actor === "string"
   );
 }
 
-function shouldGuard(method: GuardedGraffitiMethod, args: unknown[]): Boolean {
-  return (
-    ["post", "postMedia", "delete", "deleteMedia", "logout"].includes(method) ||
-    (["get", "discover", "getMedia"].includes(method) && hasSession(args))
-  );
+function withTranscludeSource(
+  graffiti: Graffiti,
+  host: HTMLElement,
+): Graffiti {
+  return new Proxy(graffiti, {
+    get(target, property) {
+      const value = Reflect.get(target, property, target) as unknown;
+      if (typeof value !== "function") return value;
+
+      return (...originalArguments: unknown[]) => {
+        const args = [...originalArguments];
+        const index = sessionArgumentIndex.get(property as keyof Graffiti);
+        const session = index === undefined ? undefined : args[index];
+
+        if (index !== undefined && isSession(session)) {
+          args[index] = {
+            ...session,
+            source: [
+              sourceFromElement(host),
+              ...(Array.isArray(session.source) ? session.source : []),
+            ],
+          } satisfies SessionWithSource;
+        }
+
+        return Reflect.apply(value, target, args) as unknown;
+      };
+    },
+  });
 }
 
-export function serveGraffiti(onGuardRequest?: GraffitiGuardRequestHandler) {
-  const graffiti = new GraffitiDecentralized();
-  const loggedInActors = new Set<string>();
-  graffiti.sessionEvents.addEventListener("login", (e) => {
-    if (!(e instanceof CustomEvent)) return;
-    const detail: GraffitiLoginEvent["detail"] = e.detail;
-    if (detail.error) return;
-    loggedInActors.add(detail.session.actor);
-  });
-  graffiti.sessionEvents.addEventListener("logout", (e) => {
-    if (!(e instanceof CustomEvent)) return;
-    const detail: GraffitiLogoutEvent["detail"] = e.detail;
-    if (detail.error) return;
-    loggedInActors.delete(detail.actor);
-  });
-
-  const served = new Map<Window, () => Promise<void>>();
-  const initEpochByWindow = new Map<Window, number>();
-  const iteratorsByWindow = new Map<
-    Window,
-    Map<string, GraffitiObjectStream<{}>>
-  >();
-
-  async function maybeEmitGuardRequest(
-    sourceWindow: Window,
-    method: GuardedGraffitiMethod,
-    args: unknown[],
-  ) {
-    if (!shouldGuard(method, args) || !onGuardRequest) return;
-    const transcludeId = getTranscludeId(sourceWindow);
-    const transcludeName = getTranscludeName(sourceWindow);
-    if (!transcludeId || !transcludeName) {
-      throw new Error("Request from a unknown window");
-    }
-    await onGuardRequest({
-      method,
-      args,
-      transcludeId,
-      transcludeName,
-      createdAtMs: Date.now(),
-    });
+/** Install this realm's Graffiti connection across one iframe boundary. */
+export function installGraffitiParent(
+  iframe: HTMLIFrameElement,
+  element: HTMLElement,
+  graffiti: Graffiti,
+) {
+  const remoteWindow = iframe.contentWindow;
+  if (!remoteWindow) {
+    throw new Error("Transclude iframe did not create a content window");
   }
 
-  async function serveGraffitiToWindow(window: Window) {
-    const epoch = (initEpochByWindow.get(window) ?? 0) + 1;
-    initEpochByWindow.set(window, epoch);
-
-    // Destroy an existing connection if it exists
-    const existing = served.get(window);
-    if (existing) await existing();
-    if (initEpochByWindow.get(window) !== epoch) return;
-
-    const messenger = new WindowMessenger({
-      remoteWindow: window,
-      allowedOrigins: ["*"],
-    });
-
-    const iterators = new Map<string, GraffitiObjectStream<{}>>();
-    iteratorsByWindow.set(window, iterators);
-
-    const sessionEventTypes = ["login", "logout", "initialized"];
-    let remote:
-      | {
-          sessionEvent: (type: string, detail: any) => Promise<void>;
-          ping: () => Promise<void>;
-        }
-      | undefined;
-    const forward = (e: Event) => {
-      if (!(e instanceof CustomEvent)) return;
-      if (!remote) return;
-      remote.sessionEvent(e.type, e.detail);
-    };
-
-    let destroyPromise: Promise<void> | null = null;
-    let heartbeatTimer: number | undefined;
-    const destroy = async () => {
-      if (destroyPromise) return destroyPromise;
-      destroyPromise = (async () => {
-        // Destroy the connection to stop any requests
-        connection.destroy();
-
-        // Stop the heartbeat
-        if (heartbeatTimer !== undefined) {
-          clearInterval(heartbeatTimer);
-          heartbeatTimer = undefined;
-        }
-
-        // Remove all listeners
-        for (const type of sessionEventTypes) {
-          graffiti.sessionEvents.removeEventListener(type, forward);
-        }
-
-        // Return all iterators to prevent locked queries
-        const windowIterators = iteratorsByWindow.get(window);
-        if (windowIterators) {
-          const returns = [...windowIterators.values()].map((iterator) =>
-            iterator.return({ cursor: "" }),
-          );
-          await Promise.allSettled(returns);
-          windowIterators.clear();
-          iteratorsByWindow.delete(window);
-        }
-
-        // Remove the destroy function to allow for new connections
-        served.delete(window);
-      })();
-      return destroyPromise;
-    };
-    served.set(window, destroy);
-
-    const rpcSimpleMethods = Object.fromEntries(
-      simpleMethods.map((method) => [
-        method,
-        async (...args: unknown[]) => {
-          await maybeEmitGuardRequest(window, method, args);
-          const fn = graffiti[method] as (
-            ...methodArgs: unknown[]
-          ) => Promise<unknown>;
-          return fn.apply(graffiti, args);
-        },
-      ]),
-    );
-
-    const connection = connect<{
-      sessionEvent: (type: string, detail: any) => Promise<void>;
-      ping: () => Promise<void>;
-    }>({
-      messenger,
-      methods: {
-        ...rpcSimpleMethods,
-        async postMedia(
-          media: {
-            data: { buffer: ArrayBuffer; type: string };
-            allowed?: string[] | null;
-          },
-          session: GraffitiSession,
-        ) {
-          const data = new Blob([media.data.buffer], { type: media.data.type });
-          const args = [{ ...media, data }, session] as const;
-          await maybeEmitGuardRequest(window, "postMedia", [...args]);
-          const mediaUrl = await graffiti.postMedia(...args);
-          return mediaUrl;
-        },
-        async getMedia(...args: Parameters<Graffiti["getMedia"]>) {
-          await maybeEmitGuardRequest(window, "getMedia", args);
-          const result = await graffiti.getMedia(...args);
-          const buffer = await result.data.arrayBuffer();
-          const type = result.data.type;
-
-          return new Reply(
-            {
-              ...result,
-              data: { buffer, type },
-            },
-            { transferables: [buffer] },
-          );
-        },
-        async discover(id: string, ...args: Parameters<Graffiti["discover"]>) {
-          await maybeEmitGuardRequest(window, "discover", args);
-          const iterator = graffiti.discover<{}>(...args);
-          iterators.set(id, iterator);
-        },
-        async continueDiscover(
-          id: string,
-          ...args: Parameters<Graffiti["continueDiscover"]>
-        ) {
-          const iterator = graffiti.continueDiscover<{}>(...args);
-          iterators.set(id, iterator);
-        },
-        async streamNext(id: string) {
-          const iterator = iterators.get(id);
-          if (!iterator) return;
-          return iterator.next();
-        },
-        async streamReturn(id: string) {
-          const iterator = iterators.get(id);
-          if (!iterator) return;
-          await iterator.return({ cursor: "" });
-          iterators.delete(id);
-        },
-        initialize() {
-          for (const actor of loggedInActors) {
-            const loginEvent: GraffitiLoginEvent = new CustomEvent("login", {
-              detail: { session: { actor } },
-            });
-            forward(loginEvent);
-          }
-          const initializedEvent: GraffitiSessionInitializedEvent =
-            new CustomEvent("initialized");
-          forward(initializedEvent);
-        },
-      },
-    });
-
-    try {
-      remote = await connection.promise;
-    } catch {
-      await destroy();
-      return;
-    }
-    if (destroyPromise || !remote || initEpochByWindow.get(window) !== epoch) {
-      await destroy();
-      return;
-    }
-
-    // once connected, forward sessionEvents -> iframe sink
-    for (const type of sessionEventTypes) {
-      graffiti.sessionEvents.addEventListener(type, forward);
-    }
-
-    // Set a heartbeat to destroy the connection,
-    // in case it can't be set up properly
-    const heartbeatIntervalMs = 100;
-    heartbeatTimer = setInterval(async () => {
-      if (window.closed) return destroy();
-    }, heartbeatIntervalMs);
-  }
-
-  window.addEventListener("message", async (event) => {
-    if (!event.source) return;
-    const window = event.source as Window;
-    const message = event.data;
-    if (message === "sw-graffiti-init") {
-      void serveGraffitiToWindow(window);
-    } else if (message === "sw-graffiti-destroy") {
-      await served.get(window)?.();
-    }
-  });
-
+  const rpcHost = serveGraffiti(withTranscludeSource(graffiti, element));
+  const connection = rpcHost.connect({ remoteWindow });
   return {
-    graffiti,
-    listConnectedWindows: () => served.keys(),
+    async destroy() {
+      await connection.destroy();
+      await rpcHost.destroy();
+    },
   };
 }

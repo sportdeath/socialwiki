@@ -1,12 +1,9 @@
 import { GraffitiGuarded } from "@graffiti-garden/wrapper-data-guard";
-import { installBrowserResolverHost } from "./browser-resolver/host";
-import { installEventsParent } from "./bridges/events/parent";
-import { installNavigationParent } from "./bridges/navigation/parent";
-import { installLensSourceHost } from "./lens-sources/host";
-import {
-  createDefaultBrowserResolver,
-  installTransclude,
-} from "./transclude";
+import { createDefaultResolver } from "./bridges/resolution/default";
+import { installDocumentResolver } from "./bridges/resolution/shared";
+import { createParentBridgeEndpointInstaller } from "./bridges/parent";
+import { installTransclude } from "./transclude";
+import { handleNavigation } from "./bridges/navigation/parent";
 
 const isClassic = document.currentScript !== null;
 const currentScriptSrc = isClassic
@@ -18,24 +15,35 @@ const navigationBaseUrl = isClassic
     window.location.href
   : window.location.href;
 
-// Initialize Graffiti
+// Install top-level services: Graffiti and resolution
 const graffiti = new GraffitiGuarded();
+const resolve = installDocumentResolver(
+  createDefaultResolver(kernelUrl.origin, navigationBaseUrl),
+);
 
-// Install top-level services
-installLensSourceHost(kernelUrl.origin);
-installBrowserResolverHost(createDefaultBrowserResolver(kernelUrl.origin));
-installTransclude(graffiti);
+// Make an installer that allows those services to be
+// bridged to sub-documents.
+const bridgedServices = { graffiti, resolve };
+const installParentBridgeEndpoints = createParentBridgeEndpointInstaller(bridgedServices);
 
-installNavigationParent(undefined, installEventsParent(), (to) => {
-  // Query-only navigation belongs to the parent of the specific transclude.
-  // This root handles navigation that has propagated out of that frame.
+// Install the <sw-transclude> component for including sub-documents
+installTransclude(
+  resolve,
+  installParentBridgeEndpoints
+);
+
+// Handle navigation requests that have bubbled all the way to the top
+handleNavigation(window, (to) => {
+  // Query-only navigation belongs to a containing lens. At the root there is
+  // no address left in which to incorporate it.
   if (to.startsWith("?")) return;
 
-  const url = new URL(to, navigationBaseUrl);
-  if (url.hash.startsWith("#/")) {
-    window.location.hash = url.hash;
-    return;
+  try {
+    const url = new URL(to, navigationBaseUrl);
+    // Ignore non-http/s URLs, e.g. javascript:
+    if (url.protocol !== "http:" && url.protocol !== "https:") return;
+    window.location.href = url.href;
+  } catch {
+    // Ignore malformed requests
   }
-
-  window.location.href = url.href;
 });

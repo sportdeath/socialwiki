@@ -1,10 +1,8 @@
 import { installTransclude } from "./transclude";
-import { installGraffitiChild } from "./bridges/graffiti/child";
-import { installEventsChild } from "./bridges/events/child";
-import { installAutosizeChild } from "./bridges/autosize/child";
-import { installNavigationChild } from "./bridges/navigation/child";
+import { installChildBridgeEndpoints } from "./bridges/child";
+import { createParentBridgeEndpointInstaller } from "./bridges/parent";
+import { withNavigationBase } from "./bridges/navigation/shared";
 import importMap from "./import-map.json";
-import { installLensSourceApi } from "./lens-sources/client";
 
 const isClassic = document.currentScript !== null;
 const currentScriptSrc = isClassic
@@ -13,6 +11,7 @@ const currentScriptSrc = isClassic
 const kernelUrl = new URL(currentScriptSrc);
 
 if (window.top !== window) {
+  // TODO: can the import map be updated dynamically based on npm?
   // Inject the import map if possible
   // (this can only be done by classic scripts which
   //  can execute before the import map is loaded)
@@ -23,27 +22,31 @@ if (window.top !== window) {
     document.head.append(importScript);
   }
 
-  // Each nested frame receives Graffiti from its immediate parent.
-  const graffiti = installGraffitiChild();
+  // Set up a connection to the parent document for
+  // passing Graffiti data, navigation requests,
+  // resolutions, and so on
+  const bridgedServices = installChildBridgeEndpoints();
 
-  // Enable transclusion
-  installTransclude(graffiti);
-  installLensSourceApi(kernelUrl.origin);
+  // Initialize an installer that will pass on the
+  // connected services to any sub documents
+  const installParentBridgeEndpoints =
+    createParentBridgeEndpointInstaller(bridgedServices);
 
-  // Install message-passing bridges between transcluded frames
-  const events = installEventsChild();
-  installNavigationChild(events);
-  installAutosizeChild(events);
+  // Initialize the <sw-transclude> component that
+  // allows this document to include sub-documents
+  const { resolve } = bridgedServices;
+  installTransclude(resolve, installParentBridgeEndpoints);
 } else {
-  // If we are the top level window, wrap the content in an iframe
-  // and spin up the RPC "server".
-  window.addEventListener("DOMContentLoaded", async () => {
+  // If we are the top-level document, wrap the document in an iframe
+  // that will act as a root "server" for all nested documents
+  const initializeHost = async () => {
     // Preserve the original document's address as its own resource base.
     const navigationBaseUrl = document.baseURI;
+    const documentTitle = document.title;
     const html = document.documentElement.outerHTML;
 
     // Replace the document with a clean host. Explicit head/body elements are
-    // needed because the server installs the guard and transclude immediately.
+    // retained for the script and transclude below.
     document.documentElement.replaceChildren(
       document.createElement("head"),
       document.createElement("body"),
@@ -66,7 +69,23 @@ if (window.top !== window) {
     transclude.style.left = "0";
     transclude.style.width = "100dvw";
     transclude.style.height = "100dvh";
-    transclude.setAttribute("srcdoc", html);
+    // Keep the kernel-created source stable across reloads.
+    transclude.id = "root";
+    transclude.setAttribute(
+      "name",
+      documentTitle || new URL(navigationBaseUrl).hostname,
+    );
+    transclude.setAttribute(
+      "srcdoc",
+      // Preserve the base URL in the origin-less document
+      withNavigationBase(html, navigationBaseUrl),
+    );
     document.body.appendChild(transclude);
-  }, { once: true });
+  };
+
+  if (document.readyState === "loading") {
+    window.addEventListener("DOMContentLoaded", initializeHost, { once: true });
+  } else {
+    void initializeHost();
+  }
 }

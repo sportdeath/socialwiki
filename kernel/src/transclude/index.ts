@@ -1,9 +1,11 @@
-import type { Graffiti } from "@graffiti-garden/api";
+import type { ParentBridgeEndpointInstaller } from "../bridges/parent";
+import type { DocumentResolver } from "../bridges/resolution/shared";
 import { defineTranscludeElement } from "./element";
 
-export { createDefaultBrowserResolver } from "./default-resolver";
-
-export function installTransclude(graffiti: Graffiti) {
+export function installTransclude(
+  resolve: DocumentResolver,
+  installParentBridgeEndpoints: ParentBridgeEndpointInstaller,
+) {
   if (customElements.get("sw-transclude")) return;
-  defineTranscludeElement(graffiti);
+  defineTranscludeElement(resolve, installParentBridgeEndpoints);
 }

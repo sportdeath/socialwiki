@@ -1,17 +1,12 @@
-import type { Graffiti } from "@graffiti-garden/api";
-import type { ResolvedDocument } from "../browser-resolver/shared";
-import { installEventsParent } from "../bridges/events/parent";
-import { installGraffitiParent } from "../bridges/graffiti/parent";
-import { installAutosizeParent } from "../bridges/autosize/parent";
-import { installNavigationParent } from "../bridges/navigation/parent";
+import type { ParentBridgeEndpointInstaller } from "../bridges/parent";
+import type { ResolvedDocument } from "../bridges/resolution/shared";
 import { LoadingPage } from "../status-pages";
 
 /** The state and resources tied to the current physical iframe. */
 type DisplayedFrame = {
   iframe: HTMLIFrameElement;
-  bridges: ReturnType<typeof connectIframeBridges>;
+  bridges: ReturnType<ParentBridgeEndpointInstaller>;
   blobUrl: string | null;
-  key: string;
   srcdoc: string;
 };
 
@@ -23,11 +18,11 @@ type DisplayedFrame = {
  * - replace the iframe when the document changes;
  * - reuse the current iframe when only its query changes;
  * - show a loading page during replacement; and
- * - connect and destroy the iframe's Graffiti, event, and autosize bridges.
+ * - connect and destroy the iframe's bridges.
  */
 export class TranscludeFrame {
   readonly #host: HTMLElement;
-  readonly #graffiti: Graffiti;
+  readonly #installParentBridgeEndpoints: ParentBridgeEndpointInstaller;
   readonly #onEvent: (name: string, detail: unknown) => void;
   readonly #shadow: ShadowRoot;
   readonly #loadingIframe = document.createElement("iframe");
@@ -35,11 +30,11 @@ export class TranscludeFrame {
 
   constructor(
     host: HTMLElement,
-    graffiti: Graffiti,
+    installParentBridgeEndpoints: ParentBridgeEndpointInstaller,
     onEvent: (name: string, detail: unknown) => void,
   ) {
     this.#host = host;
-    this.#graffiti = graffiti;
+    this.#installParentBridgeEndpoints = installParentBridgeEndpoints;
     this.#onEvent = onEvent;
     this.#shadow = host.attachShadow({ mode: "closed" });
 
@@ -67,12 +62,9 @@ export class TranscludeFrame {
   }
 
   render(next: ResolvedDocument) {
-    // The key and HTML identify the document,
-    // while the query is state within it.
-    if (
-      this.#displayedFrame?.key === next.key &&
-      this.#displayedFrame.srcdoc === next.srcdoc
-    ) {
+    // An address change can resolve to the same lens HTML with a new query.
+    // Preserve that lens instance; only changed HTML requires a new iframe.
+    if (this.#displayedFrame?.srcdoc === next.srcdoc) {
       this.#displayedFrame.bridges.setQuery(next.query);
       return;
     }
@@ -116,8 +108,7 @@ export class TranscludeFrame {
     else iframe.srcdoc = next.srcdoc;
     this.#shadow.append(iframe);
 
-    const bridges = connectIframeBridges(
-      this.#graffiti,
+    const bridges = this.#installParentBridgeEndpoints(
       this.#host,
       iframe,
       this.#onEvent,
@@ -126,7 +117,6 @@ export class TranscludeFrame {
       iframe,
       bridges,
       blobUrl,
-      key: next.key,
       srcdoc: next.srcdoc,
     };
     bridges.setQuery(next.query);
@@ -157,6 +147,8 @@ function createIframe() {
     "allow-modals",
     "allow-pointer-lock",
     "allow-downloads",
+    // Permit user-initiated new tabs without letting them escape the sandbox.
+    "allow-popups",
   );
   iframe.allow = [
     "camera *",
@@ -167,31 +159,4 @@ function createIframe() {
     "clipboard-write *",
   ].join("; ");
   return iframe;
-}
-
-function connectIframeBridges(
-  graffiti: Graffiti,
-  host: HTMLElement,
-  iframe: HTMLIFrameElement,
-  onEvent: (eventName: string, payload: unknown) => void,
-) {
-  // The bridge implementations are independent modules. They are connected
-  // together here because they all live and die with this particular iframe.
-  const events = installEventsParent(iframe);
-  const stopForwardingEvents = events.listen(onEvent);
-  const navigation = installNavigationParent(iframe, events);
-  const autosize = installAutosizeParent(iframe, host, events);
-  const graffitiBridge = installGraffitiParent(iframe, host, graffiti);
-
-  return {
-    destroy: () => {
-      stopForwardingEvents();
-      navigation.destroy();
-      autosize.destroy();
-      events.destroy();
-      void graffitiBridge.destroy();
-    },
-    send: events.send,
-    setQuery: navigation.setQuery,
-  };
 }
