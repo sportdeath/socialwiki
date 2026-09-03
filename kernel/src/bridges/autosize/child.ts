@@ -1,4 +1,4 @@
-import type { EventsChild } from "../../events/child";
+import type { EventsChild } from "../events/child";
 import {
   AUTOSIZE_MODE_EVENT,
   AUTOSIZE_SIZE_EVENT,
@@ -6,7 +6,7 @@ import {
   autosizesHeight,
   autosizesWidth,
   parseAutosizeMode,
-} from "../shared";
+} from "./shared";
 
 export function installAutosizeChild(events: EventsChild) {
   let mode: AutosizeMode = "off";

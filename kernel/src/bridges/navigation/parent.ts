@@ -1,9 +1,9 @@
-import type { EventsParent } from "../../events/parent";
+import type { EventsParent } from "../events/parent";
 import {
   BASE_URL_RESPONSE_EVENT,
   NAVIGATION_READY_EVENT,
   QUERY_EVENT,
-} from "../shared";
+} from "./shared";
 
 export function installNavigationParent(
   events: EventsParent,

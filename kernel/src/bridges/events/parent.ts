@@ -1,4 +1,4 @@
-import { EVENT_TO_CHILD, EVENT_TO_PARENT } from "../shared";
+import { EVENT_TO_CHILD, EVENT_TO_PARENT } from "./shared";
 
 export function installEventsParent(iframe: HTMLIFrameElement) {
   let destroyed = false;

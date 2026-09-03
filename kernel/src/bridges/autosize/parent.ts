@@ -1,4 +1,4 @@
-import type { EventsParent } from "../../events/parent";
+import type { EventsParent } from "../events/parent";
 import {
   AUTOSIZE_MODE_EVENT,
   AUTOSIZE_SIZE_EVENT,
@@ -6,7 +6,7 @@ import {
   autosizesHeight,
   autosizesWidth,
   parseAutosizeMode,
-} from "../shared";
+} from "./shared";
 
 export function installAutosizeParent(
   iframe: HTMLIFrameElement,

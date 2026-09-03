@@ -1,12 +1,12 @@
-import { composeQuery, parseQuery } from "../../../route";
-import type { EventsChild } from "../../events/child";
+import { composeQuery, parseQuery } from "../../route";
+import type { EventsChild } from "../events/child";
 import {
   BASE_URL_RESPONSE_EVENT,
   NAVIGATE_EVENT,
   NAVIGATION_READY_EVENT,
   QUERY_EVENT,
   handleNavigation,
-} from "../shared";
+} from "./shared";
 
 export function installNavigationChild(events: EventsChild) {
   window.handleNavigation = handleNavigation;
