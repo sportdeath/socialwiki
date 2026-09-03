@@ -30,18 +30,17 @@ export function installNavigationChild(events: EventsChild) {
 
     const didAddressChange = currentAddress !== address;
     const didParamsChange = currentParamsSerialized !== paramsSerialized;
-    if (!didAddressChange && !didParamsChange) {
-      return { didAddressChange, didParamsChange };
-    }
-
-    currentAddress = address;
-    currentParamsSerialized = paramsSerialized;
 
     if (didParamsChange) {
+      currentParamsSerialized = paramsSerialized;
       window.dispatchEvent(new Event("paramschange"));
     }
     if (didAddressChange) {
+      currentAddress = address;
       window.dispatchEvent(new Event("addresschange"));
+    }
+    if (didAddressChange || didParamsChange) {
+      window.dispatchEvent(new Event("querychange"));
     }
 
     return { didAddressChange, didParamsChange };

@@ -3,7 +3,24 @@ export const NAVIGATION_READY_EVENT = "sw-navigation-ready";
 export const QUERY_EVENT = "sw-query";
 export const BASE_URL_RESPONSE_EVENT = "sw-base-url-response";
 
+/**
+ * Query state is observable through ordinary Window events:
+ *
+ * ```ts
+ * const onQueryChange = () => render(window.query);
+ * window.addEventListener("querychange", onQueryChange);
+ * ```
+ *
+ * There are also `paramschange` and `addresschange` to watch
+ * individual query components (see ../../route).
+ */
 declare global {
+  interface WindowEventMap {
+    querychange: Event;
+    paramschange: Event;
+    addresschange: Event;
+  }
+
   interface Window {
     /**
      * Requests navigation from the containing document. `to` is emitted
@@ -25,7 +42,7 @@ declare global {
      * `?/alice`.
      *
      * Assigning a query parses it back into `params` and `address`, dispatches
-     * their change events as appropriate, and requests navigation.
+     * their change events plus one `querychange`, and requests navigation.
      */
     get query(): string;
     set query(value: string);
@@ -37,7 +54,7 @@ declare global {
      *
      * Assigning this property, or mutating the returned URLSearchParams with
      * append/delete/set/sort, requests navigation to the resulting query.
-     * A changed value received from the parent dispatches `paramschange`.
+     * Whenever the value changes, Window dispatches `paramschange`.
      */
     get params(): URLSearchParams;
     set params(value: URLSearchParams | string | undefined);
@@ -49,7 +66,7 @@ declare global {
      * it is undefined.
      *
      * Assigning this property requests navigation to the resulting query.
-     * A changed value received from the parent dispatches `addresschange`.
+     * Whenever the value changes, Window dispatches `addresschange`.
      */
     get address(): string | undefined;
     set address(value: string | undefined);
