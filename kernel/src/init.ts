@@ -1,7 +1,6 @@
 import { installTransclude } from "./transclude";
 import { installChildBridgeEndpoints } from "./bridges/child";
 import { createParentBridgeEndpointInstaller } from "./bridges/parent";
-import { withNavigationBase } from "./bridges/navigation/shared";
 import importMap from "./import-map.json";
 
 const isClassic = document.currentScript !== null;
@@ -41,7 +40,7 @@ if (window.top !== window) {
   // that will act as a root "server" for all nested documents
   const initializeHost = async () => {
     // Preserve the original document's address as its own resource base.
-    const navigationBaseUrl = document.baseURI;
+    const baseUrl = document.baseURI;
     const documentTitle = document.title;
     const html = document.documentElement.outerHTML;
 
@@ -56,7 +55,7 @@ if (window.top !== window) {
     await new Promise<void>((resolve, reject) => {
       const script = document.createElement("script");
       script.src = new URL("./init-server.js", kernelUrl).href;
-      script.dataset.navigationBaseUrl = navigationBaseUrl;
+      script.dataset.baseUrl = baseUrl;
       script.onload = () => resolve();
       script.onerror = (e) => reject(e);
       document.head.append(script);
@@ -73,13 +72,9 @@ if (window.top !== window) {
     transclude.id = "root";
     transclude.setAttribute(
       "name",
-      documentTitle || new URL(navigationBaseUrl).hostname,
+      documentTitle || new URL(baseUrl).hostname,
     );
-    transclude.setAttribute(
-      "srcdoc",
-      // Preserve the base URL in the origin-less document
-      withNavigationBase(html, navigationBaseUrl),
-    );
+    transclude.setAttribute("srcdoc", html);
     document.body.appendChild(transclude);
   };
 

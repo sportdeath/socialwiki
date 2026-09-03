@@ -143,7 +143,6 @@ function createIframe() {
     // Lenses need these capabilities, but intentionally do not receive
     // allow-same-origin or unrestricted top-level navigation.
     "allow-scripts",
-    "allow-forms",
     "allow-modals",
     "allow-pointer-lock",
     "allow-downloads",

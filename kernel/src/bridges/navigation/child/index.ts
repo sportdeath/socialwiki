@@ -1,20 +1,19 @@
-import { composeQuery, parseQuery } from "./route";
+import { composeQuery, parseQuery } from "../../../route";
+import type { EventsChild } from "../../events/child";
+import {
+  BASE_URL_REQUEST_EVENT,
+  BASE_URL_RESPONSE_EVENT,
+  NAVIGATE_EVENT,
+  QUERY_EVENT,
+  handleNavigation,
+} from "../shared";
 
-declare global {
-  interface Window {
-    navigate: (to: string) => void;
-    params?: URLSearchParams;
-    address?: string;
-  }
-}
+export function installNavigationChild(events: EventsChild) {
+  window.handleNavigation = handleNavigation;
+  window.navigate = (to: string) => events.emit(NAVIGATE_EVENT, { to });
 
-export function installNavigation(origin: string) {
-  window.navigate = (to: string) => {
-    window.emit("sw-navigate", { to });
-  };
-
-  let currentAddress: string | undefined = undefined;
-  let currentParamsSerialized: string | undefined = undefined;
+  let currentAddress: string | undefined;
+  let currentParamsSerialized: string | undefined;
 
   function normalizeParams(params?: URLSearchParams | string): string {
     if (params === undefined) return "";
@@ -48,23 +47,32 @@ export function installNavigation(origin: string) {
     return { didAddressChange, didParamsChange };
   }
 
-  function navigateForQueryChange() {
-    const to = composeQuery(
-      new URLSearchParams(currentParamsSerialized),
+  function currentQuery() {
+    return composeQuery(
+      currentParamsSerialized
+        ? new URLSearchParams(currentParamsSerialized)
+        : undefined,
       currentAddress,
     );
-    window.navigate(to);
-    return;
+  }
+
+  function navigateForQueryChange() {
+    window.navigate(currentQuery());
+  }
+
+  function applyQueryChange(query: string) {
+    const { params, address } = parseQuery(query);
+    const { didAddressChange, didParamsChange } = updateQueryState(
+      params,
+      address,
+    );
+    if (didAddressChange || didParamsChange) navigateForQueryChange();
   }
 
   const paramsMutators = new Set(["append", "delete", "set", "sort"]);
 
   function applyParamsChange(params?: URLSearchParams | string) {
-    const nextParamsSerialized = normalizeParams(params);
-    const { didParamsChange } = updateQueryState(
-      nextParamsSerialized,
-      currentAddress,
-    );
+    const { didParamsChange } = updateQueryState(params, currentAddress);
     if (!didParamsChange) return;
     navigateForQueryChange();
   }
@@ -98,6 +106,11 @@ export function installNavigation(origin: string) {
   }
 
   Object.defineProperties(window, {
+    query: {
+      configurable: true,
+      get: currentQuery,
+      set: (value: string) => applyQueryChange(String(value)),
+    },
     address: {
       configurable: true,
       get: () => currentAddress,
@@ -118,9 +131,7 @@ export function installNavigation(origin: string) {
     },
   });
 
-  window.addEventListener("sw-query", (event: Event) => {
-    if (!(event instanceof CustomEvent)) return;
-    const payload = event.detail;
+  events.listen(QUERY_EVENT, (payload) => {
     if (typeof payload !== "object" || payload === null) return;
     const p = payload as Record<string, unknown>;
     if (typeof p.query !== "string") return;
@@ -129,11 +140,39 @@ export function installNavigation(origin: string) {
     updateQueryState(params, address);
   });
 
-  const base = document.createElement("base");
-  base.href = origin;
-  document.head.append(base);
+  const inheritedBaseUrl = new Promise<string>((resolve) => {
+    const stopListening = events.listen(BASE_URL_RESPONSE_EVENT, (payload) => {
+      if (typeof payload !== "object" || payload === null) return;
+      const p = payload as Record<string, unknown>;
+      if (typeof p.baseUrl !== "string") return;
 
-  document.addEventListener("click", (e: MouseEvent) => {
+      let url: URL;
+      try {
+        url = new URL(p.baseUrl);
+      } catch {
+        return;
+      }
+      if (url.protocol !== "http:" && url.protocol !== "https:") return;
+
+      const baseUrl = url.href;
+      // Social.Wiki documents are originless and must use absolute URLs for
+      // resources. This base exists only for links and navigation.
+      const baseElement = document.createElement("base");
+      baseElement.href = baseUrl;
+      document.head.prepend(baseElement);
+      stopListening();
+      resolve(baseUrl);
+    });
+  });
+
+  // The parent endpoint is installed after the iframe is inserted. Requesting
+  // on load guarantees it is listening without introducing a ready handshake.
+  const requestBaseUrl = () => events.emit(BASE_URL_REQUEST_EVENT);
+  if (document.readyState === "complete") requestBaseUrl();
+  else window.addEventListener("load", requestBaseUrl, { once: true });
+
+  document.addEventListener("click", (e) => {
+    if (e.defaultPrevented) return;
     if (e.button !== 0) return;
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
 
@@ -143,11 +182,16 @@ export function installNavigation(origin: string) {
     const a = target.closest("a[href]");
     if (!(a instanceof HTMLAnchorElement)) return;
 
-    if (a.hasAttribute("download")) return;
+    // TODO: what about target="_blank" or target="_top"?
+    if (a.hasAttribute("download") || (a.target && a.target !== "_self")) {
+      return;
+    }
     const href = a.getAttribute("href");
     if (typeof href !== "string") return;
 
     e.preventDefault();
     window.navigate(href);
   });
+
+  return inheritedBaseUrl;
 }
