@@ -1,7 +1,8 @@
 import { installTransclude } from "./transclude";
 import { installChildBridgeEndpoints } from "./bridges/child";
 import { createParentBridgeEndpointInstaller } from "./bridges/parent";
-import importMap from "./import-map.json";
+
+declare const KERNEL_IMPORT_MAP: { imports: Record<string, string> };
 
 const isClassic = document.currentScript !== null;
 const currentScriptSrc = isClassic
@@ -10,14 +11,13 @@ const currentScriptSrc = isClassic
 const kernelUrl = new URL(currentScriptSrc);
 
 if (window.top !== window) {
-  // TODO: can the import map be updated dynamically based on npm?
   // Inject the import map if possible
   // (this can only be done by classic scripts which
   //  can execute before the import map is loaded)
   if (isClassic) {
     const importScript = document.createElement("script");
     importScript.type = "importmap";
-    importScript.textContent = JSON.stringify(importMap);
+    importScript.textContent = JSON.stringify(KERNEL_IMPORT_MAP);
     document.head.append(importScript);
   }
 
