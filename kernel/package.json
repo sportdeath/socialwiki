@@ -1,5 +1,5 @@
 {
-  "name": "social-wiki-kernel",
+  "name": "social-wiki",
   "version": "0.1.0",
   "description": "A runtime for Social.Wiki documents",
   "files": [
