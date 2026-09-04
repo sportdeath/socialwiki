@@ -1,25 +1,22 @@
 import { installTransclude } from "./transclude";
 import { installChildBridgeEndpoints } from "./bridges/child";
 import { createParentBridgeEndpointInstaller } from "./bridges/parent";
+import { ErrorPage } from "./status-pages";
 
 declare const KERNEL_IMPORT_MAP: { imports: Record<string, string> };
 
-const isClassic = document.currentScript !== null;
-const currentScriptSrc = isClassic
-  ? (document.currentScript as HTMLScriptElement).src
-  : import.meta.url;
-const kernelUrl = new URL(currentScriptSrc);
+const currentScript = document.currentScript;
+if (!(currentScript instanceof HTMLScriptElement) || !currentScript.src) {
+  throw new Error("The Social.Wiki kernel must be loaded as a classic script");
+}
+const kernelUrl = new URL(currentScript.src);
 
 if (window.top !== window) {
-  // Inject the import map if possible
-  // (this can only be done by classic scripts which
-  //  can execute before the import map is loaded)
-  if (isClassic) {
-    const importScript = document.createElement("script");
-    importScript.type = "importmap";
-    importScript.textContent = JSON.stringify(KERNEL_IMPORT_MAP);
-    document.head.append(importScript);
-  }
+  // A classic script can inject the import map before later module scripts run.
+  const importScript = document.createElement("script");
+  importScript.type = "importmap";
+  importScript.textContent = JSON.stringify(KERNEL_IMPORT_MAP);
+  document.head.append(importScript);
 
   // Set up a connection to the parent document for
   // passing Graffiti data, navigation requests,
@@ -42,7 +39,8 @@ if (window.top !== window) {
     // Preserve the original document's address as its own resource base.
     const baseUrl = document.baseURI;
     const documentTitle = document.title;
-    const html = document.documentElement.outerHTML;
+    const doctype = document.doctype ? "<!doctype html>" : "";
+    const html = doctype + document.documentElement.outerHTML;
 
     // Replace the document with a clean host. Explicit head/body elements are
     // retained for the script and transclude below.
@@ -52,14 +50,23 @@ if (window.top !== window) {
     );
 
     // Wait for the "server" to initialize
-    await new Promise<void>((resolve, reject) => {
-      const script = document.createElement("script");
-      script.src = new URL("./init-server.js", kernelUrl).href;
-      script.dataset.baseUrl = baseUrl;
-      script.onload = () => resolve();
-      script.onerror = (e) => reject(e);
-      document.head.append(script);
-    });
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = new URL("./init-server.js", kernelUrl).href;
+        script.dataset.baseUrl = baseUrl;
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error("Could not load init-server.js"));
+        document.head.append(script);
+      });
+    } catch (error) {
+      document.open();
+      document.write(
+        ErrorPage(error instanceof Error ? error.message : String(error)),
+      );
+      document.close();
+      return;
+    }
 
     // Transclude the serialized document
     const transclude = document.createElement("sw-transclude");

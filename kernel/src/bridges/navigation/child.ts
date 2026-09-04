@@ -32,12 +32,15 @@ export function installNavigationChild(events: EventsChild) {
     const didAddressChange = currentAddress !== address;
     const didParamsChange = currentParamsSerialized !== paramsSerialized;
 
+    // Commit the complete query before notifying observers so every change
+    // listener sees one coherent address/params pair.
+    currentAddress = address;
+    currentParamsSerialized = paramsSerialized;
+
     if (didParamsChange) {
-      currentParamsSerialized = paramsSerialized;
       window.dispatchEvent(new Event("paramschange"));
     }
     if (didAddressChange) {
-      currentAddress = address;
       window.dispatchEvent(new Event("addresschange"));
     }
     if (didAddressChange || didParamsChange) {

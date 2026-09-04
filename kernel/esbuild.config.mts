@@ -38,7 +38,4 @@ await esbuild.build({
   define: {
     KERNEL_IMPORT_MAP: JSON.stringify({ imports }),
   },
-  logOverride: {
-    "empty-import-meta": "silent",
-  },
 });

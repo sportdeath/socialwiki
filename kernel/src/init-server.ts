@@ -8,15 +8,12 @@ import { createParentBridgeEndpointInstaller } from "./bridges/parent";
 import { installTransclude } from "./transclude";
 import { handleNavigation } from "./bridges/navigation/shared";
 
-const isClassic = document.currentScript !== null;
-const currentScriptSrc = isClassic
-  ? (document.currentScript as HTMLScriptElement).src
-  : import.meta.url;
-const kernelUrl = new URL(currentScriptSrc);
-const baseUrl = isClassic
-  ? (document.currentScript as HTMLScriptElement).dataset.baseUrl ??
-    window.location.href
-  : window.location.href;
+const currentScript = document.currentScript;
+if (!(currentScript instanceof HTMLScriptElement) || !currentScript.src) {
+  throw new Error("The Social.Wiki server must be loaded as a classic script");
+}
+const kernelUrl = new URL(currentScript.src);
+const baseUrl = currentScript.dataset.baseUrl ?? window.location.href;
 
 // Install top-level services: Graffiti and resolution
 const graffiti = new GraffitiGuarded();
