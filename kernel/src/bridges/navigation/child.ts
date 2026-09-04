@@ -1,4 +1,4 @@
-import { composeQuery, parseQuery } from "../../route";
+import * as route from "../../route";
 import type { EventsChild } from "../events/child";
 import {
   BASE_URL_RESPONSE_EVENT,
@@ -9,6 +9,7 @@ import {
 } from "./shared";
 
 export function installNavigationChild(events: EventsChild) {
+  window.route = route;
   window.handleNavigation = handleNavigation;
   window.navigate = (to: string) => events.emit(NAVIGATE_EVENT, { to });
 
@@ -47,7 +48,7 @@ export function installNavigationChild(events: EventsChild) {
   }
 
   function currentQuery() {
-    return composeQuery(
+    return route.composeQuery(
       currentParamsSerialized
         ? new URLSearchParams(currentParamsSerialized)
         : undefined,
@@ -60,7 +61,7 @@ export function installNavigationChild(events: EventsChild) {
   }
 
   function applyQueryChange(query: string) {
-    const { params, address } = parseQuery(query);
+    const { params, address } = route.parseQuery(query);
     const { didAddressChange, didParamsChange } = updateQueryState(
       params,
       address,
@@ -135,7 +136,7 @@ export function installNavigationChild(events: EventsChild) {
     const p = payload as Record<string, unknown>;
     if (typeof p.query !== "string") return;
 
-    const { params, address } = parseQuery(p.query);
+    const { params, address } = route.parseQuery(p.query);
     // Parent updates are observations, not new navigation requests. Updating
     // the underlying state directly avoids echoing the query back upward.
     updateQueryState(params, address);

@@ -1,3 +1,8 @@
+/**
+ * Split an address into the next document name and the query delegated to it.
+ * For example, `parseAddress("v?mode=compact/alice")` returns
+ * `{ name: "v", query: "?mode=compact/alice" }`.
+ */
 export function parseAddress(address?: string): {
   name: string;
   query: string;
@@ -9,11 +14,20 @@ export function parseAddress(address?: string): {
   return { name, query };
 }
 
+/**
+ * Join a document name to its delegated query, adding `?` when needed.
+ * For example, `composeAddress("v", "/alice")` returns `"v?/alice"`.
+ */
 export function composeAddress(name: string, query: string): string {
   if (!query.length) return name;
   return `${name}${query.startsWith("?") ? query : `?${query}`}`;
 }
 
+/**
+ * Split a query into parameters and the address following its first `/`.
+ * For `"?mode=compact/alice"`, `params.get("mode")` is `"compact"` and
+ * `address` is `"alice"`; `"?/alice"` has empty parameters.
+ */
 export function parseQuery(query: string): {
   params?: URLSearchParams;
   address?: string;
@@ -33,6 +47,11 @@ export function parseQuery(query: string): {
   };
 }
 
+/**
+ * Join parameters and an optional delegated address into a query.
+ * Empty parameters plus `"alice"` produce `"?/alice"`; `mode=compact` plus
+ * `"alice"` produces `"?mode=compact/alice"`.
+ */
 export function composeQuery(
   params?: URLSearchParams,
   address?: string,

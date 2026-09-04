@@ -22,6 +22,9 @@ declare global {
   }
 
   interface Window {
+    /** Pure helpers for parsing and composing Social.Wiki routes. */
+    route: typeof import("../../route");
+
     /**
      * Requests navigation from the containing document. `to` is emitted
      * unchanged so each ancestor may interpret, rewrite, or forward it.
