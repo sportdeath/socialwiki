@@ -1,6 +1,9 @@
 import { GraffitiGuarded } from "@graffiti-garden/wrapper-data-guard";
 import { createDefaultResolver } from "./bridges/resolution/default";
-import { installDocumentResolver } from "./bridges/resolution/shared";
+import {
+  handleDocumentResolution,
+  resolveDocument,
+} from "./bridges/resolution/shared";
 import { createParentBridgeEndpointInstaller } from "./bridges/parent";
 import { installTransclude } from "./transclude";
 import { handleNavigation } from "./bridges/navigation/shared";
@@ -17,9 +20,10 @@ const baseUrl = isClassic
 
 // Install top-level services: Graffiti and resolution
 const graffiti = new GraffitiGuarded();
-const resolve = installDocumentResolver(
-  createDefaultResolver(kernelUrl.origin, baseUrl),
+handleDocumentResolution(
+  createDefaultResolver(kernelUrl.origin, baseUrl)
 );
+const resolve = resolveDocument;
 
 // Make an installer that allows those services to be
 // bridged to sub-documents.
