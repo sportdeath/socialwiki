@@ -32,6 +32,9 @@ await esbuild.build({
   splitting: false,
   format: "iife",
   outdir: "dist",
+  loader: {
+    ".css": "text",
+  },
   define: {
     KERNEL_IMPORT_MAP: JSON.stringify({ imports }),
   },
