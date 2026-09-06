@@ -1,5 +1,5 @@
 import * as esbuild from "esbuild";
-import packageLock from "./package-lock.json" with { type: "json" };
+import packageLock from "../package-lock.json" with { type: "json" };
 
 // Construct an import map that will be injected into documents.
 // Graffiti wrappers and Vue are included via CDN
@@ -21,7 +21,7 @@ const imports = Object.fromEntries(
   }),
 );
 
-await esbuild.build({
+const options = {
   entryPoints: ["src/init.ts", "src/init-server.ts"],
   platform: "browser",
   bundle: true,
@@ -38,4 +38,11 @@ await esbuild.build({
   define: {
     KERNEL_IMPORT_MAP: JSON.stringify({ imports }),
   },
-});
+} satisfies esbuild.BuildOptions;
+
+if (process.argv.includes("--watch")) {
+  const context = await esbuild.context(options);
+  await context.watch();
+} else {
+  await esbuild.build(options);
+}

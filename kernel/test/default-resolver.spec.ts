@@ -5,9 +5,9 @@ describe("default document resolution", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it.each([
-    ["v", "view.html"],
-    ["e", "edit.html"],
-    ["h", "history.html"],
+    ["v", "view/index.html"],
+    ["e", "edit/index.html"],
+    ["h", "history/index.html"],
   ])("resolves the %s lens", async (lens, file) => {
     const fetch = vi.fn(async () => new Response(`<h1>${lens}</h1>`));
     vi.stubGlobal("fetch", fetch);

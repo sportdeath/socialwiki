@@ -1,33 +1,15 @@
 {
-  "name": "social-wiki",
-  "version": "0.1.0",
-  "description": "A runtime for Social.Wiki documents",
-  "files": [
-    "src",
-    "dist",
-    "README.md",
-    "LICENSE"
-  ],
+  "name": "@social-wiki/kernel",
+  "private": true,
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
+    "dev": "tsx esbuild.config.mts --watch",
     "build:types": "tsc --declaration --emitDeclarationOnly",
     "build:js": "tsx esbuild.config.mts",
     "build": "rm -rf dist && npm run build:types && npm run build:js",
-    "check": "tsc --noEmit",
-    "prepublishOnly": "npm test && npm run check && npm run build"
+    "check": "tsc --noEmit"
   },
-  "author": "Theia Henderson",
-  "license": "GPL-3.0-or-later",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/sportdeath/socialwiki.git",
-    "directory": "kernel"
-  },
-  "bugs": {
-    "url": "https://github.com/sportdeath/socialwiki/issues"
-  },
-  "homepage": "https://github.com/sportdeath/socialwiki/tree/main/kernel#readme",
   "dependencies": {
     "@graffiti-garden/api": "^1.3.0",
     "@graffiti-garden/wrapper-data-guard": "^0.1.0",
@@ -37,13 +19,11 @@
     "vue": "^3.5.42"
   },
   "devDependencies": {
+    "@types/node": "^26.4.1",
     "esbuild": "^0.28.2",
     "happy-dom": "^20.14.0",
     "tsx": "^4.23.13",
     "typescript": "^7.0.2",
     "vitest": "^4.0.17"
-  },
-  "allowScripts": {
-    "esbuild@0.28.2": true
   }
 }

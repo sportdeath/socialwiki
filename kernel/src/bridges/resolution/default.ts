@@ -3,9 +3,9 @@ import type { DocumentResolver } from "./shared";
 
 const lensPaths = {
   // Lens HTML is deployed separately from the kernel bundles.
-  v: "/view.html",
-  e: "/edit.html",
-  h: "/history.html",
+  v: "/view/index.html",
+  e: "/edit/index.html",
+  h: "/history/index.html",
 } as const;
 
 type Lens = keyof typeof lensPaths;
