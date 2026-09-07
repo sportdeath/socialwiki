@@ -1,7 +1,13 @@
+import { GraffitiGuarded } from "@graffiti-garden/wrapper-data-guard";
 import { installTransclude } from "./transclude";
 import { installChildBridgeEndpoints } from "./bridges/child";
+import { handleNavigation } from "./bridges/navigation/shared";
 import { createParentBridgeEndpointInstaller } from "./bridges/parent";
-import { ErrorPage } from "./status-pages";
+import { createDefaultResolver } from "./bridges/resolution/default";
+import {
+  handleDocumentResolution,
+  resolveDocument,
+} from "./bridges/resolution/shared";
 
 declare const KERNEL_IMPORT_MAP: { imports: Record<string, string> };
 
@@ -11,6 +17,7 @@ if (!(currentScript instanceof HTMLScriptElement) || !currentScript.src) {
 }
 const kernelUrl = new URL(currentScript.src);
 
+// For most documents, which do not run at the top level...
 if (window.top !== window) {
   // A classic script can inject the import map before later module scripts run.
   const importScript = document.createElement("script");
@@ -34,39 +41,52 @@ if (window.top !== window) {
   installTransclude(resolve, installParentBridgeEndpoints);
 } else {
   // If we are the top-level document, wrap the document in an iframe
-  // that will act as a root "server" for all nested documents
-  const initializeHost = async () => {
+  // while this document acts as the host for all nested documents
+  const initializeHost = () => {
     // Preserve the original document's address as its own resource base.
     const baseUrl = document.baseURI;
     const documentTitle = document.title;
     const doctype = document.doctype ? "<!doctype html>" : "";
     const html = doctype + document.documentElement.outerHTML;
 
-    // Replace the document with a clean host. Explicit head/body elements are
-    // retained for the script and transclude below.
-    document.documentElement.replaceChildren(
-      document.createElement("head"),
-      document.createElement("body"),
+    // Replace the document with a clean host for the root transclude below.
+    document.documentElement.replaceChildren(document.createElement("body"));
+
+    // Install top-level services: Graffiti and resolution
+    const graffiti = new GraffitiGuarded();
+    handleDocumentResolution(
+      createDefaultResolver(kernelUrl.origin, baseUrl),
     );
 
-    // Wait for the "server" to initialize
-    try {
-      await new Promise<void>((resolve, reject) => {
-        const script = document.createElement("script");
-        script.src = new URL("./init-server.js", kernelUrl).href;
-        script.dataset.baseUrl = baseUrl;
-        script.onload = () => resolve();
-        script.onerror = () => reject(new Error("Could not load init-server.js"));
-        document.head.append(script);
-      });
-    } catch (error) {
-      document.open();
-      document.write(
-        ErrorPage(error instanceof Error ? error.message : String(error)),
-      );
-      document.close();
-      return;
-    }
+    // Make an installer that allows those services to be
+    // bridged to sub-documents.
+    const resolve = resolveDocument;
+    const bridgedServices = {
+      graffiti,
+      resolve,
+      baseUrl: Promise.resolve(baseUrl),
+    };
+    const installParentBridgeEndpoints =
+      createParentBridgeEndpointInstaller(bridgedServices);
+
+    // Install the <sw-transclude> component for including sub-documents
+    installTransclude(resolve, installParentBridgeEndpoints);
+
+    // Handle navigation requests that have bubbled all the way to the top.
+    handleNavigation((to) => {
+      // Query-only navigation belongs to a containing lens. At the root there
+      // is no address left in which to incorporate it.
+      if (to.startsWith("?")) return;
+
+      try {
+        const url = new URL(to, baseUrl);
+        // Ignore non-http/s URLs, e.g. javascript:
+        if (url.protocol !== "http:" && url.protocol !== "https:") return;
+        window.location.href = url.href;
+      } catch {
+        // Ignore malformed requests
+      }
+    });
 
     // Transclude the serialized document
     const transclude = document.createElement("sw-transclude");
@@ -82,12 +102,24 @@ if (window.top !== window) {
       documentTitle || new URL(baseUrl).hostname,
     );
     transclude.setAttribute("srcdoc", html);
+
+    // Forward any changes to the route to the top-level document
+    const syncRoute = () => {
+      const hash = window.location.hash;
+      const query = hash.startsWith("#/") ? `?/${hash.slice(2)}` : "";
+      if (transclude.getAttribute("query") !== query) {
+        transclude.setAttribute("query", query);
+      }
+    };
+    syncRoute();
+    window.addEventListener("hashchange", syncRoute);
+
     document.body.appendChild(transclude);
   };
 
   if (document.readyState === "loading") {
     window.addEventListener("DOMContentLoaded", initializeHost, { once: true });
   } else {
-    void initializeHost();
+    initializeHost();
   }
 }

@@ -22,14 +22,12 @@ const imports = Object.fromEntries(
 );
 
 const options = {
-  entryPoints: ["src/init.ts", "src/init-server.ts"],
+  entryPoints: ["src/init.ts"],
   platform: "browser",
   bundle: true,
   sourcemap: true,
   minify: true,
-  // Lenses include these files as classic scripts, so each entry must be a
-  // self-contained bundle with no shared ESM chunks.
-  splitting: false,
+  // Lenses include this as a classic script.
   format: "iife",
   outdir: "dist",
   loader: {
