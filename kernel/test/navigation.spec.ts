@@ -1,6 +1,7 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { installNavigationChild } from "../src/bridges/navigation/child";
 import {
+  handleNavigation,
   NAVIGATE_EVENT,
   QUERY_EVENT,
 } from "../src/bridges/navigation/shared";
@@ -9,8 +10,8 @@ import { createEventBridge } from "./events";
 it("exposes coherent query state and navigates only on local changes", () => {
   const events = createEventBridge();
   const emitted: Array<{ eventName: string; payload: unknown }> = [];
-  events.parent.listen((eventName, payload) => {
-    emitted.push({ eventName, payload });
+  events.parent.listen((event) => {
+    emitted.push({ eventName: event.type, payload: event.detail });
   });
   installNavigationChild(events.child);
 
@@ -59,4 +60,24 @@ it("exposes coherent query state and navigates only on local changes", () => {
   );
 
   for (const event of changeEvents) window.removeEventListener(event, record);
+});
+
+it("marks handled navigation so it does not pass through", () => {
+  const source = document.createElement("div");
+  document.body.append(source);
+  const onNavigate = vi.fn();
+  const stopHandling = handleNavigation(onNavigate);
+  const event = new CustomEvent(NAVIGATE_EVENT, {
+    detail: { to: "?/alice" },
+    bubbles: true,
+    cancelable: true,
+  });
+
+  source.dispatchEvent(event);
+
+  expect(event.defaultPrevented).toBe(true);
+  expect(onNavigate).toHaveBeenCalledWith("?/alice", source);
+
+  stopHandling();
+  source.remove();
 });

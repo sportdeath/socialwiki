@@ -23,7 +23,7 @@ type DisplayedFrame = {
 export class TranscludeFrame {
   readonly #host: HTMLElement;
   readonly #installParentBridgeEndpoints: ParentBridgeEndpointInstaller;
-  readonly #onEvent: (name: string, detail: unknown) => void;
+  readonly #onEvent: (event: CustomEvent<unknown>) => void;
   readonly #shadow: ShadowRoot;
   readonly #loadingIframe = document.createElement("iframe");
   #displayedFrame: DisplayedFrame | null = null;
@@ -31,7 +31,7 @@ export class TranscludeFrame {
   constructor(
     host: HTMLElement,
     installParentBridgeEndpoints: ParentBridgeEndpointInstaller,
-    onEvent: (name: string, detail: unknown) => void,
+    onEvent: (event: CustomEvent<unknown>) => void,
   ) {
     this.#host = host;
     this.#installParentBridgeEndpoints = installParentBridgeEndpoints;

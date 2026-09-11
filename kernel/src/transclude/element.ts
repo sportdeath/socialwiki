@@ -6,6 +6,22 @@ import type {
 import { ErrorPage, LoadingPage } from "../status-pages";
 import { TranscludeFrame } from "./frame";
 
+export interface TranscludeElement extends HTMLElement {
+  /**
+   * Receives child events after DOM dispatch, unless a bridge intercepted them
+   * or a listener called preventDefault(). Listening alone does not consume an
+   * event. Forwarding is opt-in: payloads remain untrusted when forwarded.
+   */
+  onUnhandledEvent?: (event: CustomEvent<unknown>) => void;
+  send(eventName: string, payload?: unknown): void;
+}
+
+declare global {
+  interface HTMLElementTagNameMap {
+    "sw-transclude": TranscludeElement;
+  }
+}
+
 export function defineTranscludeElement(
   resolve: DocumentResolver,
   installParentBridgeEndpoints: ParentBridgeEndpointInstaller,
@@ -27,7 +43,9 @@ export function defineTranscludeElement(
    *   status and HTML onto this element.
    * - status: reports the current result; it is an output, not an input.
    */
-  class SocialWikiTransclude extends HTMLElement {
+  class SocialWikiTransclude extends HTMLElement implements TranscludeElement {
+    onUnhandledEvent?: TranscludeElement["onUnhandledEvent"];
+
     // Only attributes which require an immediate reaction are observed.
     // ignore-lens-output is checked when an output event arrives, while status
     // is only written by this element.
@@ -51,7 +69,7 @@ export function defineTranscludeElement(
         this,
         installParentBridgeEndpoints,
         // Route events from the iframe back to this element
-        (name, detail) => this.#receiveFrameEvent(name, detail),
+        (event) => this.#receiveFrameEvent(event),
       );
     }
 
@@ -148,12 +166,14 @@ export function defineTranscludeElement(
       this.#frame.render(resolvedDocument);
     }
 
-    #receiveFrameEvent(name: string, detail: unknown) {
-      if (name === "sw-lens-output") this.#acceptLensOutput(detail);
+    #receiveFrameEvent(event: CustomEvent<unknown>) {
+      if (event.type === "sw-lens-output") this.#acceptLensOutput(event.detail);
 
-      this.dispatchEvent(
-        new CustomEvent(name, { detail, bubbles: true, composed: true }),
-      );
+      this.dispatchEvent(event);
+
+      // Wait for containing-document handlers (e.g. navigation) before offering
+      // the event to a transparent lens's forwarding callback.
+      if (!event.defaultPrevented) this.onUnhandledEvent?.(event);
     }
 
     #acceptLensOutput(output: unknown) {

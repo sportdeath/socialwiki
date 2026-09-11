@@ -40,9 +40,9 @@ export function installAutosizeParent(
     }
   };
 
-  const stopListening = events.listen((eventName, payload) => {
-    if (eventName !== AUTOSIZE_SIZE_EVENT) return;
-    applySize(payload);
+  const stopListening = events.listen((event) => {
+    if (event.type !== AUTOSIZE_SIZE_EVENT) return;
+    applySize(event.detail);
   });
 
   const sendMode = () => {

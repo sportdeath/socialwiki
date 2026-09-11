@@ -33,7 +33,9 @@ declare global {
 
     /**
      * Intercepts navigation that reaches this document. Without a handler the
-     * event continues bubbling; a handler may forward it with `navigate()`.
+     * event continues bubbling locally and may be forwarded by the containing
+     * transclude's onUnhandledEvent callback. A handler may forward it with
+     * `navigate()`.
      * Returns a function which removes the handler.
      */
     handleNavigation: typeof handleNavigation;
@@ -80,7 +82,7 @@ export function handleNavigation(
   onNavigate: (to: string, source: HTMLElement) => void,
 ) {
   const listener = (event: Event) => {
-    if (!(event instanceof CustomEvent)) return;
+    if (event.defaultPrevented || !(event instanceof CustomEvent)) return;
     const payload = event.detail;
     if (typeof payload !== "object" || payload === null) return;
     const { to } = payload as Record<string, unknown>;
@@ -90,6 +92,7 @@ export function handleNavigation(
 
     // Installing a handler means interception. It must explicitly call
     // window.navigate(to) if the request should continue to an ancestor.
+    event.preventDefault();
     event.stopImmediatePropagation();
     onNavigate(to, event.target);
   };

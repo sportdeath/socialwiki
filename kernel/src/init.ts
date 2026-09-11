@@ -1,9 +1,11 @@
 import { GraffitiGuarded } from "@graffiti-garden/wrapper-data-guard";
 import { installTransclude } from "./transclude";
 import { installChildBridgeEndpoints } from "./bridges/child";
+import { DEFAULT_BASE_URL } from "./constants";
 import { handleNavigation } from "./bridges/navigation/shared";
 import { createParentBridgeEndpointInstaller } from "./bridges/parent";
 import { createDefaultResolver } from "./bridges/resolution/default";
+import { serializeDocument } from "./bridges/resolution/document";
 import {
   handleDocumentResolution,
   resolveDocument,
@@ -43,11 +45,13 @@ if (window.top !== window) {
   // If we are the top-level document, wrap the document in an iframe
   // while this document acts as the host for all nested documents
   const initializeHost = () => {
-    // Preserve the original document's address as its own resource base.
-    const baseUrl = document.baseURI;
+    // Resource URLs follow the original document; navigation follows an
+    // explicit browser base or defaults to Social.Wiki.
+    const documentUrl = window.location.href;
+    const baseUrl =
+      document.querySelector<HTMLBaseElement>("base[href]")?.href ?? DEFAULT_BASE_URL;
     const documentTitle = document.title;
-    const doctype = document.doctype ? "<!doctype html>" : "";
-    const html = doctype + document.documentElement.outerHTML;
+    const html = serializeDocument(document, documentUrl);
 
     // Replace the document with a clean host for the root transclude below.
     document.documentElement.replaceChildren(document.createElement("body"));
@@ -55,7 +59,7 @@ if (window.top !== window) {
     // Install top-level services: Graffiti and resolution
     const graffiti = new GraffitiGuarded();
     handleDocumentResolution(
-      createDefaultResolver(kernelUrl.origin, baseUrl),
+      createDefaultResolver(kernelUrl.href, baseUrl),
     );
 
     // Make an installer that allows those services to be
@@ -99,8 +103,10 @@ if (window.top !== window) {
     transclude.id = "root";
     transclude.setAttribute(
       "name",
-      documentTitle || new URL(baseUrl).hostname,
+      documentTitle || new URL(documentUrl).hostname,
     );
+    // Child output must not replace the document this host is wrapping.
+    transclude.setAttribute("ignore-lens-output", "");
     transclude.setAttribute("srcdoc", html);
 
     // Forward any changes to the route to the top-level document

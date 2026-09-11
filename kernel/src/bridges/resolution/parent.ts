@@ -10,8 +10,10 @@ export function installResolutionParent(
   events: EventsParent,
   resolve: DocumentResolver,
 ) {
-  const stopListening = events.listen(async (eventName, payload) => {
-    if (eventName !== RESOLUTION_REQUEST_EVENT) return;
+  const stopListening = events.listen(async (event) => {
+    if (event.type !== RESOLUTION_REQUEST_EVENT) return;
+    event.preventDefault();
+    const payload = event.detail;
     if (typeof payload !== "object" || payload === null) return;
     const request = payload as Record<string, unknown>;
     if (

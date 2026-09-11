@@ -1,5 +1,5 @@
 type ChildListener = (payload: unknown) => void;
-type ParentListener = (eventName: string, payload: unknown) => void;
+type ParentListener = (event: CustomEvent<unknown>) => void;
 
 /** An in-memory connection with the same public shape as the event bridge. */
 export function createEventBridge() {
@@ -8,7 +8,8 @@ export function createEventBridge() {
 
   const child = {
     emit(eventName: string, payload?: unknown) {
-      for (const listener of parentListeners) listener(eventName, payload);
+      const event = new CustomEvent(eventName, { detail: payload, cancelable: true });
+      for (const listener of parentListeners) listener(event);
     },
     listen(eventName: string, listener: ChildListener) {
       const listeners = childListeners.get(eventName) ?? new Set();

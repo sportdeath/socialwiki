@@ -17,18 +17,19 @@ export function installNavigationParent(
     events.send(QUERY_EVENT, { query });
   };
 
-  const stopListening = events.listen((eventName) => {
-    if (eventName !== NAVIGATION_READY_EVENT) return;
-
-    // setQuery may run before the child is ready. Send its latest stored value
-    // now and push subsequent changes directly.
-    ready = true;
-    sendQuery();
+  const stopListening = events.listen((event) => {
+    if (event.type !== NAVIGATION_READY_EVENT) return;
+    event.preventDefault();
 
     // A nested document may become ready before this document has received its
-    // own base. Waiting keeps one stable inherited base for the whole tree.
+    // own base. Wait before providing that context to its descendants.
     void baseUrl.then((value) => {
+      // Query observers may resolve links, so establish their base first.
       events.send(BASE_URL_RESPONSE_EVENT, { baseUrl: value });
+      // setQuery may run before the child is ready. Send its latest stored value
+      // now and push subsequent changes directly.
+      ready = true;
+      sendQuery();
     });
   });
 

@@ -147,16 +147,21 @@ export function installNavigationChild(events: EventsChild) {
 
   // The base is stable document context, independent of resolution and query
   // changes. Keep it as a promise so early descendants can wait for and then
-  // inherit the same value without a separate initialization phase.
+  // inherit its effective value without a separate initialization phase.
   const inheritedBaseUrl = new Promise<string>((resolve) => {
     const stopListening = events.listen(BASE_URL_RESPONSE_EVENT, (payload) => {
       if (typeof payload !== "object" || payload === null) return;
       const p = payload as Record<string, unknown>;
       if (typeof p.baseUrl !== "string") return;
 
+      // A browser-like document may establish its own navigation context.
+      // Otherwise inherit the containing browser's base, not our resource URL.
+      const baseElement =
+        document.querySelector<HTMLBaseElement>("base[href]") ??
+        document.createElement("base");
       let url: URL;
       try {
-        url = new URL(p.baseUrl);
+        url = new URL(baseElement.getAttribute("href") ?? p.baseUrl, p.baseUrl);
       } catch {
         return;
       }
@@ -165,7 +170,6 @@ export function installNavigationChild(events: EventsChild) {
       const baseUrl = url.href;
       // Social.Wiki documents are originless and must use absolute URLs for
       // resources. This base exists only for native link resolution.
-      const baseElement = document.createElement("base");
       baseElement.href = baseUrl;
       document.head.prepend(baseElement);
       stopListening();

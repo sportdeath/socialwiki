@@ -5,17 +5,17 @@ import { installGraffitiParent } from "./graffiti/parent";
 import { installNavigationParent } from "./navigation/parent";
 import { installResolutionParent } from "./resolution/parent";
 
-
 /** Create an installer that can be used to connect this document to a transcluded iframe */
-export function createParentBridgeEndpointInstaller(bridgedServices: BridgedServices) {
+export function createParentBridgeEndpointInstaller(
+  bridgedServices: BridgedServices,
+) {
   const { resolve, graffiti, baseUrl } = bridgedServices;
   return (
     host: HTMLElement,
     iframe: HTMLIFrameElement,
-    onEvent: (eventName: string, payload: unknown) => void,
+    onEvent: (event: CustomEvent<unknown>) => void,
   ) => {
-    const events = installEventsParent(iframe);
-    const stopForwardingEvents = events.listen(onEvent);
+    const events = installEventsParent(iframe, onEvent);
     const navigation = installNavigationParent(events, baseUrl);
     const autosize = installAutosizeParent(iframe, host, events);
     const resolution = installResolutionParent(events, resolve);
@@ -23,7 +23,6 @@ export function createParentBridgeEndpointInstaller(bridgedServices: BridgedServ
 
     return {
       destroy() {
-        stopForwardingEvents();
         navigation.destroy();
         autosize.destroy();
         resolution.destroy();
