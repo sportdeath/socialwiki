@@ -1,6 +1,4 @@
 <script>
-    sessionStorage.redirectAddress = location.href.slice(
-        location.origin.length,
-    );
+    const address = location.href.slice(location.origin.length);
+    location.replace("/#" + address);
 </script>
-<meta http-equiv="refresh" content="0;URL='/'" />

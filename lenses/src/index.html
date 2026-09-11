@@ -1,19 +1,28 @@
 <!doctype html>
+<!-- This is the social wiki browser -->
 <html lang="en">
     <head>
         <meta charset="utf-8" />
         <title>Social Wiki</title>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="color-scheme" content="light dark" />
+        <link rel="icon" href="data:," />
         <script>
-            // A redirect from a 404 page (see public/404.html)
-            const redirectAddress = sessionStorage.redirectAddress;
-            delete sessionStorage.redirectAddress;
-            if (redirectAddress) {
-                history.replaceState(null, null, "/#" + redirectAddress);
+            // Keep this browser's own address when the kernel wraps it.
+            // Descendants inherit this base for links, including new-tab clicks.
+            if (window.top === window) {
+                const base = document.createElement("base");
+                base.href = window.location.href;
+                document.head.prepend(base);
             }
         </script>
-        <script type="module" src="/src/main.ts"></script>
+        <script src="./init.js"></script>
+        <script type="module">
+            // The kernel will wrap this document in an outer layer, so to
+            // avoid running the code twice, don't bother executing until
+            // the wrapper is set up
+            if (window.top !== window) import("/browser/main.ts");
+        </script>
     </head>
     <body>
         <div id="app"></div>

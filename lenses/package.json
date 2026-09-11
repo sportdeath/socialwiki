@@ -3,9 +3,8 @@
   "private": true,
   "scripts": {
     "build": "vite build",
-    "build:dev": "vite build --base http://localhost:5173/",
     "check": "tsc --noEmit",
-    "dev": "vite build --watch --base http://localhost:5173/",
+    "dev": "vite build --watch",
     "preview": "vite preview"
   },
   "dependencies": {

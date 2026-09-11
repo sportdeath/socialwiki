@@ -7,7 +7,8 @@ const root = resolve(import.meta.dirname, "src");
 
 export default defineConfig({
   root,
-  base: "https://social.wiki/",
+  // Portable as a directory on localhost, GitHub Pages, or a versioned CDN.
+  base: "./",
   plugins: [
     vue({
       template: {
