@@ -66,7 +66,7 @@ if (window.top !== window) {
     // bridged to sub-documents.
     const resolve = resolveDocument;
     const bridgedServices = {
-      graffiti,
+      createGraffiti: () => graffiti,
       resolve,
       baseUrl: Promise.resolve(baseUrl),
     };

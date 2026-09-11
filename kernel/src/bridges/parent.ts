@@ -9,7 +9,7 @@ import { installResolutionParent } from "./resolution/parent";
 export function createParentBridgeEndpointInstaller(
   bridgedServices: BridgedServices,
 ) {
-  const { resolve, graffiti, baseUrl } = bridgedServices;
+  const { resolve, createGraffiti, baseUrl } = bridgedServices;
   return (
     host: HTMLElement,
     iframe: HTMLIFrameElement,
@@ -19,7 +19,7 @@ export function createParentBridgeEndpointInstaller(
     const navigation = installNavigationParent(events, baseUrl);
     const autosize = installAutosizeParent(iframe, host, events);
     const resolution = installResolutionParent(events, resolve);
-    const graffitiBridge = installGraffitiParent(iframe, host, graffiti);
+    const graffitiBridge = installGraffitiParent(iframe, host, createGraffiti());
 
     return {
       destroy() {

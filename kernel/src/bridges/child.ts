@@ -8,9 +8,9 @@ import { installResolutionChild } from "./resolution/child";
 /** Install the child half of every capability provided over an iframe boundary. */
 export function installChildBridgeEndpoints() : BridgedServices {
   const events = installEventsChild();
-  const graffiti = installGraffitiChild();
+  const createGraffiti = installGraffitiChild();
   const resolve = installResolutionChild(events);
   const baseUrl = installNavigationChild(events);
   installAutosizeChild(events);
-  return { graffiti, resolve, baseUrl };
+  return { createGraffiti, resolve, baseUrl };
 }

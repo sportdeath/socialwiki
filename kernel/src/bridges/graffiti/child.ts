@@ -14,5 +14,7 @@ declare global {
 
 export function installGraffitiChild() {
   window.Graffiti = SocialWikiGraffiti;
-  return new window.Graffiti();
+  // Each new host needs initialization replay, even if the RPC client already
+  // exists. Its constructor schedules that replay after listeners are attached.
+  return () => new SocialWikiGraffiti();
 }
