@@ -69,7 +69,8 @@ let requestedLensParams: URLSearchParams | undefined;
 let renderedAddress = "";
 let currentContentKey = "";
 let activeRenderVersion = 0;
-let graffitiSession: GraffitiSession | null | undefined;
+let graffitiSession: GraffitiSession | null = null;
+let initialized = false;
 
 function setTranscludeSrcDoc(html: string, status: string) {
   transclude.setAttribute(
@@ -115,8 +116,11 @@ graffiti.sessionEvents.addEventListener("login", (event) => {
     console.error(detail.error);
     return;
   }
+  const actorChanged = graffitiSession?.actor !== detail.session.actor;
   graffitiSession = detail.session;
-  renderForSessionChange();
+  // Connecting the rendered page replays login for its new RPC host. Refresh
+  // only when the actor changes, or rendering would restart itself forever.
+  if (actorChanged) renderForSessionChange();
 });
 graffiti.sessionEvents.addEventListener("logout", (event) => {
   const detail = (event as GraffitiLogoutEvent).detail;
@@ -132,10 +136,9 @@ graffiti.sessionEvents.addEventListener("initialized", (event) => {
   const detail = (event as GraffitiSessionInitializedEvent).detail;
   if (detail?.error) console.error(detail.error);
 
-  if (graffitiSession === undefined) {
-    graffitiSession = null;
-    renderForSessionChange();
-  }
+  if (initialized) return;
+  initialized = true;
+  renderForSessionChange();
 });
 
 // Find all of the logged in actors trusted editors
@@ -225,6 +228,7 @@ function pickVersion(
 }
 
 async function renderLens(force = false) {
+  if (!initialized) return;
   const address = requestedAddress;
   if (!address?.length) return;
 
@@ -252,11 +256,6 @@ async function renderLens(force = false) {
 
   renderedAddress = address;
   currentContentKey = contentKey;
-
-  if (!requestedVersion && graffitiSession === undefined) {
-    setTranscludeSrcDoc(LoadingPage, "loading");
-    return;
-  }
 
   const renderVersion = ++activeRenderVersion;
   setTranscludeSrcDoc(LoadingPage, "loading");
