@@ -1,5 +1,3 @@
-import { composeAddress, composeQuery } from "./route";
-
 import styleCss from "../style.css?inline";
 const style = `<style>${styleCss}</style>`;
 
@@ -16,17 +14,17 @@ export const LoadingPage = `
 </html>
 `;
 
-export const PageNotFound = (pageName: string, origin: string) => `
+export const PageNotFound = (pageName: string, initUrl: string) => `
 <!doctype html>
 <html>
     <head>
       <meta charset="utf-8" />
-      <script src="${origin}/init.js"></script>
+      <script src="${initUrl}"></script>
       ${style}
     </head>
     <body>
         <h1 class="status">Nothing here…yet.</h1>
-        <a class="status-button" href="#/${composeAddress("e", composeQuery(undefined, pageName))}">
+        <a class="status-button" href="#/${window.route.composeAddress("e", window.route.composeQuery(undefined, pageName))}">
             Edit page
         </a>
     </body>

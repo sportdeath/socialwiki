@@ -236,7 +236,7 @@ header nav > ul {
     background: var(--background-color-interactive-hover);
 }
 
-body:has(.status) {
+body:has(> .status) {
     align-items: center;
     justify-content: center;
     gap: 1rem;
