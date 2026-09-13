@@ -40,8 +40,8 @@ transclude.onUnhandledEvent = (event) => {
 window.onUnhandledEvent = (event) => {
   transclude.send(event.type, event.detail);
 };
-// Only the view lens reports which document it resolved. ignore-lens-output
-// protects the inner element's attributes; cancellation also stops forwarding.
+// Only the view lens reports which document it resolved. Consume any nested
+// lens output so the generic event pass-through does not forward it.
 transclude.addEventListener("sw-lens-output", (event) => {
   event.preventDefault();
   event.stopPropagation();

@@ -85,19 +85,16 @@
         v-model="showSettingsDialog"
         :logged-in="!!session"
         :logging-out="loggingOut"
+        :resetting="resettingLenses"
+        :modifying="modifyingLens"
         @logout="session && logoutFromSettings(session)"
-        @edit="openMetaLensFromSettings"
+        @reset="session && resetLenses(session)"
+        @modify="modifyLens"
     />
     <main>
-        <MetaLensEditor
-            v-if="metaLens !== null"
-            :lens="metaLens"
-            :query="metaLensQuery"
-            :lens-sources="lensSources"
-        />
         <sw-transclude
-            v-else-if="session !== undefined"
-            :key="session?.actor ?? 'anonymous'"
+            v-if="session !== undefined"
+            :key="`${session?.actor ?? 'anonymous'}:${lensRevision}`"
             :id="lens"
             :name="
                 lens === 'v'
@@ -118,7 +115,6 @@
 <script setup lang="ts">
 import {
     computed,
-    defineAsyncComponent,
     onBeforeUnmount,
     onMounted,
     onUnmounted,
@@ -136,36 +132,26 @@ import {
     recordPageVisit,
     type VisitedPage,
 } from "./browser-history";
-import { useLensSources, type Lens } from "./lens-resolver";
+import { useLensSources } from "./lens-resolver";
 import {
     encodeRouteForRouter,
     extractHashRoute,
     getLegacyLensRedirect,
 } from "./browser-route";
+import {
+    isLens,
+    LENS_PUBLISHED_EVENT,
+    type Lens,
+} from "../utils/lenses";
 
 const { composeAddress, composeQuery, parseAddress, parseQuery } = window.route;
-const MetaLensEditor = defineAsyncComponent(
-    () => import("./MetaLensEditor.vue"),
-);
-
-function parseMetaLensRoute(
-    address: string,
-): { lens: Lens; query: string } | null {
-    const { name, query } = parseAddress(address);
-    const match = name.match(/^meta\/([veh])$/);
-    if (!match) return null;
-    return {
-        lens: match[1] as Lens,
-        query: query.startsWith("?") ? query.slice(1) : query,
-    };
-}
 
 const graffiti = useGraffiti();
 const session = useGraffitiSession();
 const router = useRouter();
 
 // The browser owns lens selection. Replacing the forwarding resolver here
-// lets a person's Graffiti-stored lens source take precedence over the
+// lets a person's own v/e/h pages take precedence over the
 // distribution defaults without changing the kernel or nested documents.
 const lensSources = useLensSources(graffiti, () => session.value);
 window.handleDocumentResolution(lensSources.resolveDocument);
@@ -175,11 +161,12 @@ const props = defineProps<{
 }>();
 
 const lens = ref("");
-const metaLens = ref<Lens | null>(null);
-const metaLensQuery = ref("");
 const lensParams = ref<URLSearchParams | undefined>(undefined);
 const pageAddress = ref<string | undefined>(undefined);
 const showSettingsDialog = ref(false);
+const resettingLenses = ref(false);
+const modifyingLens = ref<Lens | null>(null);
+const lensRevision = ref(0);
 
 function openSettingsDialog() {
     showSettingsDialog.value = true;
@@ -190,36 +177,57 @@ function closeSettingsDialog() {
     showSettingsDialog.value = false;
 }
 
-function openMetaLensEditor(lens: Lens) {
-    const route =
-        lens === "e"
-            ? editRoute.value
-            : composeAddress(lens, composeQuery(undefined, pageAddress.value));
-    const { query } = parseAddress(route);
-    router.push(encodeRouteForRouter(composeAddress(`meta/${lens}`, query)));
+async function modifyLens(lens: Lens) {
+    if (modifyingLens.value || resettingLenses.value) return;
+    modifyingLens.value = lens;
+    try {
+        const draft = await lensSources.getSource(lens);
+        closeSettingsDialog();
+        await router.push(
+            encodeRouteForRouter(
+                composeAddress(
+                    "e",
+                    composeQuery(
+                        new URLSearchParams({ draft }),
+                        composeAddress(
+                            lens,
+                            composeQuery(undefined, pageAddress.value),
+                        ),
+                    ),
+                ),
+            ),
+        );
+    } catch (error) {
+        reportSettingsError("Opening lens editor", error);
+    } finally {
+        modifyingLens.value = null;
+    }
 }
 
-function openMetaLensFromSettings(lens: Lens) {
-    closeSettingsDialog();
-    openMetaLensEditor(lens);
+async function resetLenses(currentSession: GraffitiSession) {
+    if (resettingLenses.value || modifyingLens.value) return;
+    resettingLenses.value = true;
+    try {
+        await lensSources.reset(currentSession);
+        lensRevision.value++;
+        closeSettingsDialog();
+    } catch (error) {
+        reportSettingsError("Resetting lenses", error);
+    } finally {
+        resettingLenses.value = false;
+    }
+}
+
+function reportSettingsError(action: string, error: unknown) {
+    console.error(action, error);
+    alert(
+        `${action} failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
 }
 
 watch(
     () => props.address,
     (newAddress) => {
-        // Meta routes render the browser's lens editor directly. Ordinary
-        // routes are split into the lens and the page address it receives.
-        const metaRoute = parseMetaLensRoute(newAddress);
-        if (metaRoute) {
-            metaLens.value = metaRoute.lens;
-            metaLensQuery.value = metaRoute.query;
-            lens.value = `meta/${metaRoute.lens}`;
-            lensParams.value = undefined;
-            return;
-        }
-
-        metaLens.value = null;
-        metaLensQuery.value = "";
         const { name: lens_, query } = parseAddress(newAddress);
         lens.value = lens_;
         const { params: lensParams_, address: pageAddress_ } =
@@ -321,9 +329,18 @@ watch(
     { immediate: true },
 );
 const stopHandlingNavigation = window.handleNavigation(onNavigate);
+const onLensPublished = (event: Event) => {
+    if (!(event instanceof CustomEvent)) return;
+    const publishedLens = event.detail?.lens;
+    if (typeof publishedLens !== "string" || !isLens(publishedLens)) return;
+    event.preventDefault();
+    void lensSources.refresh();
+};
+window.addEventListener(LENS_PUBLISHED_EVENT, onLensPublished);
 onBeforeUnmount(() => {
     detachObservedTransclude();
     stopHandlingNavigation();
+    window.removeEventListener(LENS_PUBLISHED_EVENT, onLensPublished);
 });
 
 const editRoute = computed(() => {
@@ -369,16 +386,6 @@ watch(
 // When input is submitted, the route changes
 // Preserve the current lens when only the page's own query changes.
 function navigateToInputAddress(inputAddress: string) {
-    if (metaLens.value !== null) {
-        router.push(
-            encodeRouteForRouter(
-                composeAddress("v", composeQuery(undefined, inputAddress)),
-            ),
-        );
-        blurActiveElement();
-        return;
-    }
-
     // Extract the page name from the input
     const { name: inputPageName } = parseAddress(inputAddress);
     const { name: currentPageName } = parseAddress(pageAddress.value);

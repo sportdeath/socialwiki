@@ -1,6 +1,5 @@
 import type {
   Graffiti,
-  GraffitiObject,
   GraffitiSession,
   JSONSchema,
 } from "@graffiti-garden/api";
@@ -8,44 +7,27 @@ import { loadDocument } from "../../../kernel/src/bridges/resolution/document";
 import { distributionUrl } from "../utils/distribution";
 import { useGraffitiDiscover } from "@graffiti-garden/wrapper-vue";
 import { nextTick, watch } from "vue";
+import {
+  createPageVersion,
+  getPageVersions,
+  pageVersionSchema,
+  sortPageVersions,
+  type PageVersionObject,
+} from "../utils/page-versions";
+import {
+  isLens,
+  lensDirectories,
+  lenses,
+  type Lens,
+} from "../utils/lenses";
 
-const lensDirectories = {
-  v: "view",
-  e: "edit",
-  h: "history",
-} as const;
-
-export type Lens = keyof typeof lensDirectories;
-
-function isLens(value: string): value is Lens {
-  return Object.hasOwn(lensDirectories, value);
-}
-
-function lensUrl(lens: Lens) {
-  // This is the stable object identifier stored in Graffiti, not the URL used
-  // to download the distribution's default lens.
-  return `https://social.wiki/lenses/${lens}`;
-}
-
-function lensSchema() {
+function lensSchema(actor: string) {
   return {
+    anyOf: lenses.map(pageVersionSchema),
     properties: {
-      value: {
-        properties: {
-          activity: { const: "Update" },
-          object: {
-            type: "string",
-            enum: (Object.keys(lensDirectories) as Lens[]).map(lensUrl),
-          },
-          published: { type: "number" },
-          source: {
-            anyOf: [{ type: "string" }, { type: "null" }],
-          },
-        },
-        required: ["activity", "object", "published", "source"],
-      },
+      actor: { const: actor },
     },
-    required: ["value"],
+    required: ["actor", "value"],
   } as const satisfies JSONSchema;
 }
 
@@ -57,45 +39,16 @@ async function loadDefaultLens(lens: Lens, signal?: AbortSignal) {
   );
 }
 
-function latestLensSource(
-  objects: Iterable<GraffitiObject<ReturnType<typeof lensSchema>>>,
+function lensVersions(
+  objects: Iterable<PageVersionObject>,
   lens: Lens,
   actor: string,
 ) {
-  let latest: GraffitiObject<ReturnType<typeof lensSchema>> | undefined;
-  for (const object of objects) {
-    if (object.actor !== actor || object.value.object !== lensUrl(lens))
-      continue;
-    if (
-      !latest ||
-      object.value.published > latest.value.published ||
-      (object.value.published === latest.value.published &&
-        object.url > latest.url)
-    ) {
-      latest = object;
-    }
-  }
-  return latest?.value.source;
-}
-
-async function saveLensSource(
-  graffiti: Graffiti,
-  lens: Lens,
-  source: string | null,
-  session: GraffitiSession,
-) {
-  await graffiti.post<ReturnType<typeof lensSchema>>(
-    {
-      channels: [session.actor],
-      allowed: [session.actor],
-      value: {
-        activity: "Update",
-        object: lensUrl(lens),
-        published: Date.now(),
-        source,
-      },
-    },
-    session,
+  return sortPageVersions(
+    [...objects].filter(
+      (object) =>
+        object.actor === actor && object.value.object === lens,
+    ),
   );
 }
 
@@ -103,25 +56,15 @@ export function useLensSources(
   graffiti: Graffiti,
   session: () => GraffitiSession | null | undefined,
 ) {
-  // One browser-owned query, not a discover per resolution. The Vue wrapper
-  // also merges local posts/deletions into these results without polling.
-  const baseSchema = lensSchema();
-  const { objects, isFirstPoll } =
-    useGraffitiDiscover<ReturnType<typeof lensSchema>>(
-      () => {
-        const actor = session()?.actor;
-        return actor ? [actor] : [];
-      },
-      () =>
-        ({
-          ...baseSchema,
-          properties: {
-            ...baseSchema.properties,
-            actor: { const: session()?.actor ?? "" },
-          },
-        }) as const,
-      session,
-    );
+  // One browser-owned query, not a discover per resolution. Explicit lens
+  // publication advances its cursor before the new lens is resolved.
+  const { objects, isFirstPoll, poll } = useGraffitiDiscover(
+    () => (session() ? lenses : []),
+    () => lensSchema(session()?.actor ?? ""),
+    session,
+  );
+  const mediaCache = new Map<string, Promise<string>>();
+  let refreshing: Promise<void> | undefined;
 
   async function waitUntilLoaded(signal?: AbortSignal) {
     // Let a session change reset the reactive query before reading its results.
@@ -148,13 +91,36 @@ export function useLensSources(
 
   async function getSource(lens: Lens, signal?: AbortSignal) {
     await waitUntilLoaded(signal);
+    await refreshing;
+    signal?.throwIfAborted();
 
     const actor = session()?.actor;
-    const source = actor
-      ? latestLensSource(objects.value, lens, actor)
+    const version = actor
+      ? lensVersions(objects.value as PageVersionObject[], lens, actor).at(0)
       : undefined;
+    if (!version) return loadDefaultLens(lens, signal);
 
-    return source ?? loadDefaultLens(lens, signal);
+    const mediaAddress = version.value.result.media;
+    let source = mediaCache.get(mediaAddress);
+    if (!source) {
+      source = graffiti
+        .getMedia(mediaAddress, { types: ["text/html"] }, session())
+        .then((media) => media.data.text());
+      mediaCache.set(mediaAddress, source);
+      void source.catch(() => mediaCache.delete(mediaAddress));
+    }
+    const html = await source;
+    signal?.throwIfAborted();
+    return html;
+  }
+
+  function refresh() {
+    if (!refreshing) {
+      refreshing = poll().finally(() => {
+        refreshing = undefined;
+      });
+    }
+    return refreshing;
   }
 
   const resolveDocument = async (src: string, signal?: AbortSignal) => {
@@ -175,17 +141,23 @@ export function useLensSources(
 
   return {
     getSource,
+    refresh,
     resolveDocument,
-    setSource(lens: Lens, source: string, currentSession: GraffitiSession) {
-      return saveLensSource(graffiti, lens, source, currentSession);
-    },
-    async resetSource(lens: Lens, currentSession: GraffitiSession) {
-      // Graffiti objects are immutable. A null source is an append-only reset
-      // marker, leaving the earlier versions intact.
-      await saveLensSource(graffiti, lens, null, currentSession);
-      return loadDefaultLens(lens);
+    async reset(currentSession: GraffitiSession) {
+      for (const lens of lenses) {
+        const [source, versions] = await Promise.all([
+          loadDefaultLens(lens),
+          getPageVersions(graffiti, lens),
+        ]);
+        await createPageVersion(
+          graffiti,
+          lens,
+          source,
+          versions.map((version) => version.url),
+          `Reset ${lensDirectories[lens]} lens to its default`,
+          currentSession,
+        );
+      }
     },
   };
 }
-
-export type LensSources = ReturnType<typeof useLensSources>;

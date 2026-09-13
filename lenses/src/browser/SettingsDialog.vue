@@ -11,19 +11,28 @@
                 v-if="loggedIn"
                 type="button"
                 class="warning"
-                :disabled="loggingOut"
+                :disabled="busy"
                 @click="emit('logout')"
             >
                 {{ loggingOut ? "Logging out..." : "Log Out" }}
             </button>
-            <button type="button" @click="emit('edit', 'v')">
-                Modify View
+            <button
+                v-if="loggedIn"
+                type="button"
+                class="warning"
+                :disabled="busy"
+                @click="emit('reset')"
+            >
+                {{ resetting ? "Resetting..." : "Reset all lenses" }}
             </button>
-            <button type="button" @click="emit('edit', 'e')">
-                Modify Edit
+            <button type="button" :disabled="busy" @click="emit('modify', 'v')">
+                {{ modifying === "v" ? "Opening..." : "Modify View" }}
             </button>
-            <button type="button" @click="emit('edit', 'h')">
-                Modify History
+            <button type="button" :disabled="busy" @click="emit('modify', 'e')">
+                {{ modifying === "e" ? "Opening..." : "Modify Edit" }}
+            </button>
+            <button type="button" :disabled="busy" @click="emit('modify', 'h')">
+                {{ modifying === "h" ? "Opening..." : "Modify History" }}
             </button>
         </div>
         <footer>
@@ -34,11 +43,24 @@
     </DialogFrame>
 </template>
 <script setup lang="ts">
+import { computed } from "vue";
 import DialogFrame from "../utils/DialogFrame.vue";
-import type { Lens } from "./lens-resolver";
+import type { Lens } from "../utils/lenses";
 const open = defineModel<boolean>({ required: true });
-defineProps<{ loggedIn: boolean; loggingOut: boolean }>();
-const emit = defineEmits<{ logout: []; edit: [lens: Lens] }>();
+const props = defineProps<{
+    loggedIn: boolean;
+    loggingOut: boolean;
+    resetting: boolean;
+    modifying: Lens | null;
+}>();
+const busy = computed(
+    () => props.loggingOut || props.resetting || props.modifying !== null,
+);
+const emit = defineEmits<{
+    logout: [];
+    reset: [];
+    modify: [lens: Lens];
+}>();
 </script>
 <style scoped>
 .settings-dialog :deep(.dialog-panel) {
