@@ -27,7 +27,7 @@ function lensUrl(lens: Lens) {
   return `https://social.wiki/lenses/${lens}`;
 }
 
-function lensSchema(lens?: Lens) {
+function lensSchema() {
   return {
     properties: {
       value: {
@@ -35,9 +35,7 @@ function lensSchema(lens?: Lens) {
           activity: { const: "Update" },
           object: {
             type: "string",
-            enum: lens
-              ? [lensUrl(lens)]
-              : (Object.keys(lensDirectories) as Lens[]).map(lensUrl),
+            enum: (Object.keys(lensDirectories) as Lens[]).map(lensUrl),
           },
           published: { type: "number" },
           source: {
@@ -80,54 +78,6 @@ function latestLensSource(
   return latest?.value.source;
 }
 
-async function getOverride(
-  graffiti: Graffiti,
-  lens: Lens,
-  session: GraffitiSession,
-) {
-  const baseSchema = lensSchema(lens);
-  const schema = {
-    ...baseSchema,
-    properties: {
-      ...baseSchema.properties,
-      actor: { const: session.actor },
-    },
-    required: ["actor", "value"],
-  } as const satisfies JSONSchema;
-
-  const objects = new Map<
-    string,
-    GraffitiObject<ReturnType<typeof lensSchema>>
-  >();
-
-  for await (const result of graffiti.discover(
-    [session.actor],
-    schema,
-    session,
-  )) {
-    if (result.error) {
-      console.error(result.error);
-      continue;
-    }
-    if (result.tombstone) objects.delete(result.object.url);
-    else objects.set(result.object.url, result.object);
-  }
-
-  return latestLensSource(objects.values(), lens, session.actor);
-}
-
-export async function getLensSource(
-  graffiti: Graffiti,
-  lens: Lens,
-  session?: GraffitiSession | null,
-  signal?: AbortSignal,
-) {
-  const source = session
-    ? await getOverride(graffiti, lens, session)
-    : undefined;
-  return source ?? loadDefaultLens(lens, signal);
-}
-
 async function saveLensSource(
   graffiti: Graffiti,
   lens: Lens,
@@ -149,26 +99,8 @@ async function saveLensSource(
   );
 }
 
-export function setLensSource(
+export function useLensSources(
   graffiti: Graffiti,
-  lens: Lens,
-  source: string,
-  session: GraffitiSession,
-) {
-  return saveLensSource(graffiti, lens, source, session);
-}
-
-export function resetLensSource(
-  graffiti: Graffiti,
-  lens: Lens,
-  session: GraffitiSession,
-) {
-  // Graffiti objects are immutable. A null source is an append-only reset
-  // marker, leaving the earlier versions intact.
-  return saveLensSource(graffiti, lens, null, session);
-}
-
-export function createBrowserResolver(
   session: () => GraffitiSession | null | undefined,
 ) {
   // One browser-owned query, not a discover per resolution. The Vue wrapper
@@ -191,15 +123,7 @@ export function createBrowserResolver(
       session,
     );
 
-  return async (src: string, signal?: AbortSignal) => {
-    const url = new URL(src, document.baseURI);
-    if (!url.hash.startsWith("#/")) {
-      throw new Error(`Could not resolve transclusion: ${src}`);
-    }
-
-    const { name: lens, query } = window.route.parseAddress(url.hash.slice(2));
-    if (!isLens(lens)) throw new Error(`Unrecognized lens: ${lens}`);
-
+  async function waitUntilLoaded(signal?: AbortSignal) {
     // Let a session change reset the reactive query before reading its results.
     // Only initial discovery needs waiting; ordinary tab changes read memory.
     await nextTick();
@@ -220,16 +144,48 @@ export function createBrowserResolver(
       await nextTick();
     }
     signal?.throwIfAborted();
+  }
+
+  async function getSource(lens: Lens, signal?: AbortSignal) {
+    await waitUntilLoaded(signal);
 
     const actor = session()?.actor;
     const source = actor
       ? latestLensSource(objects.value, lens, actor)
       : undefined;
 
+    return source ?? loadDefaultLens(lens, signal);
+  }
+
+  const resolveDocument = async (src: string, signal?: AbortSignal) => {
+    const url = new URL(src, document.baseURI);
+    if (!url.hash.startsWith("#/")) {
+      throw new Error(`Could not resolve transclusion: ${src}`);
+    }
+
+    const { name: lens, query } = window.route.parseAddress(url.hash.slice(2));
+    if (!isLens(lens)) throw new Error(`Unrecognized lens: ${lens}`);
+
     return {
-      srcdoc: source ?? (await loadDefaultLens(lens, signal)),
+      srcdoc: await getSource(lens, signal),
       query,
       status: "loading",
     };
   };
+
+  return {
+    getSource,
+    resolveDocument,
+    setSource(lens: Lens, source: string, currentSession: GraffitiSession) {
+      return saveLensSource(graffiti, lens, source, currentSession);
+    },
+    async resetSource(lens: Lens, currentSession: GraffitiSession) {
+      // Graffiti objects are immutable. A null source is an append-only reset
+      // marker, leaving the earlier versions intact.
+      await saveLensSource(graffiti, lens, null, currentSession);
+      return loadDefaultLens(lens);
+    },
+  };
 }
+
+export type LensSources = ReturnType<typeof useLensSources>;

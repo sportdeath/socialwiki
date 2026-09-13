@@ -4,6 +4,7 @@ import type {
   GraffitiSession,
   JSONSchema,
 } from "@graffiti-garden/api";
+import { annotationSchema } from "./schemas";
 
 export function pageVersionSchema(pageChannel: string) {
   return {
@@ -50,6 +51,16 @@ export function pageVersionSchema(pageChannel: string) {
 
 export type PageVersionSchema = ReturnType<typeof pageVersionSchema>;
 export type PageVersionObject = GraffitiObject<PageVersionSchema>;
+
+/** Everything needed to choose the current version of a page. */
+export function pageStateSchema(pageChannel: string) {
+  return {
+    anyOf: [
+      pageVersionSchema(pageChannel),
+      annotationSchema(["Protect", "Remove"]),
+    ],
+  } as const satisfies JSONSchema;
+}
 
 export async function createPageVersion(
   graffiti: Graffiti,

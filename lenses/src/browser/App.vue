@@ -93,6 +93,7 @@
             v-if="metaLens !== null"
             :lens="metaLens"
             :query="metaLensQuery"
+            :lens-sources="lensSources"
         />
         <sw-transclude
             v-else-if="session !== undefined"
@@ -135,7 +136,7 @@ import {
     recordPageVisit,
     type VisitedPage,
 } from "./browser-history";
-import { createBrowserResolver, type Lens } from "./lens-resolver";
+import { useLensSources, type Lens } from "./lens-resolver";
 import {
     encodeRouteForRouter,
     extractHashRoute,
@@ -166,9 +167,8 @@ const router = useRouter();
 // The browser owns lens selection. Replacing the forwarding resolver here
 // lets a person's Graffiti-stored lens source take precedence over the
 // distribution defaults without changing the kernel or nested documents.
-window.handleDocumentResolution(
-    createBrowserResolver(() => session.value),
-);
+const lensSources = useLensSources(graffiti, () => session.value);
+window.handleDocumentResolution(lensSources.resolveDocument);
 
 const props = defineProps<{
     address: string;

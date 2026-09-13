@@ -404,7 +404,7 @@ import type { GraffitiSession } from "@graffiti-garden/api";
 import {
     createPageVersion,
     deletePageVersion,
-    pageVersionSchema,
+    pageStateSchema,
     pickVersion,
     type PageVersionObject,
     sortPageVersions,
@@ -512,13 +512,7 @@ onBeforeUnmount(() => {
 const { objects: pageVersionsAndAnnotations, isFirstPoll } =
     useGraffitiDiscover(
         () => [pageName.value],
-        () =>
-            ({
-                anyOf: [
-                    pageVersionSchema(pageName.value),
-                    annotationSchema(["Protect", "Remove"]),
-                ],
-            }) as const,
+        () => pageStateSchema(pageName.value),
     );
 const pageVersions = computed(() => {
     const pageVersionsRaw =

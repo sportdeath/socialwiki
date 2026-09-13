@@ -28,15 +28,14 @@ export async function trustActor(
   );
 }
 
-export async function getTrustContext(
+async function discoverTrustContext(
   graffiti: Graffiti,
-  session?: GraffitiSession | null,
+  actor: string,
 ) {
   const results = new Map<string, AnnotationObject>();
-  // Anonymous viewers use only the distribution defaults.
-  if (session) for await (const result of graffiti.discover<AnnotationSchema>(
-    [session.actor],
-    annotationSchema(["Trust", "Untrust"], { actor: session.actor }),
+  for await (const result of graffiti.discover<AnnotationSchema>(
+    [actor],
+    annotationSchema(["Trust", "Untrust"], { actor }),
   )) {
     if (result.error) {
       console.error(result.error);
@@ -48,13 +47,54 @@ export async function getTrustContext(
       results.set(result.object.url, result.object);
     }
   }
+
+  return createTrustContext([...results.values()], actor);
+}
+
+const trustContextCache = new WeakMap<
+  Graffiti,
+  Map<string, ReturnType<typeof discoverTrustContext>>
+>();
+
+/**
+ * Read an actor's trust decisions once per Graffiti connection. Trust is
+ * independent of the page, so navigation within one lens can reuse it.
+ */
+export function getTrustContext(
+  graffiti: Graffiti,
+  session?: GraffitiSession | null,
+) {
+  if (!session) return Promise.resolve(createTrustContext([], undefined));
+
+  let byActor = trustContextCache.get(graffiti);
+  if (!byActor) {
+    byActor = new Map();
+    trustContextCache.set(graffiti, byActor);
+  }
+
+  const cached = byActor.get(session.actor);
+  if (cached) return cached;
+
+  const pending = discoverTrustContext(graffiti, session.actor);
+  byActor.set(session.actor, pending);
+  // A temporary failure should not poison future page loads.
+  void pending.catch(() => {
+    if (byActor.get(session.actor) === pending) byActor.delete(session.actor);
+  });
+  return pending;
+}
+
+function createTrustContext(
+  annotations: AnnotationObject[],
+  actor?: string,
+) {
   const trustByActor = computeTrustAnnotationsByActor(
-    [...results.values()],
+    annotations,
     defaultTrustedEditors,
   );
   return {
     trustByActor,
-    trustedEditors: trustedActors(trustByActor, session?.actor),
+    trustedEditors: trustedActors(trustByActor, actor),
   };
 }
 

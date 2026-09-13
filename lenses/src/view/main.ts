@@ -9,16 +9,13 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import type { TranscludeElement } from "../../../kernel/src/transclude/element";
 import { distributionUrl } from "../utils/distribution";
 import {
-  pageVersionSchema,
+  pageStateSchema,
   pickVersion,
   sortPageVersions,
   type PageVersionObject,
 } from "../utils/page-versions";
 import { sortProtectionHistory } from "../utils/protection";
-import {
-  annotationSchema,
-  type AnnotationObject,
-} from "../utils/schemas";
+import type { AnnotationObject } from "../utils/schemas";
 import {
   ErrorPage,
   LoadingPage,
@@ -134,12 +131,10 @@ graffiti.sessionEvents.addEventListener("initialized", (event) => {
 
 async function getPageVersionsAndProtection(pageName: string) {
   const objects = new Map<string, PageVersionObject | AnnotationObject>();
-  for await (const result of graffiti.discover([pageName], {
-    anyOf: [
-      pageVersionSchema(pageName),
-      annotationSchema(["Protect", "Remove"]),
-    ],
-  })) {
+  for await (const result of graffiti.discover(
+    [pageName],
+    pageStateSchema(pageName),
+  )) {
     if (result.error) {
       console.error(result.error);
       continue;

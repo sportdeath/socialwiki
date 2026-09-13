@@ -45,16 +45,15 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { CodeEditor } from "monaco-editor-vue3";
 import TwoPaneLayout from "../utils/TwoPaneLayout.vue";
 import {
-    getLensSource,
-    resetLensSource,
-    setLensSource,
     type Lens,
+    type LensSources,
 } from "./lens-resolver";
-import { useGraffiti, useGraffitiSession } from "@graffiti-garden/wrapper-vue";
+import { useGraffitiSession } from "@graffiti-garden/wrapper-vue";
 
 const props = defineProps<{
     lens: Lens;
     query: string;
+    lensSources: LensSources;
 }>();
 
 const lensLabel = computed(() =>
@@ -66,7 +65,6 @@ const source = ref("");
 const previewSource = ref("");
 const errorMessage = ref("");
 const busy = ref(false);
-const graffiti = useGraffiti();
 const session = useGraffitiSession();
 let saveTimer: number | undefined;
 let savedSource = "";
@@ -91,11 +89,8 @@ async function loadLensSource() {
     clearSaveTimer();
 
     try {
-        const rawSource = await getLensSource(
-            graffiti,
-            props.lens,
-            requireSession(),
-        );
+        requireSession();
+        const rawSource = await props.lensSources.getSource(props.lens);
         if (thisLoad !== loadVersion) return;
 
         savedSource = rawSource;
@@ -121,8 +116,7 @@ function schedulePersist(nextSource: string) {
         if (thisSave !== saveVersion) return;
         saveTimer = undefined;
         try {
-            await setLensSource(
-                graffiti,
+            await props.lensSources.setSource(
                 lens,
                 nextSource,
                 savingSession,
@@ -139,21 +133,26 @@ function schedulePersist(nextSource: string) {
 }
 
 async function resetLens() {
+    const thisLoad = ++loadVersion;
+    const lens = props.lens;
     busy.value = true;
     errorMessage.value = "";
     clearSaveTimer();
     try {
-        await resetLensSource(
-            graffiti,
-            props.lens,
+        const rawSource = await props.lensSources.resetSource(
+            lens,
             requireSession(),
         );
-        await loadLensSource();
+        if (thisLoad !== loadVersion) return;
+        savedSource = rawSource;
+        source.value = rawSource;
+        previewSource.value = rawSource;
     } catch (error) {
+        if (thisLoad !== loadVersion) return;
         errorMessage.value =
             error instanceof Error ? error.message : String(error);
     } finally {
-        busy.value = false;
+        if (thisLoad === loadVersion) busy.value = false;
     }
 }
 
