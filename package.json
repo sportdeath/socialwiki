@@ -1,5 +1,5 @@
 {
-  "name": "social-wiki",
+  "name": "socialwiki",
   "version": "0.1.0",
   "description": "A web held in common.",
   "files": [
@@ -13,11 +13,11 @@
     "lenses"
   ],
   "scripts": {
-    "build": "npm run build --workspace @social-wiki/kernel && npm run build --workspace @social-wiki/lenses && tsx build.mts",
+    "build": "npm run build --workspace @socialwiki/kernel && npm run build --workspace @socialwiki/lenses && tsx build.mts",
     "check": "npm run check --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
-    "predev": "npm run build --workspace @social-wiki/kernel && npm run build --workspace @social-wiki/lenses && tsx build.mts --link",
-    "dev": "concurrently --kill-others --names kernel,lenses,server \"npm run dev --workspace @social-wiki/kernel\" \"npm run dev --workspace @social-wiki/lenses\" \"npm run preview\"",
+    "predev": "npm run build --workspace @socialwiki/kernel && npm run build --workspace @socialwiki/lenses && tsx build.mts --link",
+    "dev": "concurrently --kill-others --names kernel,lenses,server \"npm run dev --workspace @socialwiki/kernel\" \"npm run dev --workspace @socialwiki/lenses\" \"npm run preview\"",
     "preview": "vite preview . --config lenses/vite.config.mts --outDir dist --port 5173 --strictPort",
     "prepublishOnly": "npm test && npm run check && npm run build"
   },

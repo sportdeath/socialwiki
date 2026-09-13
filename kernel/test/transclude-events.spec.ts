@@ -8,7 +8,12 @@ import { defineTranscludeElement } from "../src/transclude/element";
 vi.stubGlobal("origin", "null");
 afterAll(() => vi.unstubAllGlobals());
 const receivers = new WeakMap<HTMLElement, Parameters<ParentBridgeEndpointInstaller>[2]>();
-defineTranscludeElement(vi.fn(), (host, _iframe, receive) => {
+const resolveDocument = vi.fn(async () => ({
+  srcdoc: "<p>Lens</p>",
+  query: "",
+  status: "loading",
+}));
+defineTranscludeElement(resolveDocument, (host, _iframe, receive) => {
   receivers.set(host, receive);
   return { destroy() {}, send() {}, setQuery() {} };
 });
@@ -27,6 +32,42 @@ function receive(element: HTMLElement, type: string, detail: unknown) {
 }
 
 afterEach(() => document.body.replaceChildren());
+
+it("keeps direct srcdoc as input and reflects uncanceled resolved-lens output", async () => {
+  const direct = transclude();
+  receive(direct, "sw-lens-output", {
+    status: "ok",
+    srcdoc: "<p>Nested output</p>",
+  });
+  expect(direct.getAttribute("srcdoc")).toBe("<p>Example</p>");
+
+  const resolved = document.createElement("sw-transclude");
+  resolved.setAttribute("src", "#/v?/example");
+  document.body.append(resolved);
+  await vi.waitFor(() => expect(receivers.has(resolved)).toBe(true));
+
+  receive(resolved, "sw-lens-output", {
+    status: "ok",
+    srcdoc: "<p>Resolved output</p>",
+  });
+  expect(resolved.getAttribute("status")).toBe("ok");
+  expect(resolved.getAttribute("srcdoc")).toBe("<p>Resolved output</p>");
+});
+
+it("lets a resolved-lens host prevent output reflection", async () => {
+  const element = document.createElement("sw-transclude");
+  element.setAttribute("src", "#/v?/example");
+  element.addEventListener("sw-lens-output", (event) => event.preventDefault());
+  document.body.append(element);
+  await vi.waitFor(() => expect(receivers.has(element)).toBe(true));
+
+  receive(element, "sw-lens-output", {
+    status: "ok",
+    srcdoc: "<p>Output</p>",
+  });
+  expect(element.getAttribute("status")).toBe("loading");
+  expect(element.hasAttribute("srcdoc")).toBe(false);
+});
 
 it("exposes events locally and forwards only when explicitly requested", () => {
   const element = transclude();

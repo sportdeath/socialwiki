@@ -1,5 +1,5 @@
 {
-  "name": "@social-wiki/kernel",
+  "name": "@socialwiki/kernel",
   "private": true,
   "scripts": {
     "test": "vitest run",

@@ -105,8 +105,6 @@ if (window.top !== window) {
       "name",
       documentTitle || new URL(documentUrl).hostname,
     );
-    // Child output must not replace the document this host is wrapping.
-    transclude.setAttribute("ignore-lens-output", "");
     transclude.setAttribute("srcdoc", html);
 
     // Forward any changes to the route to the top-level document

@@ -39,16 +39,13 @@ export function defineTranscludeElement(
    *   contains its own query.
    * - autosize: controls the host's size; it accepts "off" (the default),
    *   "width", "height", or "both". A bare autosize attribute means "both".
-   * - ignore-lens-output: lets lens output events bubble without copying their
-   *   status and HTML onto this element.
    * - status: reports the current result; it is an output, not an input.
    */
   class SocialWikiTransclude extends HTMLElement implements TranscludeElement {
     onUnhandledEvent?: TranscludeElement["onUnhandledEvent"];
 
-    // Only attributes which require an immediate reaction are observed.
-    // ignore-lens-output is checked when an output event arrives, while status
-    // is only written by this element.
+    // Only attributes which require an immediate reaction are observed;
+    // status is only written by this element.
     static get observedAttributes() {
       return ["src", "srcdoc", "query"];
     }
@@ -167,9 +164,13 @@ export function defineTranscludeElement(
     }
 
     #receiveFrameEvent(event: CustomEvent<unknown>) {
-      if (event.type === "sw-lens-output") this.#acceptLensOutput(event.detail);
-
       this.dispatchEvent(event);
+
+      // Reflection is the default action of lens output and can therefore be
+      // intercepted like other bridge behavior with preventDefault().
+      if (!event.defaultPrevented && event.type === "sw-lens-output") {
+        this.#acceptLensOutput(event.detail);
+      }
 
       // Wait for containing-document handlers (e.g. navigation) before offering
       // the event to a transparent lens's forwarding callback.
@@ -185,12 +186,9 @@ export function defineTranscludeElement(
       //   srcdoc: "<article>Hello</article>",
       // });
       //
-      // By default, the srcdoc is copied onto this element. This lets a containing
-      // application observe the status and resulting HTML as attributes. However, some
-      // hosts own their srcdoc, so ignore-lens-output leaves the attributes
-      // unchanged - this is the typical behavior of most "lenses".
-      // The event still bubbles from #receiveFrameEvent either way.
-      if (this.hasAttribute("ignore-lens-output")) return;
+      // A direct srcdoc is input owned by the host. Only a resolved src uses
+      // srcdoc as an output slot for the lens's resulting document.
+      if (!this.hasAttribute("src")) return;
 
       // This value arrived from another window, so check its shape before use.
       if (typeof output !== "object" || output === null) return;
