@@ -1,0 +1,1037 @@
+<template>
+    <TwoPaneLayout leftTitle="History" rightTitle="Preview">
+        <template #left-pane>
+            <div class="history-pane-content">
+                <section
+                    v-if="isProtected === undefined"
+                    class="protection-panel"
+                >
+                    <h3>Loading...</h3>
+                </section>
+                <section class="protection-panel" v-else>
+                    <h3>
+                        {{
+                            isProtected ? "Protected Page" : "Unprotected Page"
+                        }}
+                    </h3>
+
+                    <template v-if="isProtected">
+                        <ProtectionNotice
+                            :active-protection="activeProtection"
+                            :is-protection-by-session-actor="
+                                isProtectionBySessionActor
+                            "
+                            :active-protection-trust-source="
+                                activeProtectionTrustSource
+                            "
+                        />
+                        <p>
+                            Only changes made or endorsed by your
+                            <a :href="trustedEditorsRoute">trusted editors</a>
+                            will be shown to you in the
+                            <a :href="viewAddress">View</a> tab.
+                        </p>
+                    </template>
+                    <p v-else>
+                        This page has <strong>not</strong> been marked as
+                        protected by you or an
+                        <a :href="trustedEditorsRoute">editor you trust</a>.
+                        Anyone's changes to this page will be visible to you.
+                    </p>
+
+                    <p v-if="$graffitiSession.value">
+                        <button
+                            type="button"
+                            :disabled="
+                                hasPendingMutation || isProtected === undefined
+                            "
+                            :class="{ warning: isProtected }"
+                            @click="
+                                handleUpdatePageProtection(
+                                    $graffitiSession.value,
+                                )
+                            "
+                        >
+                            {{ protectionActionLabel }}
+                        </button>
+                    </p>
+                    <p v-else>
+                        <button @click="$graffiti.login()">
+                            Log in to manage protection
+                        </button>
+                    </p>
+
+                    <details
+                        class="protection-history"
+                        v-if="protectionHistory && protectionHistory.length"
+                    >
+                        <summary>Protection history</summary>
+                        <ol class="protection-history-list">
+                            <li
+                                v-for="annotation in protectionHistory"
+                                :key="annotation.url"
+                            >
+                                <p>
+                                    {{
+                                        annotation.value.activity === "Protect"
+                                            ? "Protected"
+                                            : "Protection removed"
+                                    }}
+                                    by
+                                    <strong>
+                                        <GraffitiActorToHandle
+                                            :actor="annotation.actor"
+                                        />
+                                    </strong>
+                                    <span
+                                        v-if="
+                                            isActorInDefaultTrustedList(
+                                                annotation.actor,
+                                            )
+                                        "
+                                        class="history-default-indicator"
+                                    >
+                                        (Default trusted editor)
+                                    </span>
+                                </p>
+                                <time
+                                    :datetime="
+                                        timestamp(
+                                            annotation.value.published,
+                                            true,
+                                        )
+                                    "
+                                >
+                                    {{ timestamp(annotation.value.published) }}
+                                </time>
+                                <p
+                                    v-if="
+                                        $graffitiSession.value?.actor ===
+                                        annotation.actor
+                                    "
+                                >
+                                    <button
+                                        type="button"
+                                        class="warning"
+                                        :disabled="hasPendingMutation"
+                                        @click="
+                                            undoProtectionHistory(
+                                                annotation,
+                                                $graffitiSession.value,
+                                            )
+                                        "
+                                    >
+                                        {{
+                                            isUndoingProtection(annotation)
+                                                ? "Undoing..."
+                                                : "Undo"
+                                        }}
+                                    </button>
+                                </p>
+                            </li>
+                        </ol>
+                    </details>
+                </section>
+
+                <ol class="history-list">
+                    <li
+                        v-for="(version, index) in pageVersions"
+                        :key="version.url"
+                    >
+                        <article
+                            @click="onVersionClick($event, version)"
+                            :id="version.url"
+                            :class="{
+                                selected: isSelected(version),
+                                untrusted:
+                                    isVersionUntrusted(version) &&
+                                    !isSelected(version),
+                            }"
+                        >
+                            <header>
+                                <h3>
+                                    <button
+                                        type="button"
+                                        class="version-select"
+                                        :aria-pressed="isSelected(version)"
+                                        :disabled="isProtected === undefined"
+                                        @click="selectPageVersion(version)"
+                                    >
+                                        {{
+                                            formatSummary(version.value.summary)
+                                        }}
+                                    </button>
+                                </h3>
+                            </header>
+
+                            <div class="history-meta">
+                                <p class="history-actor-row">
+                                    <strong class="history-actor">
+                                        <GraffitiActorToHandle
+                                            :actor="version.actor"
+                                        />
+                                    </strong>
+                                    <span
+                                        v-if="
+                                            isVersionUntrusted(version) &&
+                                            !isSelected(version)
+                                        "
+                                        class="history-untrusted-indicator"
+                                    >
+                                        (Untrusted editor)
+                                    </span>
+                                    <span
+                                        class="history-trust-inline"
+                                        v-if="isSelected(version)"
+                                    >
+                                        <template
+                                            v-if="
+                                                $graffitiSession.value
+                                                    ?.actor === version.actor
+                                            "
+                                        >
+                                            <span>(You.)</span>
+                                        </template>
+                                        <template
+                                            v-else-if="
+                                                getActorTrustStatus(
+                                                    version.actor,
+                                                ) === 'trusted'
+                                            "
+                                        >
+                                            <span>
+                                                ({{
+                                                    isActorInDefaultTrustedList(
+                                                        version.actor,
+                                                    )
+                                                        ? "Default trusted editor."
+                                                        : "Trusted editor."
+                                                }}
+                                            </span>
+                                            <button
+                                                class="secondary"
+                                                type="button"
+                                                v-if="
+                                                    $graffitiSession.value &&
+                                                    !isUpdatingTrust(
+                                                        version.actor,
+                                                    )
+                                                "
+                                                @click.stop.prevent="
+                                                    toggleActorTrust(
+                                                        version.actor,
+                                                        $graffitiSession.value,
+                                                    )
+                                                "
+                                            >
+                                                Untrust?
+                                            </button>
+                                            <button
+                                                class="secondary"
+                                                disabled
+                                                type="button"
+                                                v-else-if="
+                                                    isUpdatingTrust(
+                                                        version.actor,
+                                                    )
+                                                "
+                                            >
+                                                Updating...
+                                            </button>
+                                            <span>)</span>
+                                        </template>
+                                        <template
+                                            v-else-if="
+                                                getActorTrustStatus(
+                                                    version.actor,
+                                                ) === 'untrusted'
+                                            "
+                                        >
+                                            <span>(Untrusted editor.</span>
+                                            <button
+                                                type="button"
+                                                v-if="
+                                                    $graffitiSession.value &&
+                                                    !isUpdatingTrust(
+                                                        version.actor,
+                                                    )
+                                                "
+                                                @click.stop.prevent="
+                                                    toggleActorTrust(
+                                                        version.actor,
+                                                        $graffitiSession.value,
+                                                    )
+                                                "
+                                            >
+                                                Trust?
+                                            </button>
+                                            <button
+                                                class="secondary"
+                                                disabled
+                                                type="button"
+                                                v-else-if="
+                                                    isUpdatingTrust(
+                                                        version.actor,
+                                                    )
+                                                "
+                                            >
+                                                Updating...
+                                            </button>
+                                            <span>)</span>
+                                        </template>
+                                        <span v-else>(Loading...)</span>
+                                    </span>
+                                </p>
+                                <time
+                                    :datetime="
+                                        timestamp(version.value.published, true)
+                                    "
+                                >
+                                    {{ timestamp(version.value.published) }}
+                                </time>
+                            </div>
+
+                            <footer v-if="isSelected(version)">
+                                <ul>
+                                    <li
+                                        v-if="
+                                            $graffitiSession.value &&
+                                            index !== 0
+                                        "
+                                    >
+                                        <button
+                                            :disabled="hasPendingMutation"
+                                            @click.stop="
+                                                republishPageVersion(
+                                                    'Restore',
+                                                    version,
+                                                    $graffitiSession.value,
+                                                )
+                                            "
+                                        >
+                                            {{
+                                                isRestoringVersion(version)
+                                                    ? "Restoring..."
+                                                    : "Restore"
+                                            }}
+                                        </button>
+                                    </li>
+                                    <li
+                                        v-if="
+                                            $graffitiSession.value &&
+                                            index === 0 &&
+                                            $graffitiSession.value.actor !==
+                                                version.actor
+                                        "
+                                    >
+                                        <button
+                                            :disabled="hasPendingMutation"
+                                            @click.stop="
+                                                republishPageVersion(
+                                                    'Endorse',
+                                                    version,
+                                                    $graffitiSession.value,
+                                                )
+                                            "
+                                        >
+                                            {{
+                                                isEndorsingVersion(version)
+                                                    ? "Endorsing..."
+                                                    : "Endorse"
+                                            }}
+                                        </button>
+                                    </li>
+                                    <li>
+                                        <a :href="editAddress"> Edit </a>
+                                    </li>
+                                    <li>
+                                        <a :href="previewAddress"> Link </a>
+                                    </li>
+                                    <li
+                                        v-if="
+                                            $graffitiSession.value?.actor ===
+                                            version.actor
+                                        "
+                                    >
+                                        <button
+                                            class="warning"
+                                            :disabled="hasPendingMutation"
+                                            @click.stop="
+                                                deleteSelectedPageVersion(
+                                                    version,
+                                                    $graffitiSession.value,
+                                                )
+                                            "
+                                        >
+                                            {{
+                                                isDeletingVersion(version)
+                                                    ? "Deleting..."
+                                                    : "Delete"
+                                            }}
+                                        </button>
+                                    </li>
+                                </ul>
+                            </footer>
+                        </article>
+                    </li>
+                </ol>
+            </div>
+        </template>
+        <template #right-pane>
+            <sw-transclude
+                v-if="previewAddress"
+                key="preview"
+                id="preview"
+                name="Preview"
+                ref="transclude"
+                :src="previewAddress"
+            ></sw-transclude>
+            <sw-transclude
+                v-else
+                key="loading"
+                id="preview"
+                name="Preview"
+                :srcdoc="LoadingPage"
+            ></sw-transclude>
+        </template>
+    </TwoPaneLayout>
+</template>
+
+<script lang="ts" setup>
+import ProtectionNotice from "../utils/ProtectionNotice.vue";
+import TwoPaneLayout from "../utils/TwoPaneLayout.vue";
+import type { GraffitiSession } from "@graffiti-garden/api";
+import {
+    createPageVersion,
+    deletePageVersion,
+    pageVersionSchema,
+    pickVersion,
+    type PageVersionObject,
+    sortPageVersions,
+} from "../utils/page-versions";
+import {
+    useGraffiti,
+    GraffitiActorToHandle,
+    useGraffitiDiscover,
+    useGraffitiSession,
+} from "@graffiti-garden/wrapper-vue";
+import { computed, onBeforeUnmount, ref, useTemplateRef, watch } from "vue";
+import { annotationSchema, type AnnotationObject } from "../utils/schemas";
+import {
+    computeTrustAnnotationsByActor,
+    trustedActors,
+    trustActor,
+} from "../utils/trust";
+import { defaultTrustedEditors } from "../utils/default-trusted-editors";
+import {
+    sortProtectionHistory,
+    updatePageProtection,
+} from "../utils/protection";
+import { LoadingPage } from "../utils/status-pages";
+
+const { composeAddress, composeQuery, parseAddress, parseQuery } = window.route;
+
+function emitLensOutput(
+    status: "loading" | "not-found" | "ok" | "error",
+    srcdoc?: string,
+) {
+    window.emit("sw-lens-output", { status, srcdoc });
+}
+
+const pageName = ref("");
+const pageQuery = ref("");
+const selectedPageVersion = ref<PageVersionObject | null | undefined>(
+    undefined,
+);
+
+function onQueryChange() {
+    const { name: nextPageName, query: nextPageQuery } = parseAddress(
+        window.address,
+    );
+    const didChangePage = pageName.value !== nextPageName;
+
+    pageName.value = nextPageName;
+    pageQuery.value = nextPageQuery;
+
+    if (didChangePage) {
+        // Avoid rendering stale preview routes while the new page versions load.
+        selectedPageVersion.value = undefined;
+    }
+}
+window.addEventListener("addresschange", onQueryChange);
+onQueryChange();
+
+const transclude = useTemplateRef<HTMLElement>("transclude");
+defineExpose({ transclude });
+let previewObserver: MutationObserver | undefined;
+const previewHtml = ref("");
+
+const outputPreviewIfReady = () => {
+    const preview = transclude.value;
+    if (!preview) return;
+
+    const status = preview.getAttribute("status");
+    const html = preview.getAttribute("srcdoc");
+    previewHtml.value = html ?? "";
+    if (status === "ok" && html !== null) {
+        emitLensOutput("ok", html);
+    }
+};
+
+const stopHandlingNavigation = window.handleNavigation((to) => {
+    // If not relative, just pass it on
+    if (!to.startsWith("?")) return window.navigate(to);
+
+    // For relative queries strip out the version name
+    const { address } = parseQuery(to);
+    window.navigate(composeQuery(undefined, address));
+});
+
+function stopObservingPreview() {
+    previewObserver?.disconnect();
+    previewObserver = undefined;
+}
+
+watch(transclude, (preview) => {
+    stopObservingPreview();
+    if (!preview) return;
+    previewObserver = new MutationObserver(outputPreviewIfReady);
+    previewObserver.observe(preview, {
+        attributes: true,
+        attributeFilter: ["srcdoc", "status"],
+    });
+    outputPreviewIfReady();
+});
+
+onBeforeUnmount(() => {
+    stopObservingPreview();
+    stopHandlingNavigation();
+    window.removeEventListener("addresschange", onQueryChange);
+});
+
+const { objects: pageVersionsAndAnnotations, isFirstPoll } =
+    useGraffitiDiscover(
+        () => [pageName.value],
+        () =>
+            ({
+                anyOf: [
+                    pageVersionSchema(pageName.value),
+                    annotationSchema(["Protect", "Remove"]),
+                ],
+            }) as const,
+    );
+const pageVersions = computed(() => {
+    const pageVersionsRaw =
+        pageVersionsAndAnnotations.value.filter<PageVersionObject>(
+            (o): o is PageVersionObject => o.value.activity === "Update",
+        );
+    return sortPageVersions(pageVersionsRaw);
+});
+const protectionHistory = computed(() => {
+    if (trustedEditors.value === undefined) return undefined;
+    const annotationsRaw =
+        pageVersionsAndAnnotations.value.filter<AnnotationObject>(
+            (o): o is AnnotationObject =>
+                o.value.activity === "Protect" || o.value.activity === "Remove",
+        );
+    return sortProtectionHistory(annotationsRaw, trustedEditors.value);
+});
+const isProtected = computed(() => {
+    if (protectionHistory.value === undefined) return undefined;
+    return protectionHistory.value.at(0)?.value.activity === "Protect";
+});
+const activeProtection = computed(() => {
+    const latest = protectionHistory.value?.at(0);
+    if (!latest || latest.value.activity !== "Protect") return null;
+    return latest;
+});
+const trustedEditorsRoute = "#/v?/trusted-editors";
+
+const graffiti = useGraffiti();
+const restoringVersionUrl = ref<string | null>(null);
+const endorsingVersionUrl = ref<string | null>(null);
+const deletingVersionUrl = ref<string | null>(null);
+const isUpdatingProtection = ref(false);
+const undoingProtectionUrl = ref<string | null>(null);
+const hasPendingMutation = computed(
+    () =>
+        restoringVersionUrl.value !== null ||
+        endorsingVersionUrl.value !== null ||
+        deletingVersionUrl.value !== null ||
+        isUpdatingProtection.value ||
+        undoingProtectionUrl.value !== null,
+);
+const protectionActionLabel = computed(() => {
+    if (isUpdatingProtection.value) {
+        return isProtected.value
+            ? "Removing protection..."
+            : "Protecting page...";
+    }
+    if (isProtected.value === undefined) return "Loading...";
+    return isProtected.value ? "Remove protection" : "Protect this page";
+});
+
+async function handleUpdatePageProtection(session: GraffitiSession) {
+    if (hasPendingMutation.value || isProtected.value === undefined) return;
+    isUpdatingProtection.value = true;
+    try {
+        await updatePageProtection(
+            graffiti,
+            pageName.value,
+            isProtected.value,
+            activeProtection.value,
+            session,
+        );
+    } catch (error) {
+        reportError("Updating page protection", error);
+    } finally {
+        isUpdatingProtection.value = false;
+    }
+}
+
+const isUndoingProtection = (annotation: AnnotationObject) =>
+    undoingProtectionUrl.value === annotation.url;
+
+async function undoProtectionHistory(
+    annotation: AnnotationObject,
+    session: GraffitiSession,
+) {
+    if (hasPendingMutation.value) return;
+    undoingProtectionUrl.value = annotation.url;
+    try {
+        await graffiti.delete(annotation, session);
+    } catch (error) {
+        reportError("Undoing protection", error);
+    } finally {
+        if (undoingProtectionUrl.value === annotation.url) {
+            undoingProtectionUrl.value = null;
+        }
+    }
+}
+
+async function republishPageVersion(
+    action: "Restore" | "Endorse",
+    version: PageVersionObject,
+    session: GraffitiSession,
+) {
+    if (hasPendingMutation.value) return;
+    const pending =
+        action === "Restore" ? restoringVersionUrl : endorsingVersionUrl;
+    pending.value = version.url;
+    const predecessors = pageVersions.value.map((v) => v.url);
+    try {
+        // The preview may still show the previous selection. Publish the chosen
+        // version's media, never whatever HTML happens to be rendered right now.
+        const media = await graffiti.getMedia(version.value.result.media, {
+            types: ["text/html"],
+        });
+        const created = await createPageVersion(
+            graffiti,
+            version.value.object,
+            await media.data.text(),
+            predecessors,
+            `${action}: ${version.value.summary}`,
+            session,
+        );
+        if (pageName.value === version.value.object)
+            selectedPageVersion.value = created;
+    } catch (error) {
+        reportError(action, error);
+    } finally {
+        pending.value = null;
+    }
+}
+
+async function deleteSelectedPageVersion(
+    version: PageVersionObject,
+    session: GraffitiSession,
+) {
+    if (hasPendingMutation.value) return;
+    deletingVersionUrl.value = version.url;
+    try {
+        await deletePageVersion(graffiti, version, session);
+    } catch (error) {
+        reportError("Deleting version", error);
+    } finally {
+        if (deletingVersionUrl.value === version.url) {
+            deletingVersionUrl.value = null;
+        }
+    }
+}
+
+const effectiveSelectedPageVersion = computed(() => {
+    if (isProtected.value === undefined) return null;
+
+    const selected = selectedPageVersion.value;
+    // Protection chooses the default preview, but History still lets the user
+    // explicitly inspect an untrusted version without endorsing it.
+    if (
+        selected &&
+        pageVersions.value.some((version) => version.url === selected.url)
+    ) {
+        return selected;
+    }
+
+    return pickVersion(
+        pageVersions.value,
+        trustedEditors.value ?? [],
+        isProtected.value,
+    );
+});
+
+const previewAddress = computed(() => {
+    // Choose the version before starting View; otherwise it first loads the
+    // latest page itself, then reloads when History supplies an explicit version.
+    if (
+        session.value === undefined ||
+        isFirstPoll.value ||
+        isProtected.value === undefined
+    ) {
+        return undefined;
+    }
+    const lensParams = new URLSearchParams();
+    if (effectiveSelectedPageVersion.value) {
+        lensParams.set(
+            "version",
+            effectiveSelectedPageVersion.value.value.result.media,
+        );
+    }
+
+    return `#/${composeAddress(
+        "v",
+        composeQuery(
+            lensParams,
+            composeAddress(pageName.value, pageQuery.value),
+        ),
+    )}`;
+});
+const viewAddress = computed(
+    () =>
+        `#/${composeAddress(
+            "v",
+            composeQuery(
+                undefined,
+                composeAddress(pageName.value, pageQuery.value),
+            ),
+        )}`,
+);
+const editAddress = computed(
+    () =>
+        `#/${composeAddress(
+            "e",
+            composeQuery(
+                new URLSearchParams({
+                    draft: previewHtml.value,
+                }),
+                composeAddress(pageName.value, pageQuery.value),
+            ),
+        )}`,
+);
+
+const selectPageVersion = (version: PageVersionObject) => {
+    if (isProtected.value === undefined) return;
+    selectedPageVersion.value = version;
+};
+
+function onVersionClick(event: MouseEvent, version: PageVersionObject) {
+    // The card is a pointer shortcut; its title remains the keyboard control.
+    if (event.target instanceof Element && event.target.closest("a, button, input, summary")) return;
+    selectPageVersion(version);
+}
+
+const isSelected = (version: PageVersionObject) =>
+    effectiveSelectedPageVersion.value?.url === version.url;
+const isRestoringVersion = (version: PageVersionObject) =>
+    restoringVersionUrl.value === version.url;
+const isEndorsingVersion = (version: PageVersionObject) =>
+    endorsingVersionUrl.value === version.url;
+const isDeletingVersion = (version: PageVersionObject) =>
+    deletingVersionUrl.value === version.url;
+const isVersionUntrusted = (version: PageVersionObject) =>
+    isProtected.value === true &&
+    trustedEditors.value !== undefined &&
+    !trustedEditors.value.includes(version.actor);
+
+const formatSummary = (summary?: string) =>
+    summary?.trim() || "No summary provided";
+
+function reportError(action: string, error: unknown) {
+    console.error(action, error);
+    alert(
+        `${action} failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+}
+
+function timestamp(value: number, exact = false) {
+    const date = new Date(value);
+    if (!Number.isFinite(date.getTime()))
+        return exact ? undefined : "Unknown time";
+    return exact ? date.toISOString() : date.toLocaleString();
+}
+
+watch(pageVersions, (versions) => {
+    if (!versions.length) {
+        selectedPageVersion.value = undefined;
+        return;
+    }
+
+    const selectedUrl = selectedPageVersion.value?.url;
+    if (
+        selectedUrl &&
+        !versions.some((version) => version.url === selectedUrl)
+    ) {
+        selectedPageVersion.value = undefined;
+    }
+});
+
+watch([pageVersions, isFirstPoll], ([versions, firstPoll]) => {
+    if (firstPoll) return;
+    if (!versions.length) {
+        emitLensOutput("not-found");
+    }
+});
+
+const session = useGraffitiSession();
+const { objects: trustAnnotations, isFirstPoll: isTrustAnnotationLoading } =
+    useGraffitiDiscover(
+        () => (session.value ? [session.value.actor] : []),
+        () =>
+            annotationSchema(["Trust", "Untrust"], {
+                actor: session.value?.actor,
+            }),
+    );
+const trustAnnotationsByActor = computed(() => {
+    if (isTrustAnnotationLoading.value) return undefined;
+    return computeTrustAnnotationsByActor(
+        trustAnnotations.value,
+        defaultTrustedEditors,
+    );
+});
+const defaultTrustedEditorSet = new Set(defaultTrustedEditors);
+const trustedEditors = computed(() => {
+    if (trustAnnotationsByActor.value === undefined) return undefined;
+    return trustedActors(trustAnnotationsByActor.value, session.value?.actor);
+});
+
+const getActorTrustStatus = (actor: string) => {
+    if (session.value?.actor === actor) return "self";
+    const byActor = trustAnnotationsByActor.value;
+    if (!byActor) return "loading";
+    const trustValue = byActor.get(actor);
+    return trustValue === true || trustValue?.value.activity === "Trust"
+        ? "trusted"
+        : "untrusted";
+};
+const isActorInDefaultTrustedList = (actor: string) =>
+    defaultTrustedEditorSet.has(actor);
+const isProtectionBySessionActor = computed(
+    () => activeProtection.value?.actor === session.value?.actor,
+);
+const activeProtectionTrustSource = computed(() => {
+    const actor = activeProtection.value?.actor;
+    if (!actor || isProtectionBySessionActor.value) return null;
+    return trustAnnotationsByActor.value?.get(actor) === true
+        ? "default"
+        : "trusted";
+});
+
+// Register this only after every computed dependency above exists: Vue reads
+// the source once when a watcher is created, even when it is not immediate.
+watch(previewAddress, (address) => {
+    if (address) return;
+    previewHtml.value = "";
+    emitLensOutput("loading");
+});
+
+const trustMutationActor = ref<string | null>(null);
+const isUpdatingTrust = (actor: string) => trustMutationActor.value === actor;
+
+async function toggleActorTrust(actor: string, session: GraffitiSession) {
+    if (actor === session.actor) return;
+    trustMutationActor.value = actor;
+    try {
+        const trustValue = trustAnnotationsByActor.value?.get(actor);
+
+        if (typeof trustValue === "object") {
+            await graffiti.delete(trustValue, session);
+        } else {
+            await trustActor(graffiti, actor, session, {
+                untrust: trustValue === true,
+            });
+        }
+    } catch (error) {
+        reportError("Updating editor trust", error);
+    } finally {
+        if (trustMutationActor.value === actor) {
+            trustMutationActor.value = null;
+        }
+    }
+}
+</script>
+
+<style scoped>
+.history-pane-content {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.protection-panel {
+    width: 100%;
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.protection-panel h3 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.protection-help {
+    color: var(--secondary-color);
+    font-size: 0.9rem;
+}
+
+.protection-history > summary {
+    cursor: pointer;
+}
+
+.protection-history-list {
+    list-style: none;
+    margin: 0.5rem 0 0;
+    padding: 0;
+    display: grid;
+    gap: 0.5rem;
+}
+
+.protection-history-list > li {
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    padding: 0.5rem;
+    display: grid;
+    gap: 0.15rem;
+}
+
+.protection-history-list > li time {
+    color: var(--secondary-color);
+    font-size: 0.85rem;
+}
+
+.history-list {
+    flex: 1;
+    width: 100%;
+    list-style: none;
+    padding: 0.75rem;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.history-list > li > article {
+    cursor: pointer;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    display: grid;
+    gap: 0.45rem;
+    transition:
+        background-color 0.15s ease,
+        border-color 0.15s ease;
+}
+
+.history-list > li > article:hover {
+    background: var(--background-color-interactive);
+    border-color: var(--border-color-hover);
+}
+
+.history-list > li > article.selected {
+    background: var(--background-color-interactive);
+    border-color: var(--border-color-hover);
+    box-shadow: 0 0 0 1px var(--border-color-hover);
+}
+
+.history-list > li > article.untrusted {
+    border-style: dashed;
+}
+
+.history-list > li > article.untrusted h3 {
+    color: var(--secondary-color);
+}
+
+.version-select:focus-visible {
+    outline: 2px solid var(--border-color-hover);
+    outline-offset: 1px;
+}
+
+.history-list h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    line-height: 1.35;
+    color: var(--link-color);
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.version-select {
+    width: 100%;
+    text-align: start;
+    font: inherit;
+    color: inherit;
+}
+
+.history-meta {
+    display: grid;
+    gap: 0.1rem;
+}
+
+.history-meta .history-actor {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.history-actor-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.35rem;
+}
+
+.history-meta time {
+    color: var(--secondary-color);
+    font-size: 0.85rem;
+}
+
+.history-trust-inline {
+    font-size: 0.85rem;
+    color: var(--text-color);
+}
+
+.history-untrusted-indicator {
+    font-size: 0.78rem;
+    color: var(--secondary-color);
+    font-style: italic;
+}
+
+.history-default-indicator {
+    font-size: 0.78rem;
+    color: var(--secondary-color);
+    font-style: italic;
+}
+
+.history-trust-inline button {
+    margin-left: 0.25rem;
+}
+
+.history-list footer > ul {
+    list-style: none;
+    display: flex;
+    gap: 0.85rem;
+    margin: 0;
+    padding: 0.15rem 0 0;
+}
+</style>

@@ -1,0 +1,139 @@
+/* Editor menubar + dropdowns */
+nav.editor-controls > ul.editor-toolbar > li {
+    position: relative;
+}
+
+:is(
+    nav.editor-controls summary,
+    nav.editor-controls > ul > li > button,
+    nav.editor-controls > ul > li > :where(label.top-level-checkbox)
+) {
+    list-style: none; /* remove default marker in some browsers */
+    cursor: pointer;
+    color: var(--link-color);
+    background: var(--background-color-interactive);
+    border: 1px solid var(--border-color);
+    user-select: none;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.5rem;
+
+    &:hover {
+        color: var(--link-color-hover);
+        background: var(--background-color-interactive-hover);
+        border-color: var(--border-color-hover);
+        text-decoration: none;
+    }
+}
+
+nav.editor-controls > ul > li > button.publish-button {
+    border-color: var(--border-color);
+    background: var(--accent-button-background);
+    color: var(--accent-button-text);
+}
+
+nav.editor-controls > ul > li > button.publish-button:hover {
+    border-color: var(--border-color-hover);
+    background: var(--accent-button-background-hover);
+    color: var(--accent-button-text);
+}
+
+nav.editor-controls > ul > li > button.publish-button:disabled {
+    background: var(--background-color-interactive);
+    color: var(--text-color);
+}
+
+nav.editor-controls > ul > li > button.publish-button:disabled:hover {
+    border-color: var(--border-color);
+    background: var(--background-color-interactive);
+    color: var(--text-color);
+}
+
+/* dropdown menu */
+nav.editor-controls ul.editor-menu {
+    position: absolute;
+    top: calc(100% + 0.25rem);
+    left: 0;
+
+    padding: 0.25rem;
+    list-style: none;
+
+    background: var(--background-color);
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    box-shadow: 0 10px 30px #000000aa;
+    z-index: 50;
+
+    width: max-content;
+}
+
+nav.editor-controls ul.editor-menu > li > label.menu-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.25rem 0.4rem;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+nav.editor-controls ul.editor-menu > li > label.menu-checkbox:hover {
+    background: var(--background-color-interactive);
+}
+
+nav.editor-controls .top-level-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+nav.editor-controls .refresh-button {
+    position: relative;
+}
+
+nav.editor-controls .refresh-spinner {
+    position: absolute;
+    top: -0.1rem;
+    right: -0.1rem;
+    width: 0.7rem;
+    height: 0.7rem;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: refresh-spin 1s linear infinite;
+    pointer-events: none;
+}
+
+/* separators */
+nav.editor-controls ul.editor-menu > li.menu-separator {
+    height: 1px;
+    background: var(--border-color);
+    margin: 0.25rem 0.25rem;
+}
+
+.editor-controls button.publish-button.publish-shake {
+    animation: publish-shake 0.3s ease-in-out;
+}
+
+@keyframes publish-shake {
+    0% {
+        transform: translateX(0);
+    }
+    25% {
+        transform: translateX(-4px);
+    }
+    50% {
+        transform: translateX(4px);
+    }
+    75% {
+        transform: translateX(-2px);
+    }
+    100% {
+        transform: translateX(0);
+    }
+}
+
+@keyframes refresh-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}

@@ -1,52 +1,17 @@
-import "./style.css";
-import { createApp } from "vue";
-import { createRouter, createWebHashHistory, RouterView } from "vue-router";
-import App from "./App.vue";
 import { GraffitiPlugin } from "@graffiti-garden/wrapper-vue";
-import { serveGraffiti } from "./backend/graffiti-server";
-import { installTransclude } from "./backend/transclude";
-import { handleGraffitiGuardRequest } from "./guard/graffiti-guard";
-import {
-  composeAddress,
-  composeQuery,
-  parseAddress,
-  parseQuery,
-} from "./backend/route";
+import { createApp } from "vue";
+import { createMemoryHistory, createRouter, RouterView } from "vue-router";
+import "../style.css";
+import App from "./App.vue";
+import { decodeAddress, encodeRouteForRouter } from "./browser-route";
 
-function safeDecodeComponent(value: string): string {
-  try {
-    return decodeURIComponent(value);
-  } catch {
-    return value;
-  }
-}
-
-function decodeAddress(address: string): string {
-  const { name, query } = parseAddress(address);
-  const decodedName = safeDecodeComponent(name);
-  if (!query.length) return composeAddress(decodedName, query);
-
-  const { params, address: nestedAddress } = parseQuery(query);
-  const decodedNestedAddress =
-    nestedAddress === undefined ? undefined : decodeAddress(nestedAddress);
-  return composeAddress(
-    decodedName,
-    composeQuery(params, decodedNestedAddress),
-  );
-}
-
-// Set up a graffiti "server" that is served
-// to all the "client" pages
-const { graffiti, listConnectedWindows } = serveGraffiti(
-  handleGraffitiGuardRequest,
-);
-
+const graffiti = new window.Graffiti();
 const router = createRouter({
-  // Use web hash history so that the page name
-  // is never sent to the server. This means that
-  // when Graffiti becomes E2EE, page names will
-  // never touch any server in the clear.
-  history: createWebHashHistory(),
+  // This document runs in an originless sandbox. Keep its routing in memory;
+  // navigation outside the lens belongs to the navigation bridge. The bridge
+  // ultimately stores the address in the top-level hash, so page names are
+  // not sent to the web server.
+  history: createMemoryHistory(),
   routes: [
     {
       path: "/",
@@ -56,22 +21,46 @@ const router = createRouter({
     {
       path: "/:path(.+)",
       component: App,
-      props: () => {
-        // Use the raw hash route to avoid Vue Router query decoding/re-encoding
-        // that can alter reserved characters in lens params.
-        const hash = window.location.hash;
-        const addressEncoded = hash.replace(/^#\/?/, "");
+      props: (route) => {
+        // Read fullPath so the Social.Wiki query remains part of the address
+        // instead of being reconstructed from Vue Router's parsed query.
+        const addressEncoded = route.fullPath.replace(/^\//, "");
         return { address: decodeAddress(addressEncoded) };
       },
     },
   ],
 });
-// Add the web components
-const origin = window.location.origin;
-installTransclude(graffiti, origin);
+
+// The browser is sandboxed inside the kernel host, so its in-memory route and
+// the real top-level hash need to cross the navigation bridge in both
+// directions. Wait for the parent's initial query before writing upward so a
+// router redirect cannot overwrite an existing address during startup.
+let navigationReady = false;
+const syncRouteFromParent = () => {
+  navigationReady = true;
+  const address =
+    window.address === undefined ? undefined : decodeAddress(window.address);
+  const route = encodeRouteForRouter(address ?? "");
+  if (router.currentRoute.value.fullPath !== route) {
+    void router.replace(route);
+  } else if (address === undefined) {
+    window.navigate(
+      new URL(`#${router.currentRoute.value.fullPath}`, document.baseURI).href,
+    );
+  }
+};
+window.addEventListener("querychange", syncRouteFromParent);
+
+router.afterEach((route) => {
+  if (!navigationReady) return;
+  const address = decodeAddress(route.fullPath.replace(/^\//, ""));
+  const parentAddress =
+    window.address === undefined ? undefined : decodeAddress(window.address);
+  if (address === parentAddress) return;
+  window.navigate(new URL(`#${route.fullPath}`, document.baseURI).href);
+});
 
 createApp(RouterView)
-  .provide("listConnectedWindows", listConnectedWindows)
   .use(GraffitiPlugin, { graffiti })
   .use(router)
   .mount("#app");

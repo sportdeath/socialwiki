@@ -7,10 +7,10 @@ import type {
 import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import type { TranscludeElement } from "../../../kernel/src/transclude/element";
-import { defaultTrustedEditors } from "../utils/default-trusted-editors";
 import { distributionUrl } from "../utils/distribution";
 import {
   pageVersionSchema,
+  pickVersion,
   sortPageVersions,
   type PageVersionObject,
 } from "../utils/page-versions";
@@ -24,7 +24,7 @@ import {
   LoadingPage,
   PageNotFound,
 } from "../utils/status-pages";
-import { computeTrustAnnotationsByActor } from "../utils/trust";
+import { getTrustContext } from "../utils/trust";
 
 const { composeAddress, composeQuery, parseAddress } = window.route;
 
@@ -132,44 +132,6 @@ graffiti.sessionEvents.addEventListener("initialized", (event) => {
   renderForSessionChange();
 });
 
-// Find all of the logged in actors trusted editors
-async function getTrustedEditors() {
-  const annotations = new Map<string, AnnotationObject>();
-  const session = graffitiSession;
-
-  // Only consult an actor-specific trust channel when an identity is known.
-  // Anonymous viewers use only the distribution's default trusted editors.
-  if (session) {
-    for await (const result of graffiti.discover(
-      [session.actor],
-      annotationSchema(["Trust", "Untrust"], { actor: session.actor }),
-    )) {
-      if (result.error) {
-        console.error(result.error);
-      } else if (result.tombstone) {
-        annotations.delete(result.object.url);
-      } else {
-        annotations.set(result.object.url, result.object);
-      }
-    }
-  }
-
-  const trustByActor = computeTrustAnnotationsByActor(
-    [...annotations.values()],
-    defaultTrustedEditors,
-  );
-  const trusted = new Set(
-    [...trustByActor.entries()]
-      .filter(
-        ([, trust]) =>
-          trust === true || trust.value.activity === "Trust",
-      )
-      .map(([actor]) => actor),
-  );
-  if (session) trusted.add(session.actor);
-  return [...trusted];
-}
-
 async function getPageVersionsAndProtection(pageName: string) {
   const objects = new Map<string, PageVersionObject | AnnotationObject>();
   for await (const result of graffiti.discover([pageName], {
@@ -202,20 +164,6 @@ async function getPageVersionsAndProtection(pageName: string) {
         object.value.activity === "Remove",
     ),
   };
-}
-
-// If the page is not protected, choose the most recent version.
-// Otherwise, choose the most recent version produced by a trusted actor.
-function pickVersion(
-  pageVersions: PageVersionObject[],
-  trustedEditors: string[],
-  isProtected: boolean,
-) {
-  if (!isProtected) return pageVersions.at(0) ?? null;
-  return (
-    pageVersions.find((version) => trustedEditors.includes(version.actor)) ??
-    null
-  );
 }
 
 async function renderLens(force = false) {
@@ -255,8 +203,8 @@ async function renderLens(force = false) {
     let mediaAddress = requestedVersion;
 
     if (!mediaAddress) {
-      const [trustedEditors, pageData] = await Promise.all([
-        getTrustedEditors(),
+      const [{ trustedEditors }, pageData] = await Promise.all([
+        getTrustContext(graffiti, graffitiSession),
         getPageVersionsAndProtection(pageName),
       ]);
       // A newer route may finish first; never let this older request replace it.

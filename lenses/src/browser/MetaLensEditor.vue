@@ -45,10 +45,12 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { CodeEditor } from "monaco-editor-vue3";
 import TwoPaneLayout from "../utils/TwoPaneLayout.vue";
 import {
-    embedLensSourceOrigin,
+    getLensSource,
+    resetLensSource,
+    setLensSource,
     type Lens,
-    type LensSourceApi,
-} from "../../backend/lens-sources";
+} from "./lens-resolver";
+import { useGraffiti, useGraffitiSession } from "@graffiti-garden/wrapper-vue";
 
 const props = defineProps<{
     lens: Lens;
@@ -64,20 +66,21 @@ const source = ref("");
 const previewSource = ref("");
 const errorMessage = ref("");
 const busy = ref(false);
+const graffiti = useGraffiti();
+const session = useGraffitiSession();
 let saveTimer: number | undefined;
-let isHydrating = false;
+let savedSource = "";
 let loadVersion = 0;
+let saveVersion = 0;
 
-function getLensApi(): LensSourceApi {
-    if (!window.socialWikiLenses) {
-        throw new Error("Lens API is unavailable");
-    }
-    return window.socialWikiLenses;
+function requireSession() {
+    if (!session.value) throw new Error("Log in to modify a lens");
+    return session.value;
 }
 
 function clearSaveTimer() {
-    if (saveTimer === undefined) return;
-    clearTimeout(saveTimer);
+    saveVersion++;
+    if (saveTimer !== undefined) clearTimeout(saveTimer);
     saveTimer = undefined;
 }
 
@@ -88,10 +91,14 @@ async function loadLensSource() {
     clearSaveTimer();
 
     try {
-        const rawSource = await getLensApi().get(props.lens);
+        const rawSource = await getLensSource(
+            graffiti,
+            props.lens,
+            requireSession(),
+        );
         if (thisLoad !== loadVersion) return;
 
-        isHydrating = true;
+        savedSource = rawSource;
         source.value = rawSource;
         previewSource.value = rawSource;
     } catch (error) {
@@ -102,21 +109,31 @@ async function loadLensSource() {
         if (thisLoad === loadVersion) {
             busy.value = false;
         }
-        isHydrating = false;
     }
 }
 
 function schedulePersist(nextSource: string) {
     clearSaveTimer();
+    const thisSave = saveVersion;
+    const lens = props.lens;
+    const savingSession = requireSession();
     saveTimer = window.setTimeout(async () => {
+        if (thisSave !== saveVersion) return;
+        saveTimer = undefined;
         try {
-            await getLensApi().set(props.lens, nextSource);
+            await setLensSource(
+                graffiti,
+                lens,
+                nextSource,
+                savingSession,
+            );
+            if (thisSave !== saveVersion) return;
+            savedSource = nextSource;
             errorMessage.value = "";
         } catch (error) {
+            if (thisSave !== saveVersion) return;
             errorMessage.value =
                 error instanceof Error ? error.message : String(error);
-        } finally {
-            saveTimer = undefined;
         }
     }, 180);
 }
@@ -126,7 +143,11 @@ async function resetLens() {
     errorMessage.value = "";
     clearSaveTimer();
     try {
-        await getLensApi().reset(props.lens);
+        await resetLensSource(
+            graffiti,
+            props.lens,
+            requireSession(),
+        );
         await loadLensSource();
     } catch (error) {
         errorMessage.value =
@@ -137,20 +158,22 @@ async function resetLens() {
 }
 
 watch(
-    () => props.lens,
+    [() => props.lens, session],
     () => {
+        if (session.value === undefined) return;
         void loadLensSource();
     },
     { immediate: true },
 );
 
 watch(source, (nextSource) => {
-    previewSource.value = embedLensSourceOrigin(nextSource, window.origin);
-    if (isHydrating) return;
+    previewSource.value = nextSource;
+    if (nextSource === savedSource) return;
     schedulePersist(nextSource);
 });
 
 onBeforeUnmount(() => {
+    loadVersion++;
     clearSaveTimer();
 });
 </script>

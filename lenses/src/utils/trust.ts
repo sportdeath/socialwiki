@@ -1,3 +1,4 @@
+import { defaultTrustedEditors } from "./default-trusted-editors";
 import type { Graffiti, GraffitiSession } from "@graffiti-garden/api";
 import {
   annotationSchema,
@@ -27,12 +28,13 @@ export async function trustActor(
   );
 }
 
-export async function getTrustedActors(
+export async function getTrustContext(
   graffiti: Graffiti,
-  session: GraffitiSession,
+  session?: GraffitiSession | null,
 ) {
   const results = new Map<string, AnnotationObject>();
-  for await (const result of graffiti.discover<AnnotationSchema>(
+  // Anonymous viewers use only the distribution defaults.
+  if (session) for await (const result of graffiti.discover<AnnotationSchema>(
     [session.actor],
     annotationSchema(["Trust", "Untrust"], { actor: session.actor }),
   )) {
@@ -46,6 +48,14 @@ export async function getTrustedActors(
       results.set(result.object.url, result.object);
     }
   }
+  const trustByActor = computeTrustAnnotationsByActor(
+    [...results.values()],
+    defaultTrustedEditors,
+  );
+  return {
+    trustByActor,
+    trustedEditors: trustedActors(trustByActor, session?.actor),
+  };
 }
 
 export function computeTrustAnnotationsByActor(
@@ -60,12 +70,17 @@ export function computeTrustAnnotationsByActor(
     const actor = object.value.object;
     const existing = latestByActor.get(actor);
 
+    // A simultaneous Untrust wins; URLs break ties between matching actions.
     if (
       !existing ||
       existing === true ||
       object.value.published > existing.value.published ||
       (object.value.published === existing.value.published &&
-        object.value.activity !== "True")
+        (object.value.activity === "Untrust" &&
+          existing.value.activity !== "Untrust")) ||
+      (object.value.published === existing.value.published &&
+        object.value.activity === existing.value.activity &&
+        object.url > existing.url)
     ) {
       latestByActor.set(actor, object);
     }
@@ -73,4 +88,20 @@ export function computeTrustAnnotationsByActor(
 
   // Trusted actors are those whose latest decision is Trust.
   return latestByActor;
+}
+
+/** Shared trust policy; callers choose one-shot or reactive discovery. */
+export function trustedActors(
+  annotations: Map<string, AnnotationObject | true>,
+  actor?: string,
+) {
+  const trusted = new Set(
+    [...annotations]
+      .filter(
+        ([, value]) => value === true || value.value.activity === "Trust",
+      )
+      .map(([actor]) => actor),
+  );
+  if (actor) trusted.add(actor);
+  return [...trusted];
 }

@@ -187,3 +187,17 @@ export function sortPageVersions(
   // Return in reverse chronological order
   return sortedList.toReversed();
 }
+
+// If the page is not protected, choose the most recent version.
+// Otherwise, choose the most recent version produced by a trusted actor.
+export function pickVersion(
+  pageVersions: PageVersionObject[],
+  trustedEditors: string[],
+  isProtected: boolean,
+) {
+  if (!isProtected) return pageVersions.at(0) ?? null;
+  return (
+    pageVersions.find((version) => trustedEditors.includes(version.actor)) ??
+    null
+  );
+}
