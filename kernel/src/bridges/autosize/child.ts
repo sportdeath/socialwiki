@@ -182,7 +182,8 @@ export function installAutosizeChild(events: EventsChild) {
     startAutosize();
   };
 
-  events.listen(AUTOSIZE_MODE_EVENT, (payload) => {
+  events.listen(AUTOSIZE_MODE_EVENT, (event) => {
+    const payload = event.detail;
     const nextMode =
       typeof payload === "object" && payload !== null
         ? parseAutosizeMode((payload as Record<string, unknown>).mode)

@@ -134,7 +134,9 @@ export function installNavigationChild(events: EventsChild) {
     },
   });
 
-  events.listen(QUERY_EVENT, (payload) => {
+  events.listen(QUERY_EVENT, (event) => {
+    event.preventDefault();
+    const payload = event.detail;
     if (typeof payload !== "object" || payload === null) return;
     const p = payload as Record<string, unknown>;
     if (typeof p.query !== "string") return;
@@ -149,7 +151,9 @@ export function installNavigationChild(events: EventsChild) {
   // changes. Keep it as a promise so early descendants can wait for and then
   // inherit its effective value without a separate initialization phase.
   const inheritedBaseUrl = new Promise<string>((resolve) => {
-    const stopListening = events.listen(BASE_URL_RESPONSE_EVENT, (payload) => {
+    const stopListening = events.listen(BASE_URL_RESPONSE_EVENT, (event) => {
+      event.preventDefault();
+      const payload = event.detail;
       if (typeof payload !== "object" || payload === null) return;
       const p = payload as Record<string, unknown>;
       if (typeof p.baseUrl !== "string") return;

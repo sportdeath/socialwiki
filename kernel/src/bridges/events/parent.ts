@@ -1,6 +1,10 @@
-import { EVENT_TO_CHILD, EVENT_TO_PARENT } from "./shared";
+import {
+  EVENT_TO_CHILD,
+  EVENT_TO_PARENT,
+  type BridgedEvent,
+} from "./shared";
 
-type Listener = (event: CustomEvent<unknown>) => void;
+type Listener = (event: BridgedEvent) => void;
 
 export function installEventsParent(
   iframe: HTMLIFrameElement,

@@ -1,13 +1,11 @@
-import { EVENT_TO_CHILD, EVENT_TO_PARENT } from "./shared";
-
-declare global {
-  interface Window {
-    emit: (eventName: string, payload?: unknown) => void;
-  }
-}
+import {
+  EVENT_TO_CHILD,
+  EVENT_TO_PARENT,
+  type BridgedEvent,
+} from "./shared";
 
 export function installEventsChild() {
-  const listeners = new Map<string, Set<(payload: unknown) => void>>();
+  const listeners = new Map<string, Set<(event: BridgedEvent) => void>>();
 
   const emit = (eventName: string, payload?: unknown) => {
     window.parent?.postMessage(
@@ -31,16 +29,25 @@ export function installEventsChild() {
     const d = data as Record<string, unknown>;
     if (d.type !== EVENT_TO_CHILD || typeof d.eventName !== "string") return;
 
+    const childEvent = new CustomEvent(d.eventName, {
+      detail: d.payload,
+      cancelable: true,
+    });
     for (const listener of listeners.get(d.eventName) ?? []) {
-      listener(d.payload);
+      listener(childEvent);
     }
-    window.dispatchEvent(new CustomEvent(d.eventName, { detail: d.payload }));
+    if (!childEvent.defaultPrevented) window.dispatchEvent(childEvent);
+    if (!childEvent.defaultPrevented) window.onUnhandledEvent?.(childEvent);
   };
 
   window.addEventListener("message", onMessage);
   return {
     emit,
-    listen(eventName: string, receive: (payload: unknown) => void) {
+    /**
+     * Observe one incoming event name. preventDefault() consumes it without
+     * hiding it from other listeners; call it before awaiting async work.
+     */
+    listen(eventName: string, receive: (event: BridgedEvent) => void) {
       let eventListeners = listeners.get(eventName);
       if (!eventListeners) {
         eventListeners = new Set();

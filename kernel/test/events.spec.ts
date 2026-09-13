@@ -1,6 +1,50 @@
 import { expect, it, vi } from "vitest";
+import { installEventsChild } from "../src/bridges/events/child";
 import { installEventsParent } from "../src/bridges/events/parent";
-import { EVENT_TO_PARENT } from "../src/bridges/events/shared";
+import {
+  EVENT_TO_CHILD,
+  EVENT_TO_PARENT,
+} from "../src/bridges/events/shared";
+
+it("forwards only inbound events left unhandled by the child document", () => {
+  const events = installEventsChild();
+  const observe = vi.fn();
+  const forward = vi.fn();
+  const observeHandled = vi.fn();
+  window.addEventListener("public", observe);
+  window.addEventListener("handled", observeHandled);
+  window.onUnhandledEvent = forward;
+
+  const send = (eventName: string, payload: unknown) => {
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        source: window.parent,
+        data: { type: EVENT_TO_CHILD, eventName, payload },
+      }),
+    );
+  };
+
+  send("public", { value: 1 });
+  expect(observe).toHaveBeenCalledWith(
+    expect.objectContaining({ type: "public", detail: { value: 1 } }),
+  );
+  expect(forward).toHaveBeenCalledOnce();
+
+  events.listen("handled", (event) => event.preventDefault());
+  send("handled", { value: 2 });
+  expect(observeHandled).not.toHaveBeenCalled();
+  expect(forward).toHaveBeenCalledOnce();
+
+  const block = (event: Event) => event.preventDefault();
+  window.addEventListener("blocked", block);
+  send("blocked", { value: 3 });
+  expect(forward).toHaveBeenCalledOnce();
+
+  window.removeEventListener("public", observe);
+  window.removeEventListener("handled", observeHandled);
+  window.removeEventListener("blocked", block);
+  window.onUnhandledEvent = undefined;
+});
 
 it("validates the sender and lets listeners consume events before async work", async () => {
   const iframe = document.createElement("iframe");

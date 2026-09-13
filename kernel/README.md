@@ -27,6 +27,7 @@ Social.Wiki documents receive:
 - `<sw-transclude>`, a web component for including sub-documents. See [Transclude](src/transclude/README.md) for details.
 - `window.Graffiti` for posting and discovering social data. See the [Graffiti API](https://api.graffiti.garden/classes/Graffiti.html) for usage.
 - `window.emit(eventName, payload)` for sending events to the containing document.
+- `window.onUnhandledEvent` for optionally continuing incoming events into a nested document after bridge and DOM listeners have declined them.
 - `window.navigate(to)` for requesting navigation to a new route. 
 - `window.handleNavigation(onNavigate)` for intercepting navigation requests.
 - `window.query`, `window.params`, and `window.address` for reading and changing the current route.

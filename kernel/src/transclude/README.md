@@ -25,10 +25,30 @@ The element supports:
 - `ignore-lens-output`: prevents `srcdoc` and `status` from being reflected onto the element.
 - `status`: the current loading or document status, written by the element.
 
-`send(eventName, payload)` can be called on the elemtn to send an event into the child document.
-Event emitted from the child document can be listened to with `element.addEventListener(eventName, listener)`.
-
 When both `src` and `srcdoc` exist, `src` selects the running document and `srcdoc` may hold output reported by that document.
+
+## Across the boundary
+
+Capabilities such as Graffiti, navigation, and document resolution are restored
+across iframe boundaries via ["Bridges"](../bridges/). The transclude code intentionally
+does not implement this functionality itself and bridges are designed to be independent and modular.
+
+## Events
+
+`send(eventName, payload)` sends an event into the immediate child document,
+which can listen with `window.addEventListener(eventName, listener)`.
+Events emitted by that document via `window.emit(eventName, payload)` can be
+observed with `transcludeEl.addEventListener(eventName, listener)`.
+
+A transparent lens, like the View lens, may decide to propogate unhandled events in either direction, but forwarding is not enabled by default:
+
+```ts
+transclude.onUnhandledEvent = ({ type, detail }) => window.emit(type, detail);
+window.onUnhandledEvent = ({ type, detail }) => transclude.send(type, detail);
+```
+
+Bridge handlers and ordinary event listeners run first. Calling
+`preventDefault()` synchronously stops it from being sent to the corresponding `onUnhandledEvent`.
 
 ## Resolution and rendering
 
@@ -51,9 +71,3 @@ the rest of the address (such as `?/example` in the `src`, `#/v?/example`).
 
 Any document can intercept resolution requests with `window.handleDocumentResolution()`
 and act as the browser for its own descendants.
-
-## Across the boundary
-
-Capabilities such as Graffiti, navigation, and document resolution are restored
-across iframe boundaries via ["Bridges"](../bridges/). The transclude code intentionally
-does not implement this functionality itself and bridges are designed to be independent and modular.

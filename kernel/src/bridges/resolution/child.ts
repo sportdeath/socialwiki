@@ -12,6 +12,10 @@ let nextRequestId = 0;
 
 /** Use the immediate parent as this document's default resolver. */
 export function installResolutionChild(events: EventsChild): DocumentResolver {
+  // Responses belong to this bridge even when their local request was
+  // aborted. Consuming them does not hide them from the request listeners.
+  events.listen(RESOLUTION_RESPONSE_EVENT, (event) => event.preventDefault());
+
   const resolveThroughParent: DocumentResolver = (src, signal) => {
     // Responses may arrive out of order when several transcludes resolve at
     // once, so each invocation listens only for its own request ID.
@@ -24,13 +28,14 @@ export function installResolutionChild(events: EventsChild): DocumentResolver {
       };
       const onAbort = () => {
         // The event bridge has no cancellation message. Stop waiting locally;
-        // a late response will simply have no matching listener.
+        // a late response is consumed by the bridge but otherwise ignored.
         cleanup();
         reject(signal?.reason ?? new DOMException("Aborted", "AbortError"));
       };
       const stopListening = events.listen(
         RESOLUTION_RESPONSE_EVENT,
-        (payload) => {
+        (event) => {
+          const payload = event.detail;
           if (typeof payload !== "object" || payload === null) return;
           const response = payload as Record<string, unknown>;
           if (response.requestId !== requestId) return;
