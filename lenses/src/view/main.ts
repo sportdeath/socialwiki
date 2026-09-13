@@ -35,24 +35,14 @@ if (!foundTransclude) {
 }
 const transclude = foundTransclude;
 
-// Present unhandled child events as this transparent lens's own events.
+// Continue unhandled events across the View lens in both directions. Bridge
+// handlers and ordinary listeners can preventDefault() to stop either path.
 transclude.onUnhandledEvent = (event) => {
   window.emit(event.type, event.detail);
 };
-// Reflect autosize attributes on View.
-// The actual sizing and passthrough are handled by by continuing
-// to bubble the autosize event via onUnhandledEvent above
-window.addEventListener("sw-autosize-mode", (event) => {
-  if (!(event instanceof CustomEvent)) return;
-
-  const mode = event.detail?.mode;
-  if (typeof mode === "string") {
-    // The nested autosize bridge validates the attribute's value.
-    transclude.setAttribute("autosize", mode);
-  } else {
-    transclude.removeAttribute("autosize");
-  }
-});
+window.onUnhandledEvent = (event) => {
+  transclude.send(event.type, event.detail);
+};
 // Only the view lens reports which document it resolved. ignore-lens-output
 // protects the inner element's attributes; cancellation also stops forwarding.
 transclude.addEventListener("sw-lens-output", (event) => {
@@ -84,6 +74,7 @@ function setTranscludeSrcDoc(html: string, status: string) {
 }
 setTranscludeSrcDoc(LoadingPage, "loading");
 
+// Intercept navigation requests
 window.handleNavigation((to) => {
   // Any relative navigation is passed-through to the containing document
   if (!to.startsWith("?")) {
