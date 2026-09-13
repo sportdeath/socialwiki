@@ -16,25 +16,60 @@
             >
                 {{ loggingOut ? "Logging out..." : "Log Out" }}
             </button>
-            <button
-                v-if="loggedIn"
-                type="button"
-                class="warning"
-                :disabled="busy"
-                @click="emit('reset')"
-            >
-                {{ resetting ? "Resetting..." : "Reset all lenses" }}
-            </button>
-            <button type="button" :disabled="busy" @click="emit('modify', 'v')">
-                {{ modifying === "v" ? "Opening..." : "Modify View" }}
-            </button>
-            <button type="button" :disabled="busy" @click="emit('modify', 'e')">
-                {{ modifying === "e" ? "Opening..." : "Modify Edit" }}
-            </button>
-            <button type="button" :disabled="busy" @click="emit('modify', 'h')">
-                {{ modifying === "h" ? "Opening..." : "Modify History" }}
-            </button>
         </div>
+
+        <section class="lens-settings">
+            <h3>Modify Social.Wiki</h3>
+            <p class="lens-warning">
+                Advanced: changing these will change how you interact with all Social.Wiki sites.
+            </p>
+
+            <div class="lens-row">
+                <strong>View</strong>
+                <button type="button" :disabled="busy" @click="emit('modify', 'v')">
+                    {{ modifying === "v" ? "Opening..." : "Modify" }}
+                </button>
+                <button
+                    v-if="loggedIn"
+                    type="button"
+                    class="warning"
+                    :disabled="busy"
+                    @click="emit('reset', 'v')"
+                >
+                    {{ resetting === "v" ? "Resetting..." : "Reset" }}
+                </button>
+            </div>
+            <div class="lens-row">
+                <strong>Edit</strong>
+                <button type="button" :disabled="busy" @click="emit('modify', 'e')">
+                    {{ modifying === "e" ? "Opening..." : "Modify" }}
+                </button>
+                <button
+                    v-if="loggedIn"
+                    type="button"
+                    class="warning"
+                    :disabled="busy"
+                    @click="emit('reset', 'e')"
+                >
+                    {{ resetting === "e" ? "Resetting..." : "Reset" }}
+                </button>
+            </div>
+            <div class="lens-row">
+                <strong>History</strong>
+                <button type="button" :disabled="busy" @click="emit('modify', 'h')">
+                    {{ modifying === "h" ? "Opening..." : "Modify" }}
+                </button>
+                <button
+                    v-if="loggedIn"
+                    type="button"
+                    class="warning"
+                    :disabled="busy"
+                    @click="emit('reset', 'h')"
+                >
+                    {{ resetting === "h" ? "Resetting..." : "Reset" }}
+                </button>
+            </div>
+        </section>
         <footer>
             <button type="button" class="secondary" @click="open = false">
                 Close
@@ -50,15 +85,18 @@ const open = defineModel<boolean>({ required: true });
 const props = defineProps<{
     loggedIn: boolean;
     loggingOut: boolean;
-    resetting: boolean;
+    resetting: Lens | null;
     modifying: Lens | null;
 }>();
 const busy = computed(
-    () => props.loggingOut || props.resetting || props.modifying !== null,
+    () =>
+        props.loggingOut ||
+        props.resetting !== null ||
+        props.modifying !== null,
 );
 const emit = defineEmits<{
     logout: [];
-    reset: [];
+    reset: [lens: Lens];
     modify: [lens: Lens];
 }>();
 </script>
@@ -78,9 +116,9 @@ const emit = defineEmits<{
     gap: 0.5rem;
 }
 
-.settings-actions > button {
+.settings-actions > button,
+.lens-row button {
     width: 100%;
-    text-align: left;
     border: 1px solid var(--border-color);
     border-radius: 0.5rem;
     background: var(--background-color-interactive);
@@ -89,27 +127,48 @@ const emit = defineEmits<{
     text-decoration: none;
 }
 
-.settings-actions > button:hover {
+.settings-actions > button {
+    text-align: left;
+}
+
+.settings-actions > button:hover,
+.lens-row button:hover {
     background: var(--background-color-interactive-hover);
     border-color: var(--border-color-hover);
     color: var(--text-color);
     text-decoration: none;
 }
 
-.settings-actions > button.secondary {
-    color: var(--secondary-color);
+.lens-settings {
+    margin-top: 1.5rem;
 }
 
-.settings-actions > button.secondary:hover {
-    color: var(--secondary-hover-color);
+.lens-settings h3 {
+    margin-bottom: 0.25rem;
 }
 
-.settings-actions > button.warning {
+.lens-warning {
+    margin-top: 0;
+    color: var(--warning-color);
+    font-size: 0.9rem;
+}
+
+.lens-row {
+    display: grid;
+    grid-template-columns: minmax(5rem, 1fr) auto auto;
+    align-items: center;
+    gap: 0.5rem;
+    padding-block: 0.3rem;
+}
+
+.settings-actions > button.warning,
+.lens-row button.warning {
     color: var(--warning-color);
     border-color: var(--warning-color);
 }
 
-.settings-actions > button.warning:hover {
+.settings-actions > button.warning:hover,
+.lens-row button.warning:hover {
     color: var(--warning-hover-color);
     border-color: var(--warning-hover-color);
 }

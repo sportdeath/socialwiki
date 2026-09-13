@@ -143,21 +143,19 @@ export function useLensSources(
     getSource,
     refresh,
     resolveDocument,
-    async reset(currentSession: GraffitiSession) {
-      for (const lens of lenses) {
-        const [source, versions] = await Promise.all([
-          loadDefaultLens(lens),
-          getPageVersions(graffiti, lens),
-        ]);
-        await createPageVersion(
-          graffiti,
-          lens,
-          source,
-          versions.map((version) => version.url),
-          `Reset ${lensDirectories[lens]} lens to its default`,
-          currentSession,
-        );
-      }
+    async reset(lens: Lens, currentSession: GraffitiSession) {
+      const [source, versions] = await Promise.all([
+        loadDefaultLens(lens),
+        getPageVersions(graffiti, lens),
+      ]);
+      await createPageVersion(
+        graffiti,
+        lens,
+        source,
+        versions.map((version) => version.url),
+        `Reset ${lensDirectories[lens]} lens to its default`,
+        currentSession,
+      );
     },
   };
 }

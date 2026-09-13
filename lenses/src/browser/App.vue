@@ -85,10 +85,10 @@
         v-model="showSettingsDialog"
         :logged-in="!!session"
         :logging-out="loggingOut"
-        :resetting="resettingLenses"
+        :resetting="resettingLens"
         :modifying="modifyingLens"
         @logout="session && logoutFromSettings(session)"
-        @reset="session && resetLenses(session)"
+        @reset="session && resetLens($event, session)"
         @modify="modifyLens"
     />
     <main>
@@ -164,7 +164,7 @@ const lens = ref("");
 const lensParams = ref<URLSearchParams | undefined>(undefined);
 const pageAddress = ref<string | undefined>(undefined);
 const showSettingsDialog = ref(false);
-const resettingLenses = ref(false);
+const resettingLens = ref<Lens | null>(null);
 const modifyingLens = ref<Lens | null>(null);
 const lensRevision = ref(0);
 
@@ -178,7 +178,7 @@ function closeSettingsDialog() {
 }
 
 async function modifyLens(lens: Lens) {
-    if (modifyingLens.value || resettingLenses.value) return;
+    if (modifyingLens.value || resettingLens.value) return;
     modifyingLens.value = lens;
     try {
         const draft = await lensSources.getSource(lens);
@@ -204,17 +204,16 @@ async function modifyLens(lens: Lens) {
     }
 }
 
-async function resetLenses(currentSession: GraffitiSession) {
-    if (resettingLenses.value || modifyingLens.value) return;
-    resettingLenses.value = true;
+async function resetLens(lensToReset: Lens, currentSession: GraffitiSession) {
+    if (resettingLens.value || modifyingLens.value) return;
+    resettingLens.value = lensToReset;
     try {
-        await lensSources.reset(currentSession);
-        lensRevision.value++;
-        closeSettingsDialog();
+        await lensSources.reset(lensToReset, currentSession);
+        if (lens.value === lensToReset) lensRevision.value++;
     } catch (error) {
-        reportSettingsError("Resetting lenses", error);
+        reportSettingsError(`Resetting ${lensToReset} lens`, error);
     } finally {
-        resettingLenses.value = false;
+        resettingLens.value = null;
     }
 }
 
