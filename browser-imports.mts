@@ -2,11 +2,13 @@ import packageLock from "./package-lock.json" with { type: "json" };
 
 const packages = packageLock.packages as Record<string, { version?: string }>;
 
-// vue-router's exported ESM entry is its development build and eagerly imports
-// Vue Devtools. The production browser build is published but not exposed via
-// package exports, so it is the one exceptional entrypoint we must name.
-const browserProductionEntrypoints: Record<string, string> = {
+// These must remain raw ESM so every bare "vue" import uses the import map's
+// single compiler-enabled instance. The default Vue entry lacks the compiler;
+// the default Vue Router entry also loads Devtools in sandboxed documents.
+const rawBrowserEntrypoints: Record<string, string> = {
+  vue: "dist/vue.esm-browser.prod.js",
   "vue-router": "dist/vue-router.esm-browser.prod.js",
+  "@graffiti-garden/wrapper-vue": "dist/node/plugin.mjs",
 };
 
 function packageName(specifier: string) {
@@ -31,20 +33,15 @@ export function isPackageImport(specifier: string) {
 }
 
 /**
- * Resolve a package import through jsDelivr's ESM service. The service follows
- * the package's exports/module/main metadata, so packages and subpaths do not
- * need hand-maintained browser entrypoint paths here.
+ * Resolve package imports through jsDelivr. Most use its ESM service, which
+ * follows package metadata; packages that must share Vue use raw ESM instead.
  */
 export function packageImportUrl(specifier: string) {
   const name = packageName(specifier);
   const subpath = specifier.slice(name.length);
-  const productionEntrypoint =
-    subpath.length === 0 ? browserProductionEntrypoints[name] : undefined;
-  if (productionEntrypoint) {
-    // Still pass the file through +esm so its own bare imports become pinned
-    // browser URLs rather than depending on the containing import map.
-    return `${packageAssetUrl(name, productionEntrypoint)}/+esm`;
-  }
+  const rawEntrypoint =
+    subpath.length === 0 ? rawBrowserEntrypoints[name] : undefined;
+  if (rawEntrypoint) return packageAssetUrl(name, rawEntrypoint);
   return `https://cdn.jsdelivr.net/npm/${name}@${packageVersion(name)}${subpath}/+esm`;
 }
 
