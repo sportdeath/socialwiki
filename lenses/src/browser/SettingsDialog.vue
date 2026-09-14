@@ -69,6 +69,27 @@
                     {{ resetting === "h" ? "Resetting..." : "Reset" }}
                 </button>
             </div>
+            <div class="lens-row">
+                <strong>Browser</strong>
+                <button
+                    type="button"
+                    :disabled="busy"
+                    @click="emit('modify', 'browser')"
+                >
+                    {{ modifying === "browser" ? "Opening..." : "Modify" }}
+                </button>
+                <button
+                    v-if="loggedIn"
+                    type="button"
+                    class="warning"
+                    :disabled="busy"
+                    @click="emit('reset', 'browser')"
+                >
+                    {{
+                        resetting === "browser" ? "Resetting..." : "Reset"
+                    }}
+                </button>
+            </div>
         </section>
         <footer>
             <button type="button" class="secondary" @click="open = false">

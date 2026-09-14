@@ -2,6 +2,13 @@ import packageLock from "./package-lock.json" with { type: "json" };
 
 const packages = packageLock.packages as Record<string, { version?: string }>;
 
+// vue-router's exported ESM entry is its development build and eagerly imports
+// Vue Devtools. The production browser build is published but not exposed via
+// package exports, so it is the one exceptional entrypoint we must name.
+const browserProductionEntrypoints: Record<string, string> = {
+  "vue-router": "dist/vue-router.esm-browser.prod.js",
+};
+
 function packageName(specifier: string) {
   const parts = specifier.split("/");
   return specifier.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0];
@@ -31,6 +38,13 @@ export function isPackageImport(specifier: string) {
 export function packageImportUrl(specifier: string) {
   const name = packageName(specifier);
   const subpath = specifier.slice(name.length);
+  const productionEntrypoint =
+    subpath.length === 0 ? browserProductionEntrypoints[name] : undefined;
+  if (productionEntrypoint) {
+    // Still pass the file through +esm so its own bare imports become pinned
+    // browser URLs rather than depending on the containing import map.
+    return `${packageAssetUrl(name, productionEntrypoint)}/+esm`;
+  }
   return `https://cdn.jsdelivr.net/npm/${name}@${packageVersion(name)}${subpath}/+esm`;
 }
 

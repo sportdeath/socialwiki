@@ -7,7 +7,7 @@ import type {
 import { bytesToHex, utf8ToBytes } from "@noble/hashes/utils.js";
 import { sha256 } from "@noble/hashes/sha2.js";
 import type { TranscludeElement } from "../../../kernel/src/transclude/element";
-import { distributionUrl } from "../utils/distribution";
+import { lensesUrl } from "../utils/locator";
 import {
   pageStateSchema,
   pickVersion,
@@ -219,7 +219,7 @@ async function renderLens(force = false) {
 
       if (!selectedVersion) {
         emitLensOutput("not-found");
-        const initUrl = new URL("init.js", distributionUrl).href;
+        const initUrl = new URL("init.js", lensesUrl).href;
         setTranscludeSrcDoc(
           PageNotFound(address, initUrl),
           "not-found",

@@ -13,10 +13,12 @@ import {
 export const root = resolve(import.meta.dirname, "src");
 export const entries = {
   index: resolve(root, "index.html"),
+  browser: resolve(root, "browser/index.html"),
   view: resolve(root, "view/index.html"),
   edit: resolve(root, "edit/index.html"),
   history: resolve(root, "history/index.html"),
 } as const;
+const locatorEntry = resolve(root, "locator.ts");
 
 function readableLens(name: string): Plugin {
   return {
@@ -125,23 +127,21 @@ function preserveSourceComments(): Plugin {
 
 export function buildConfig(
   entry: keyof typeof entries,
-  standalone: boolean,
   watch = false,
 ): UserConfig {
   return {
     root,
     // Portable as a directory on localhost, GitHub Pages, or a versioned CDN.
     base: "./",
-    publicDir: standalone ? false : "public",
-    plugins: standalone
-      ? [
-          preserveSourceComments(),
-          vuePlugin(),
-          viteSingleFile({ removeViteModuleLoader: true }),
-          readableLens(entry),
-        ]
-      : [vuePlugin()],
-    esbuild: standalone ? { legalComments: "inline" } : undefined,
+    // Only the top-level needs to copy over the 404 redirect
+    publicDir: entry === "index" ? "public" : false,
+    plugins: [
+      preserveSourceComments(),
+      vuePlugin(),
+      viteSingleFile({ removeViteModuleLoader: true }),
+      ...(entry === "index" ? [] : [readableLens(entry)]),
+    ],
+    esbuild: { legalComments: "inline" },
     define: {
       MONACO_WORKER_BASE_URL: JSON.stringify(monacoWorkerBaseUrl),
     },
@@ -151,18 +151,37 @@ export function buildConfig(
       minify: false,
       cssMinify: false,
       watch: watch ? {} : undefined,
-      modulePreload: standalone ? false : undefined,
+      modulePreload: false,
       rollupOptions: {
         input: entries[entry],
-        external: standalone ? isPackageImport : undefined,
-        output: standalone
-          ? {
-              paths: packageImportUrl,
-            }
-          : undefined,
+        external: isPackageImport,
+        output: {
+          paths: packageImportUrl,
+        },
       },
     },
     preview: { cors: true },
+  };
+}
+
+export function locatorBuildConfig(watch = false): UserConfig {
+  return {
+    root,
+    publicDir: false,
+    esbuild: { legalComments: "inline" },
+    build: {
+      outDir: resolve(import.meta.dirname, "dist"),
+      emptyOutDir: false,
+      minify: false,
+      watch: watch ? {} : undefined,
+      rollupOptions: {
+        input: locatorEntry,
+        output: {
+          entryFileNames: "locator.js",
+          format: "iife",
+        },
+      },
+    },
   };
 }
 

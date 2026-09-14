@@ -92,7 +92,6 @@ import { annotationSchema, type AnnotationObject } from "../utils/schemas";
 import { getTrustContext } from "../utils/trust";
 import { sortProtectionHistory } from "../utils/protection";
 import { starterHtml } from "./starter";
-import { isLens, LENS_PUBLISHED_EVENT } from "../utils/lenses";
 
 const { composeAddress, composeQuery, parseAddress } = window.route;
 
@@ -480,12 +479,6 @@ async function submitPublishDialog(publishName: string, summary: string) {
             summary,
             publishSession,
         );
-        // The Browser keeps one cursor for the three personal lens pages.
-        // Tell it to advance that cursor before resolving the published lens.
-        if (isLens(publishName)) {
-            window.emit(LENS_PUBLISHED_EVENT, { lens: publishName });
-        }
-
         loadDraft(nextPublishedHtml);
         baselineHtml.value = nextPublishedHtml;
         resetPublishReminderState();

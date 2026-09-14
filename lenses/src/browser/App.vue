@@ -138,11 +138,7 @@ import {
     extractHashRoute,
     getLegacyLensRedirect,
 } from "./browser-route";
-import {
-    isLens,
-    LENS_PUBLISHED_EVENT,
-    type Lens,
-} from "../utils/lenses";
+import type { Lens } from "../utils/lenses";
 
 const { composeAddress, composeQuery, parseAddress, parseQuery } = window.route;
 
@@ -151,7 +147,7 @@ const session = useGraffitiSession();
 const router = useRouter();
 
 // The browser owns lens selection. Replacing the forwarding resolver here
-// lets a person's own v/e/h pages take precedence over the
+// lets a person's own browser/v/e/h pages take precedence over the
 // distribution defaults without changing the kernel or nested documents.
 const lensSources = useLensSources(graffiti, () => session.value);
 window.handleDocumentResolution(lensSources.resolveDocument);
@@ -177,11 +173,25 @@ function closeSettingsDialog() {
     showSettingsDialog.value = false;
 }
 
-async function modifyLens(lens: Lens) {
+async function modifyLens(lensToModify: Lens) {
     if (modifyingLens.value || resettingLens.value) return;
-    modifyingLens.value = lens;
+    modifyingLens.value = lensToModify;
     try {
-        const draft = await lensSources.getSource(lens);
+        const draft = await lensSources.getSource(lensToModify);
+        const currentBrowserAddress = composeAddress(
+            lens.value,
+            composeQuery(lensParams.value, pageAddress.value),
+        );
+        const editablePageAddress =
+            lensToModify === "browser"
+                ? composeAddress(
+                      lensToModify,
+                      composeQuery(undefined, currentBrowserAddress),
+                  )
+                : composeAddress(
+                      lensToModify,
+                      composeQuery(undefined, pageAddress.value),
+                  );
         closeSettingsDialog();
         await router.push(
             encodeRouteForRouter(
@@ -189,10 +199,7 @@ async function modifyLens(lens: Lens) {
                     "e",
                     composeQuery(
                         new URLSearchParams({ draft }),
-                        composeAddress(
-                            lens,
-                            composeQuery(undefined, pageAddress.value),
-                        ),
+                        editablePageAddress,
                     ),
                 ),
             ),
@@ -204,14 +211,19 @@ async function modifyLens(lens: Lens) {
     }
 }
 
-async function resetLens(lensToReset: Lens, currentSession: GraffitiSession) {
+async function resetLens(
+    lensToReset: Lens,
+    currentSession: GraffitiSession,
+) {
     if (resettingLens.value || modifyingLens.value) return;
     resettingLens.value = lensToReset;
     try {
         await lensSources.reset(lensToReset, currentSession);
-        if (lens.value === lensToReset) lensRevision.value++;
+        if (lens.value === lensToReset) {
+            lensRevision.value++;
+        }
     } catch (error) {
-        reportSettingsError(`Resetting ${lensToReset} lens`, error);
+        reportSettingsError(`Resetting ${lensToReset}`, error);
     } finally {
         resettingLens.value = null;
     }
@@ -328,18 +340,9 @@ watch(
     { immediate: true },
 );
 const stopHandlingNavigation = window.handleNavigation(onNavigate);
-const onLensPublished = (event: Event) => {
-    if (!(event instanceof CustomEvent)) return;
-    const publishedLens = event.detail?.lens;
-    if (typeof publishedLens !== "string" || !isLens(publishedLens)) return;
-    event.preventDefault();
-    void lensSources.refresh();
-};
-window.addEventListener(LENS_PUBLISHED_EVENT, onLensPublished);
 onBeforeUnmount(() => {
     detachObservedTransclude();
     stopHandlingNavigation();
-    window.removeEventListener(LENS_PUBLISHED_EVENT, onLensPublished);
 });
 
 const editRoute = computed(() => {

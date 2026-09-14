@@ -1,5 +1,5 @@
 <!doctype html>
-<!-- This is the social wiki browser -->
+<!-- This loader selects the signed-in user's Social.Wiki browser. -->
 <html lang="en">
     <head>
         <meta charset="utf-8" />
@@ -16,15 +16,28 @@
                 document.head.prepend(base);
             }
         </script>
+        <style>
+            html,
+            body,
+            #browser {
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                overflow: hidden;
+            }
+        </style>
+        <script vite-ignore src="./locator.js"></script>
         <script vite-ignore src="./init.js"></script>
         <script type="module">
+            import { startBrowserLoader } from "./bootstrap.ts";
+
             // The kernel will wrap this document in an outer layer, so to
             // avoid running the code twice, don't bother executing until
             // the wrapper is set up
-            if (window.top !== window) import("/browser/main.ts");
+            if (window.top !== window) startBrowserLoader();
         </script>
     </head>
     <body>
-        <div id="app"></div>
+        <sw-transclude id="browser" name="Browser"></sw-transclude>
     </body>
 </html>

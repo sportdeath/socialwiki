@@ -4,7 +4,7 @@ import type {
   JSONSchema,
 } from "@graffiti-garden/api";
 import { loadDocument } from "../../../kernel/src/bridges/resolution/document";
-import { distributionUrl } from "../utils/distribution";
+import { lensesUrl } from "../utils/locator";
 import { useGraffitiDiscover } from "@graffiti-garden/wrapper-vue";
 import { nextTick, watch } from "vue";
 import {
@@ -14,7 +14,7 @@ import {
   type PageVersionObject,
 } from "../utils/page-versions";
 import {
-  isLens,
+  isGovernanceLens,
   lensDirectories,
   lenses,
   type Lens,
@@ -33,7 +33,7 @@ function lensSchema(actor: string) {
 async function loadDefaultLens(lens: Lens, signal?: AbortSignal) {
   // Keep default lenses and their assets in the same distribution as the browser.
   return loadDocument(
-    new URL(`${lensDirectories[lens]}/index.html`, distributionUrl),
+    new URL(`${lensDirectories[lens]}/index.html`, lensesUrl),
     signal,
   );
 }
@@ -55,8 +55,8 @@ export function useLensSources(
   graffiti: Graffiti,
   session: () => GraffitiSession | null | undefined,
 ) {
-  // One browser-owned query, not a discover per resolution. Explicit lens
-  // publication advances its cursor before the new lens is resolved.
+  // Keep one browser-owned query rather than starting a discovery for every
+  // resolution. Reset explicitly advances its cursor after deleting versions.
   const { objects, isFirstPoll, poll } = useGraffitiDiscover(
     () => (session() ? lenses : []),
     () => lensSchema(session()?.actor ?? ""),
@@ -95,7 +95,11 @@ export function useLensSources(
 
     const actor = session()?.actor;
     const version = actor
-      ? lensVersions(objects.value as PageVersionObject[], lens, actor).at(0)
+      ? lensVersions(
+          objects.value as PageVersionObject[],
+          lens,
+          actor,
+        ).at(0)
       : undefined;
     if (!version) return loadDefaultLens(lens, signal);
 
@@ -129,7 +133,7 @@ export function useLensSources(
     }
 
     const { name: lens, query } = window.route.parseAddress(url.hash.slice(2));
-    if (!isLens(lens)) throw new Error(`Unrecognized lens: ${lens}`);
+    if (!isGovernanceLens(lens)) throw new Error(`Unrecognized lens: ${lens}`);
 
     return {
       srcdoc: await getSource(lens, signal),
@@ -140,7 +144,6 @@ export function useLensSources(
 
   return {
     getSource,
-    refresh,
     resolveDocument,
     async reset(lens: Lens, currentSession: GraffitiSession) {
       await waitUntilLoaded();
