@@ -8,11 +8,11 @@
         <h2>Settings</h2>
         <div class="settings-actions">
             <button
-                v-if="loggedIn"
+                v-if="session"
                 type="button"
                 class="warning"
                 :disabled="busy"
-                @click="emit('logout')"
+                @click="logout"
             >
                 {{ loggingOut ? "Logging out..." : "Log Out" }}
             </button>
@@ -26,45 +26,45 @@
 
             <div class="lens-row">
                 <strong>View</strong>
-                <button type="button" :disabled="busy" @click="emit('modify', 'v')">
+                <button type="button" :disabled="busy" @click="modifyLens('v')">
                     {{ modifying === "v" ? "Opening..." : "Modify" }}
                 </button>
                 <button
-                    v-if="loggedIn"
+                    v-if="session"
                     type="button"
                     class="warning"
                     :disabled="busy"
-                    @click="emit('reset', 'v')"
+                    @click="resetLens('v')"
                 >
                     {{ resetting === "v" ? "Resetting..." : "Reset" }}
                 </button>
             </div>
             <div class="lens-row">
                 <strong>Edit</strong>
-                <button type="button" :disabled="busy" @click="emit('modify', 'e')">
+                <button type="button" :disabled="busy" @click="modifyLens('e')">
                     {{ modifying === "e" ? "Opening..." : "Modify" }}
                 </button>
                 <button
-                    v-if="loggedIn"
+                    v-if="session"
                     type="button"
                     class="warning"
                     :disabled="busy"
-                    @click="emit('reset', 'e')"
+                    @click="resetLens('e')"
                 >
                     {{ resetting === "e" ? "Resetting..." : "Reset" }}
                 </button>
             </div>
             <div class="lens-row">
                 <strong>History</strong>
-                <button type="button" :disabled="busy" @click="emit('modify', 'h')">
+                <button type="button" :disabled="busy" @click="modifyLens('h')">
                     {{ modifying === "h" ? "Opening..." : "Modify" }}
                 </button>
                 <button
-                    v-if="loggedIn"
+                    v-if="session"
                     type="button"
                     class="warning"
                     :disabled="busy"
-                    @click="emit('reset', 'h')"
+                    @click="resetLens('h')"
                 >
                     {{ resetting === "h" ? "Resetting..." : "Reset" }}
                 </button>
@@ -74,16 +74,16 @@
                 <button
                     type="button"
                     :disabled="busy"
-                    @click="emit('modify', 'browser')"
+                    @click="modifyLens('browser')"
                 >
                     {{ modifying === "browser" ? "Opening..." : "Modify" }}
                 </button>
                 <button
-                    v-if="loggedIn"
+                    v-if="session"
                     type="button"
                     class="warning"
                     :disabled="busy"
-                    @click="emit('reset', 'browser')"
+                    @click="resetLens('browser')"
                 >
                     {{
                         resetting === "browser" ? "Resetting..." : "Reset"
@@ -99,27 +99,104 @@
     </DialogFrame>
 </template>
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
+import { useRouter } from "vue-router";
+import {
+    useGraffiti,
+    useGraffitiSession,
+} from "@graffiti-garden/wrapper-vue";
 import DialogFrame from "../utils/DialogFrame.vue";
 import type { Lens } from "../utils/lenses";
+import type { LensSources } from "./lens-resolver";
+import { decodeAddress, encodeRouteForRouter } from "./browser-route";
+
+const { composeAddress, composeQuery, parseAddress, parseQuery } = window.route;
 const open = defineModel<boolean>({ required: true });
 const props = defineProps<{
-    loggedIn: boolean;
-    loggingOut: boolean;
-    resetting: Lens | null;
-    modifying: Lens | null;
+    lensSources: LensSources;
 }>();
+const graffiti = useGraffiti();
+const session = useGraffitiSession();
+const router = useRouter();
+const loggingOut = ref(false);
+const resetting = ref<Lens | null>(null);
+const modifying = ref<Lens | null>(null);
 const busy = computed(
     () =>
-        props.loggingOut ||
-        props.resetting !== null ||
-        props.modifying !== null,
+        loggingOut.value || resetting.value !== null || modifying.value !== null,
 );
-const emit = defineEmits<{
-    logout: [];
-    reset: [lens: Lens];
-    modify: [lens: Lens];
-}>();
+
+async function logout() {
+    const currentSession = session.value;
+    if (!currentSession || busy.value) return;
+
+    loggingOut.value = true;
+    open.value = false;
+    try {
+        await graffiti.logout(currentSession);
+    } catch (error) {
+        reportSettingsError("Logging out", error);
+    } finally {
+        loggingOut.value = false;
+    }
+}
+
+async function modifyLens(lens: Lens) {
+    if (busy.value) return;
+    modifying.value = lens;
+    try {
+        const draft = await props.lensSources.getSource(lens);
+        const currentBrowserAddress = decodeAddress(
+            router.currentRoute.value.fullPath.replace(/^\//, ""),
+        );
+        const { query } = parseAddress(currentBrowserAddress);
+        const { address: pageAddress } = parseQuery(query);
+        const editablePageAddress = composeAddress(
+            lens,
+            composeQuery(
+                undefined,
+                lens === "browser" ? currentBrowserAddress : pageAddress,
+            ),
+        );
+        open.value = false;
+        await router.push(
+            encodeRouteForRouter(
+                composeAddress(
+                    "e",
+                    composeQuery(
+                        new URLSearchParams({ draft }),
+                        editablePageAddress,
+                    ),
+                ),
+            ),
+        );
+    } catch (error) {
+        reportSettingsError("Opening lens editor", error);
+    } finally {
+        modifying.value = null;
+    }
+}
+
+async function resetLens(lens: Lens) {
+    const currentSession = session.value;
+    if (!currentSession || busy.value) return;
+
+    resetting.value = lens;
+    try {
+        await props.lensSources.reset(lens, currentSession);
+    } catch (error) {
+        reportSettingsError(`Resetting ${lens}`, error);
+    } finally {
+        resetting.value = null;
+    }
+}
+
+function reportSettingsError(action: string, error: unknown) {
+    console.error(action, error);
+    alert(
+        `${action} failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+}
 </script>
 <style scoped>
 .settings-dialog :deep(.dialog-panel) {

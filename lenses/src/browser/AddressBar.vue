@@ -20,7 +20,9 @@
             class="dropdown"
             v-if="
                 isDropdownOpen &&
-                (addressInput !== pageAddress || historySuggestions.length)
+                (addressInput !== pageAddress ||
+                    historySuggestions.length ||
+                    historyEnabled === false)
             "
             @keydown="onDropdownKeydown"
         >
@@ -47,19 +49,22 @@
                     </small>
                 </button>
             </li>
+            <li v-if="historyEnabled === false">
+                <button type="button" @click="enableBrowserHistory">
+                    Enable browser history
+                </button>
+            </li>
         </ul>
     </search>
 </template>
 <script setup lang="ts">
 import { computed, ref, watch, useTemplateRef, onBeforeUnmount } from "vue";
-import type { VisitedPage } from "./browser-history";
+import { useBrowserHistory } from "./browser-history";
 const props = defineProps<{
     address?: string;
-    historySuggestions: VisitedPage[];
 }>();
 const emit = defineEmits<{
     navigate: [address: string];
-    search: [query: string];
     focus: [];
 }>();
 const pageAddress = computed(() => props.address);
@@ -69,6 +74,11 @@ const addressInput = ref(pageAddress.value);
 watch(pageAddress, (newVal) => (addressInput.value = newVal), {
     immediate: true,
 });
+const {
+    enabled: historyEnabled,
+    suggestions: historySuggestions,
+    enable: enableBrowserHistory,
+} = useBrowserHistory(pageAddress, addressInput);
 
 function navigateToVisitedPage(address: string) {
     addressInput.value = address;
@@ -82,14 +92,6 @@ function navigateToInputAddress() {
 }
 
 const isDropdownOpen = defineModel<boolean>({ required: true });
-watch(addressInput, () => {
-    if (!isDropdownOpen.value) return;
-    emit("search", addressInput.value ?? "");
-});
-watch(isDropdownOpen, (open) => {
-    if (!open) return;
-    emit("search", addressInput.value ?? "");
-});
 
 function onAddressFocusIn(event: FocusEvent) {
     emit("focus");

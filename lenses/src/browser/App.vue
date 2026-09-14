@@ -9,10 +9,8 @@
 
         <AddressBar
             :address="pageAddress"
-            :history-suggestions="historySuggestions"
             v-model="isDropdownOpen"
             @navigate="navigateToInputAddress"
-            @search="refreshHistorySuggestions"
             @focus="isSmall && (navOpen = false)"
         />
 
@@ -83,13 +81,7 @@
     </header>
     <SettingsDialog
         v-model="showSettingsDialog"
-        :logged-in="!!session"
-        :logging-out="loggingOut"
-        :resetting="resettingLens"
-        :modifying="modifyingLens"
-        @logout="session && logoutFromSettings(session)"
-        @reset="session && resetLens($event, session)"
-        @modify="modifyLens"
+        :lens-sources="lensSources"
     />
     <main>
         <sw-transclude
@@ -125,21 +117,16 @@ import {
 import SettingsDialog from "./SettingsDialog.vue";
 import AddressBar from "./AddressBar.vue";
 import { useRouter } from "vue-router";
-import { useGraffiti, useGraffitiSession } from "@graffiti-garden/wrapper-vue";
-import type { GraffitiSession } from "@graffiti-garden/api";
 import {
-    listVisitedPages,
-    recordPageVisit,
-    type VisitedPage,
-} from "./browser-history";
+    useGraffiti,
+    useGraffitiSession,
+} from "@graffiti-garden/wrapper-vue";
 import { useLensSources } from "./lens-resolver";
 import {
     encodeRouteForRouter,
     extractHashRoute,
     getLegacyLensRedirect,
 } from "./browser-route";
-import type { Lens } from "../utils/lenses";
-
 const { composeAddress, composeQuery, parseAddress, parseQuery } = window.route;
 
 const graffiti = useGraffiti();
@@ -150,6 +137,7 @@ const router = useRouter();
 // lets a person's own browser/v/e/h pages take precedence over the
 // distribution defaults without changing the kernel or nested documents.
 const lensSources = useLensSources(graffiti, () => session.value);
+const lensRevision = lensSources.revision;
 window.handleDocumentResolution(lensSources.resolveDocument);
 
 const props = defineProps<{
@@ -160,9 +148,6 @@ const lens = ref("");
 const lensParams = ref<URLSearchParams | undefined>(undefined);
 const pageAddress = ref<string | undefined>(undefined);
 const showSettingsDialog = ref(false);
-const resettingLens = ref<Lens | null>(null);
-const modifyingLens = ref<Lens | null>(null);
-const lensRevision = ref(0);
 
 function openSettingsDialog() {
     showSettingsDialog.value = true;
@@ -171,69 +156,6 @@ function openSettingsDialog() {
 
 function closeSettingsDialog() {
     showSettingsDialog.value = false;
-}
-
-async function modifyLens(lensToModify: Lens) {
-    if (modifyingLens.value || resettingLens.value) return;
-    modifyingLens.value = lensToModify;
-    try {
-        const draft = await lensSources.getSource(lensToModify);
-        const currentBrowserAddress = composeAddress(
-            lens.value,
-            composeQuery(lensParams.value, pageAddress.value),
-        );
-        const editablePageAddress =
-            lensToModify === "browser"
-                ? composeAddress(
-                      lensToModify,
-                      composeQuery(undefined, currentBrowserAddress),
-                  )
-                : composeAddress(
-                      lensToModify,
-                      composeQuery(undefined, pageAddress.value),
-                  );
-        closeSettingsDialog();
-        await router.push(
-            encodeRouteForRouter(
-                composeAddress(
-                    "e",
-                    composeQuery(
-                        new URLSearchParams({ draft }),
-                        editablePageAddress,
-                    ),
-                ),
-            ),
-        );
-    } catch (error) {
-        reportSettingsError("Opening lens editor", error);
-    } finally {
-        modifyingLens.value = null;
-    }
-}
-
-async function resetLens(
-    lensToReset: Lens,
-    currentSession: GraffitiSession,
-) {
-    if (resettingLens.value || modifyingLens.value) return;
-    resettingLens.value = lensToReset;
-    try {
-        await lensSources.reset(lensToReset, currentSession);
-        if (lens.value === lensToReset) {
-            lensRevision.value++;
-        }
-    } catch (error) {
-        reportSettingsError(`Resetting ${lensToReset}`, error);
-    } finally {
-        resettingLens.value = null;
-    }
-}
-
-function reportSettingsError(action: string, error: unknown) {
-    console.error(action, error);
-    alert(
-        `${action} failed: ${error instanceof Error ? error.message : String(error)}`,
-    );
 }
 
 watch(
@@ -268,24 +190,12 @@ watch(
 );
 
 const loggingIn = ref(false);
-const loggingOut = ref(false);
 
 function login() {
     loggingIn.value = true;
     graffiti.login().finally(() => {
         loggingIn.value = false;
     });
-}
-function logout(session: GraffitiSession) {
-    loggingOut.value = true;
-    graffiti.logout(session).finally(() => {
-        loggingOut.value = false;
-    });
-}
-
-function logoutFromSettings(session: GraffitiSession) {
-    closeSettingsDialog();
-    logout(session);
 }
 
 // Watch transclude srcdoc for draft updates and listen for explicit
@@ -353,37 +263,6 @@ const editRoute = computed(() => {
 });
 
 const isDropdownOpen = ref(false);
-const historySuggestions = ref<VisitedPage[]>([]);
-let historyLookupVersion = 0;
-
-let searchQuery = "";
-async function refreshHistorySuggestions(query = searchQuery) {
-    searchQuery = query;
-    const lookupVersion = ++historyLookupVersion;
-
-    try {
-        const suggestions = await listVisitedPages(query);
-        if (lookupVersion !== historyLookupVersion) return;
-        historySuggestions.value = suggestions;
-    } catch {
-        if (lookupVersion !== historyLookupVersion) return;
-        historySuggestions.value = [];
-    }
-}
-
-watch(
-    pageAddress,
-    (address) => {
-        if (!address) return;
-        void recordPageVisit(address)
-            .then(() => {
-                if (!isDropdownOpen.value) return;
-                void refreshHistorySuggestions();
-            })
-            .catch(() => {});
-    },
-    { immediate: true },
-);
 
 // When input is submitted, the route changes
 // Preserve the current lens when only the page's own query changes.

@@ -1,69 +1,89 @@
-import { openDB, type DBSchema, type IDBPDatabase } from "idb";
+import type {
+    GraffitiObject,
+    JSONSchema,
+} from "@graffiti-garden/api";
+import {
+    useGraffiti,
+    useGraffitiDiscover,
+    useGraffitiSession,
+} from "@graffiti-garden/wrapper-vue";
+import {
+    computed,
+    toValue,
+    watch,
+    type MaybeRefOrGetter,
+} from "vue";
 
-const DB_NAME = "socialwiki-browser-history";
-const DB_VERSION = 1;
-const STORE_NAME = "visited-pages";
-
-export interface VisitedPage {
+interface VisitedPage {
     address: string;
     visits: number;
     lastVisitedAt: number;
 }
 
-interface BrowserHistoryDB extends DBSchema {
-    [STORE_NAME]: {
-        key: string;
-        value: VisitedPage;
-    };
-}
-
-let databasePromise: Promise<IDBPDatabase<BrowserHistoryDB>> | undefined;
-
-function getDatabase() {
-    if (!databasePromise) {
-        databasePromise = openDB<BrowserHistoryDB>(DB_NAME, DB_VERSION, {
-            upgrade(db) {
-                if (db.objectStoreNames.contains(STORE_NAME)) return;
-                db.createObjectStore(STORE_NAME, { keyPath: "address" });
+function browserHistorySchema(publishedAfter: number) {
+    return {
+        properties: {
+            allowed: {
+                type: "array",
+                maxItems: 0,
             },
-        });
-    }
-    return databasePromise;
+            value: {
+                properties: {
+                    activity: { const: "View" },
+                    site: { type: "string" },
+                    published: {
+                        type: "number",
+                        minimum: publishedAfter,
+                    },
+                },
+                required: ["activity", "site", "published"],
+            },
+        },
+        required: ["allowed", "value"],
+    } as const satisfies JSONSchema;
 }
+
+type BrowserHistoryEntry = GraffitiObject<
+    ReturnType<typeof browserHistorySchema>
+>;
 
 function normalizeAddress(address: string) {
     return address.trim();
 }
 
-export async function recordPageVisit(address: string) {
-    const normalizedAddress = normalizeAddress(address);
-    if (!normalizedAddress) return;
+function aggregateVisits(entries: BrowserHistoryEntry[]) {
+    const pagesByAddress = new Map<string, VisitedPage>();
+    for (const entry of entries) {
+        const address = normalizeAddress(entry.value.site);
+        if (!address) continue;
 
-    const db = await getDatabase();
-    const existing = await db.get(STORE_NAME, normalizedAddress);
-    const next: VisitedPage = {
-        address: normalizedAddress,
-        visits: (existing?.visits ?? 0) + 1,
-        lastVisitedAt: Date.now(),
-    };
-    await db.put(STORE_NAME, next);
+        const existing = pagesByAddress.get(address);
+        pagesByAddress.set(address, {
+            address,
+            visits: (existing?.visits ?? 0) + 1,
+            lastVisitedAt: Math.max(
+                existing?.lastVisitedAt ?? 0,
+                entry.value.published,
+            ),
+        });
+    }
+
+    return [...pagesByAddress.values()];
 }
 
-function rankSuggestions(
-    pages: VisitedPage[],
-    query: string,
-    limit: number,
-): VisitedPage[] {
+function listVisitedPages(
+    entries: BrowserHistoryEntry[],
+    query = "",
+    limit = 8,
+) {
     const normalizedQuery = query.trim().toLowerCase();
+    const pages = aggregateVisits(entries).filter(
+        (page) =>
+            normalizedQuery.length === 0 ||
+            page.address.toLowerCase().includes(normalizedQuery),
+    );
 
-    const filtered =
-        normalizedQuery.length === 0
-            ? pages
-            : pages.filter((page) =>
-                  page.address.toLowerCase().includes(normalizedQuery),
-              );
-
-    filtered.sort((left, right) => {
+    pages.sort((left, right) => {
         if (normalizedQuery.length > 0) {
             const leftStarts = left.address
                 .toLowerCase()
@@ -80,11 +100,70 @@ function rankSuggestions(
         return left.address.localeCompare(right.address);
     });
 
-    return filtered.slice(0, limit);
+    return pages.slice(0, limit);
 }
 
-export async function listVisitedPages(query = "", limit = 8) {
-    const db = await getDatabase();
-    const pages = await db.getAll(STORE_NAME);
-    return rankSuggestions(pages, query, limit);
+export function useBrowserHistory(
+    pageAddress: MaybeRefOrGetter<string | undefined>,
+    query: MaybeRefOrGetter<string | undefined>,
+) {
+    const graffiti = useGraffiti();
+    const session = useGraffitiSession();
+
+    const historyCutoff = new Date();
+    historyCutoff.setDate(historyCutoff.getDate() - 30);
+    const publishedAfter = historyCutoff.setHours(0, 0, 0, 0);
+    const { objects, isFirstPoll } = useGraffitiDiscover(
+        () => (session.value ? [session.value.actor] : []),
+        () => browserHistorySchema(publishedAfter),
+        () => session.value,
+    );
+    const enabled = computed(() =>
+        !session.value || isFirstPoll.value
+            ? undefined
+            : objects.value.length > 0,
+    );
+    const suggestions = computed(() =>
+        listVisitedPages(objects.value, toValue(query) ?? ""),
+    );
+
+    let lastRecordedVisit = "";
+    async function record(force = false) {
+        const currentSession = session.value;
+        const site = normalizeAddress(toValue(pageAddress) ?? "");
+        if (!currentSession || !site || (!force && !enabled.value)) return;
+
+        const visit = `${currentSession.actor}:${site}`;
+        if (visit === lastRecordedVisit) return;
+        lastRecordedVisit = visit;
+        try {
+            await graffiti.post<ReturnType<typeof browserHistorySchema>>(
+                {
+                    allowed: [],
+                    channels: [currentSession.actor],
+                    value: {
+                        activity: "View",
+                        site,
+                        published: Date.now(),
+                    },
+                },
+                currentSession,
+            );
+        } catch (error) {
+            if (lastRecordedVisit === visit) lastRecordedVisit = "";
+            console.error("Recording browser history failed", error);
+        }
+    }
+
+    watch(
+        [() => toValue(pageAddress), enabled],
+        () => void record(),
+        { immediate: true },
+    );
+
+    return {
+        enabled,
+        suggestions,
+        enable: () => void record(true),
+    };
 }

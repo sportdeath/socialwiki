@@ -6,7 +6,7 @@ import type {
 import { loadDocument } from "../../../kernel/src/bridges/resolution/document";
 import { lensesUrl } from "../utils/locator";
 import { useGraffitiDiscover } from "@graffiti-garden/wrapper-vue";
-import { nextTick, watch } from "vue";
+import { nextTick, ref, watch } from "vue";
 import {
   deletePageVersion,
   pageVersionSchema,
@@ -62,6 +62,7 @@ export function useLensSources(
     () => lensSchema(session()?.actor ?? ""),
     session,
   );
+  const revision = ref(0);
   const mediaCache = new Map<string, Promise<string>>();
   let refreshing: Promise<void> | undefined;
 
@@ -145,6 +146,7 @@ export function useLensSources(
   return {
     getSource,
     resolveDocument,
+    revision,
     async reset(lens: Lens, currentSession: GraffitiSession) {
       await waitUntilLoaded();
       const versions = lensVersions(
@@ -160,6 +162,9 @@ export function useLensSources(
         }),
       );
       await refresh();
+      revision.value++;
     },
   };
 }
+
+export type LensSources = ReturnType<typeof useLensSources>;
