@@ -101,6 +101,9 @@ if (window.top !== window) {
     transclude.style.height = "100dvh";
     // Keep the kernel-created source stable across reloads.
     transclude.id = "root";
+    // The root frame is the origin's own document, not a separate permission
+    // principal beneath it.
+    transclude.setAttribute("permission-scope", "inherit");
     transclude.setAttribute(
       "name",
       documentTitle || new URL(documentUrl).hostname,

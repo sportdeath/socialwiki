@@ -38,7 +38,7 @@ function isSession(value: unknown): value is SessionWithSource {
   );
 }
 
-function withTranscludeSource(
+export function withTranscludeSource(
   graffiti: Graffiti,
   host: HTMLElement,
 ): Graffiti {
@@ -53,12 +53,17 @@ function withTranscludeSource(
         const session = index === undefined ? undefined : args[index];
 
         if (index !== undefined && isSession(session)) {
+          const childSource = Array.isArray(session.source)
+            ? session.source
+            : [];
           args[index] = {
             ...session,
-            source: [
-              sourceFromElement(host),
-              ...(Array.isArray(session.source) ? session.source : []),
-            ],
+            // Scope inheritance is chosen by the containing document on the
+            // host element. The sandboxed child cannot grant it to itself.
+            source:
+              host.getAttribute("permission-scope") === "inherit"
+                ? childSource
+                : [sourceFromElement(host), ...childSource],
           } satisfies SessionWithSource;
         }
 

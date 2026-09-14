@@ -39,6 +39,9 @@ export function defineTranscludeElement(
    *   contains its own query.
    * - autosize: controls the host's size; it accepts "off" (the default),
    *   "width", "height", or "both". A bare autosize attribute means "both".
+   * - permission-scope: when set to "inherit", the containing document trusts
+   *   this document to use its Graffiti permission scope instead of adding a
+   *   new source segment.
    * - status: reports the current result; it is an output, not an input.
    */
   class SocialWikiTransclude extends HTMLElement implements TranscludeElement {

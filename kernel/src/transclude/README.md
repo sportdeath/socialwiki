@@ -22,6 +22,7 @@ The element supports:
 - `query`: state for a direct `srcdoc`; ignored when `src` is present because the query is part of the document address.
 - `autosize`: `width`, `height`, `both`, or a bare attribute for both axes. Makes the containing element resize to fit the child document.
 - `id` and `name`: these identify a document within the Graffiti guard. A document's ID hierarchy is used to identity that document for permissions purposes. The name should be human-readable.
+- `permission-scope="inherit"`: omits this boundary from Graffiti's source hierarchy, giving the child the containing document's permission scope. Because this delegates the parent's authority to the child, it must only be set by a parent that trusts the transcluded document. Unknown values retain the normal isolated scope.
 - `status`: the current loading or document status, written by the element.
 
 ## Across the boundary

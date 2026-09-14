@@ -88,6 +88,7 @@
             v-if="session !== undefined"
             :key="`${session?.actor ?? 'anonymous'}:${lensRevision}`"
             :id="lens"
+            permission-scope="inherit"
             :name="
                 lens === 'v'
                     ? 'View'
