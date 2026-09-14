@@ -1,3 +1,4 @@
+import "./monaco-workers";
 import { createApp } from "vue";
 import { GraffitiPlugin } from "@graffiti-garden/wrapper-vue";
 import Edit from "./Edit.vue";

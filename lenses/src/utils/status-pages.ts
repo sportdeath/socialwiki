@@ -1,4 +1,4 @@
-import styleCss from "../style.css?inline";
+import styleCss from "./status-pages.css?inline";
 const style = `<style>${styleCss}</style>`;
 
 export const LoadingPage = `

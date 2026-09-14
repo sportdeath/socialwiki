@@ -8,8 +8,7 @@ import { distributionUrl } from "../utils/distribution";
 import { useGraffitiDiscover } from "@graffiti-garden/wrapper-vue";
 import { nextTick, watch } from "vue";
 import {
-  createPageVersion,
-  getPageVersions,
+  deletePageVersion,
   pageVersionSchema,
   sortPageVersions,
   type PageVersionObject,
@@ -144,18 +143,20 @@ export function useLensSources(
     refresh,
     resolveDocument,
     async reset(lens: Lens, currentSession: GraffitiSession) {
-      const [source, versions] = await Promise.all([
-        loadDefaultLens(lens),
-        getPageVersions(graffiti, lens),
-      ]);
-      await createPageVersion(
-        graffiti,
+      await waitUntilLoaded();
+      const versions = lensVersions(
+        objects.value as PageVersionObject[],
         lens,
-        source,
-        versions.map((version) => version.url),
-        `Reset ${lensDirectories[lens]} lens to its default`,
-        currentSession,
+        currentSession.actor,
       );
+
+      await Promise.all(
+        versions.map(async (version) => {
+          await deletePageVersion(graffiti, version, currentSession);
+          mediaCache.delete(version.value.result.media);
+        }),
+      );
+      await refresh();
     },
   };
 }

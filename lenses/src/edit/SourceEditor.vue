@@ -105,27 +105,17 @@
         <!-- Left pane body (Editor) -->
         <template #left-pane>
             <div class="pane">
-                <CodeEditor
-                    v-if="!showDiff"
-                    v-model:value="editorHtml"
-                    language="html"
-                    :theme="editorTheme"
-                    :options="monacoOptions"
-                    @editorDidMount="onEditorDidMount"
+                <div
+                    v-show="!showDiff"
+                    ref="codeEditorElement"
                     class="code-editor"
-                />
+                ></div>
 
-                <DiffEditor
-                    v-else
-                    :value="diffHtml"
-                    :original="baseline"
-                    language="html"
-                    :theme="editorTheme"
-                    :options="diffOptions"
-                    @change="onDiffChange"
-                    @editorDidMount="onDiffDidMount"
+                <div
+                    v-show="showDiff"
+                    ref="diffEditorElement"
                     class="code-editor"
-                />
+                ></div>
             </div>
         </template>
 
@@ -139,33 +129,22 @@ import {
     shallowRef,
     computed,
     watch,
+    nextTick,
     onMounted,
     onBeforeUnmount,
 } from "vue";
 import * as monaco from "monaco-editor";
-import { CodeEditor, DiffEditor } from "monaco-editor-vue3";
 import { initVimMode, type VimAdapterInstance } from "monaco-vim";
 import "./toolbar.css";
 import TwoPaneLayout from "../utils/TwoPaneLayout.vue";
 
 const editorHtml = defineModel<string>({ required: true });
-defineProps<{
+const props = defineProps<{
     baseline: string;
     publishing: boolean;
     shouldShakePublish: boolean;
 }>();
 const emit = defineEmits<{ publish: []; download: [] }>();
-const diffHtml = ref(editorHtml.value);
-watch(editorHtml, (html) => {
-    // DiffEditor emits through editorHtml too. Do not feed that same change
-    // back through its value prop: Monaco's setValue clears its undo history.
-    if (
-        showDiff.value &&
-        diffEditorInstance.value?.getModifiedEditor().getValue() === html
-    )
-        return;
-    diffHtml.value = html;
-});
 
 // --- Editor Settings ------------------------------------
 type MonacoTheme = "vs-dark" | "vs";
@@ -204,9 +183,15 @@ const monacoOptions =
         lineNumbersMinChars: 3,
     }));
 
+const codeEditorElement = ref<HTMLElement | null>(null);
+const diffEditorElement = ref<HTMLElement | null>(null);
 const codeEditorInstance =
     shallowRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+const diffEditorInstance =
+    shallowRef<monaco.editor.IStandaloneDiffEditor | null>(null);
 const vimAdapter = shallowRef<VimAdapterInstance | null>(null);
+let originalModel: monaco.editor.ITextModel | null = null;
+let modifiedModel: monaco.editor.ITextModel | null = null;
 
 const disposeVimMode = () => {
     vimAdapter.value?.dispose();
@@ -225,26 +210,9 @@ const syncVimMode = () => {
     vimAdapter.value = initVimMode(activeEditor, null);
 };
 
-const onEditorDidMount = (editor: monaco.editor.IStandaloneCodeEditor) => {
-    codeEditorInstance.value = editor;
-    syncVimMode();
-};
-
 // --- Diff settings ------------------------------------
 
-// Keep the editor and diff HTML in sync (v-model does not work)
 const showDiff = ref(false);
-watch(showDiff, (enabled) => {
-    if (enabled) {
-        codeEditorInstance.value = null;
-        diffHtml.value = editorHtml.value;
-    } else {
-        diffEditorInstance.value = null;
-    }
-});
-const onDiffChange = (value: string) => {
-    editorHtml.value = value;
-};
 
 const viewMenuDetails = ref<HTMLDetailsElement | null>(null);
 function closeViewMenu() {
@@ -268,30 +236,90 @@ const diffOptions = computed(() => ({
     ...monacoOptions.value,
     renderSideBySide: false,
 }));
-const diffEditorInstance =
-    shallowRef<monaco.editor.IStandaloneDiffEditor | null>(null);
-const onDiffDidMount = (editor: monaco.editor.IStandaloneDiffEditor) => {
-    diffEditorInstance.value = editor;
+
+// Both editors share the modified model, so toggling the diff never replaces
+// its value or clears Monaco's undo history.
+function mountCodeEditor() {
+    const codeElement = codeEditorElement.value;
+    if (!codeElement) throw new Error("Missing Monaco editor container");
+
+    modifiedModel = monaco.editor.createModel(editorHtml.value, "html");
+    codeEditorInstance.value = monaco.editor.create(codeElement, {
+        ...monacoOptions.value,
+        model: modifiedModel,
+    });
+    modifiedModel.onDidChangeContent(() => {
+        const value = modifiedModel?.getValue();
+        if (value !== undefined && value !== editorHtml.value) {
+            editorHtml.value = value;
+        }
+    });
     syncVimMode();
-};
-watch([vimModeEnabled, showDiff], syncVimMode);
+}
+
+function mountDiffEditor() {
+    const diffElement = diffEditorElement.value;
+    if (!diffElement || !modifiedModel) {
+        throw new Error("Missing Monaco diff editor container");
+    }
+
+    originalModel = monaco.editor.createModel(props.baseline, "html");
+    diffEditorInstance.value = monaco.editor.createDiffEditor(
+        diffElement,
+        diffOptions.value,
+    );
+    diffEditorInstance.value.setModel({
+        original: originalModel,
+        modified: modifiedModel,
+    });
+}
+
+watch(editorHtml, (html) => {
+    if (modifiedModel && modifiedModel.getValue() !== html) {
+        modifiedModel.setValue(html);
+    }
+});
+watch(
+    () => props.baseline,
+    (baseline) => {
+        if (originalModel && originalModel.getValue() !== baseline) {
+            originalModel.setValue(baseline);
+        }
+    },
+);
+watch(vimModeEnabled, syncVimMode);
+watch(showDiff, async () => {
+    await nextTick();
+    if (showDiff.value && !diffEditorInstance.value) mountDiffEditor();
+    const activeEditor = showDiff.value
+        ? diffEditorInstance.value
+        : codeEditorInstance.value;
+    activeEditor?.layout();
+    syncVimMode();
+});
 watch(
     monacoOptions,
     (opts) => {
-        if (!diffEditorInstance.value) return;
-        const modified = diffEditorInstance.value.getModifiedEditor();
-        const original = diffEditorInstance.value.getOriginalEditor();
-
-        modified.updateOptions(opts);
-        original.updateOptions(opts);
+        codeEditorInstance.value?.updateOptions(opts);
+        diffEditorInstance.value?.updateOptions({
+            ...opts,
+            renderSideBySide: false,
+        });
     },
     { deep: true },
 );
 
-onMounted(() => document.addEventListener("pointerdown", onMenuPointerDown));
+onMounted(() => {
+    document.addEventListener("pointerdown", onMenuPointerDown);
+    mountCodeEditor();
+});
 onBeforeUnmount(() => {
     document.removeEventListener("pointerdown", onMenuPointerDown);
     disposeVimMode();
+    codeEditorInstance.value?.dispose();
+    diffEditorInstance.value?.dispose();
+    modifiedModel?.dispose();
+    originalModel?.dispose();
 });
 defineExpose({ closeMenu: closeViewMenu });
 </script>
