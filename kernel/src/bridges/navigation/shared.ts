@@ -70,6 +70,9 @@ declare global {
      * is `alice`; for `?/v?/alice`, it is `v?/alice`; and for `?mode=compact`
      * it is undefined.
      *
+     * Each document name within an address cannot contain `?`, because `?`
+     * separates that name from the query delegated to the document.
+     *
      * Assigning this property requests navigation to the resulting query.
      * Whenever the value changes, Window dispatches `addresschange`.
      */

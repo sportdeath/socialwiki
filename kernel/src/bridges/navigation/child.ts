@@ -1,4 +1,5 @@
 import * as route from "../../route";
+import { canonicalRouteUrl } from "../../url-route";
 import type { EventsChild } from "../events/child";
 import {
   BASE_URL_RESPONSE_EVENT,
@@ -187,25 +188,102 @@ export function installNavigationChild(events: EventsChild) {
   if (document.readyState === "complete") announceReady();
   else window.addEventListener("load", announceReady, { once: true });
 
+  // We will be selecting links in order to re-write their hrefs
+  // to serialize them (which is necessary for unicode).
+  const linkSelector = "a[href], area[href]";
+  type LinkElement = HTMLAnchorElement | HTMLAreaElement | SVGAElement;
+  function isLinkElement(element: EventTarget): element is LinkElement {
+    return element instanceof Element && element.matches(linkSelector);
+  }
+
+  // Get the link out of an event (a click event, pointerdown event, etc.)
+  // This gets the link even if the actual element is nested or in the shadow DOM.
+  function eventLink(event: Event): LinkElement | undefined {
+    // composedPath retains the actual link across open shadow boundaries,
+    // whereas event.target may be retargeted to the shadow host.
+    const pathLink = event.composedPath().find(isLinkElement);
+    if (pathLink) return pathLink;
+
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const link = target.closest(linkSelector);
+    return link && isLinkElement(link) ? link : undefined;
+  }
+
+  // Keep track of links that have already been serialized
+  // so that they are not double-encoded
+  const preparedLinks = new WeakMap<
+    LinkElement,
+    { sourceHref: string; canonicalHref: string }
+  >();
+
+  // Turn the href of a link element into a properly serialized URL
+  function canonicalizeRouteLink(link: LinkElement) {
+    // Don't serialize downloads, just normal links
+    if (link.hasAttribute("download")) return;
+    const href = link.getAttribute("href");
+    if (typeof href !== "string") return;
+
+    // pointerdown and contextmenu may both precede click. Keep preparation
+    // idempotent while retaining the decoded href for bridge navigation.
+    const prepared = preparedLinks.get(link);
+    if (prepared?.canonicalHref === href) return prepared.sourceHref;
+
+    try {
+      const routeUrl = canonicalRouteUrl(href, document.baseURI);
+      if (!routeUrl) {
+        preparedLinks.delete(link);
+        return href;
+      }
+
+      const canonicalHref = routeUrl.href;
+      preparedLinks.set(link, { sourceHref: href, canonicalHref });
+      link.setAttribute("href", canonicalHref);
+      return href;
+    } catch {
+      // Malformed links are left to native browser behavior.
+      return href;
+    }
+  }
+
+  // Prepare native new-tab/window paths before the browser opens its context
+  // menu or handles a middle click. Neither event is consumed.
+  const prepareNativeLink = (event: Event) => {
+    const link = eventLink(event);
+    if (link) canonicalizeRouteLink(link);
+  };
+  document.addEventListener("pointerdown", prepareNativeLink);
+  document.addEventListener("contextmenu", prepareNativeLink);
+
+  // When a link is clicked, intercept the navigation to use window.navigate
   document.addEventListener("click", (e) => {
     if (e.defaultPrevented) return;
     if (e.button !== 0) return;
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
 
-    const target = e.target;
-    if (!(target instanceof Element)) return;
-
-    const a = target.closest("a[href]");
-    if (!(a instanceof HTMLAnchorElement)) return;
+    const link = eventLink(e);
+    if (!link) return;
 
     // Downloads remain native. Other ordinary clicks use the bridge because
     // the sandbox cannot reliably navigate explicit ancestor targets.
-    if (a.hasAttribute("download")) return;
-    const href = a.getAttribute("href");
+    if (link.hasAttribute("download")) return;
+    const href = link.getAttribute("href");
     if (typeof href !== "string") return;
 
+    // This also covers keyboard-generated clicks without a preceding pointer
+    // or context-menu event.
+    const navigationHref = canonicalizeRouteLink(link) ?? href;
+
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+
+    // The sandbox explicitly permits user-initiated popups, so preserve the
+    // most common declarative new-tab behavior instead of routing it in-place.
+    const target =
+      link.getAttribute("target") ??
+      document.querySelector("base[target]")?.getAttribute("target");
+    if (target?.trim().toLowerCase() === "_blank") return;
+
     e.preventDefault();
-    window.navigate(href);
+    window.navigate(navigationHref);
   });
 
   return inheritedBaseUrl;

@@ -1,11 +1,11 @@
 <template>
     <header>
-        <RouterLink :to="encodeRouteForRouter('')">
+        <a :href="routeHref(homeRoute)">
             <h1>
                 <span class="brand-full">Social.Wiki</span>
                 <span class="brand-short" aria-hidden="true">SW</span>
             </h1>
-        </RouterLink>
+        </a>
 
         <AddressBar
             :address="pageAddress"
@@ -19,43 +19,35 @@
 
             <nav>
                 <ul>
-                    <li>
-                        <RouterLink
-                            :to="
-                                encodeRouteForRouter(
-                                    composeAddress(
-                                        'v',
-                                        composeQuery(undefined, pageAddress),
-                                    ),
-                                )
-                            "
+                    <li v-if="routeReady">
+                        <a
+                            :href="routeHref(viewRoute)"
+                            :class="{ active: lens === 'v' }"
+                            :aria-current="lens === 'v' ? 'page' : undefined"
                             title="The current version of this page"
                         >
                             View
-                        </RouterLink>
+                        </a>
                     </li>
-                    <li>
-                        <RouterLink
-                            :to="encodeRouteForRouter(editRoute)"
+                    <li v-if="routeReady">
+                        <a
+                            :href="routeHref(editRoute)"
+                            :class="{ active: lens === 'e' }"
+                            :aria-current="lens === 'e' ? 'page' : undefined"
                             title="Edit the source code of this page"
                         >
                             Edit
-                        </RouterLink>
+                        </a>
                     </li>
-                    <li>
-                        <RouterLink
-                            :to="
-                                encodeRouteForRouter(
-                                    composeAddress(
-                                        'h',
-                                        composeQuery(undefined, pageAddress),
-                                    ),
-                                )
-                            "
+                    <li v-if="routeReady">
+                        <a
+                            :href="routeHref(historyRoute)"
+                            :class="{ active: lens === 'h' }"
+                            :aria-current="lens === 'h' ? 'page' : undefined"
                             title="Past revisions of this page"
                         >
                             History
-                        </RouterLink>
+                        </a>
                     </li>
                     <li v-if="$graffitiSession.value === undefined">
                         Loading...
@@ -85,7 +77,7 @@
     />
     <main>
         <sw-transclude
-            v-if="session !== undefined"
+            v-if="session !== undefined && routeReady"
             :key="`${session?.actor ?? 'anonymous'}:${lensRevision}`"
             :id="lens"
             permission-scope="inherit"
@@ -117,22 +109,20 @@ import {
 } from "vue";
 import SettingsDialog from "./SettingsDialog.vue";
 import AddressBar from "./AddressBar.vue";
-import { useRouter } from "vue-router";
 import {
     useGraffiti,
     useGraffitiSession,
 } from "@graffiti-garden/wrapper-vue";
 import { useLensSources } from "./lens-resolver";
 import {
-    encodeRouteForRouter,
-    extractHashRoute,
     getLegacyLensRedirect,
+    navigateAddress as navigateBrowserAddress,
+    routeHref,
 } from "./browser-route";
 const { composeAddress, composeQuery, parseAddress, parseQuery } = window.route;
 
 const graffiti = useGraffiti();
 const session = useGraffitiSession();
-const router = useRouter();
 
 // The browser owns lens selection. Replacing the forwarding resolver here
 // lets a person's own browser/v/e/h pages take precedence over the
@@ -141,14 +131,19 @@ const lensSources = useLensSources(graffiti, () => session.value);
 const lensRevision = lensSources.revision;
 window.handleDocumentResolution(lensSources.resolveDocument);
 
-const props = defineProps<{
-    address: string;
-}>();
-
 const lens = ref("");
 const lensParams = ref<URLSearchParams | undefined>(undefined);
 const pageAddress = ref<string | undefined>(undefined);
+const routeReady = ref(false);
 const showSettingsDialog = ref(false);
+const navOpen = ref(true);
+const isSmall = ref(false);
+const mq = window.matchMedia("(min-width: 700px)");
+
+function syncNav() {
+    isSmall.value = !mq.matches;
+    navOpen.value = mq.matches;
+}
 
 function openSettingsDialog() {
     showSettingsDialog.value = true;
@@ -159,36 +154,43 @@ function closeSettingsDialog() {
     showSettingsDialog.value = false;
 }
 
-watch(
-    () => props.address,
-    (newAddress) => {
-        const { name: lens_, query } = parseAddress(newAddress);
-        lens.value = lens_;
-        const { params: lensParams_, address: pageAddress_ } =
-            parseQuery(query);
-        lensParams.value = lensParams_;
-        pageAddress.value = pageAddress_;
+function applyAddress(address: string) {
+    // TODO: Remove this after the legacy route format is fully sunset.
+    const legacyRedirectRoute = getLegacyLensRedirect(address);
+    if (legacyRedirectRoute !== null) {
+        navigateAddress(legacyRedirectRoute);
+        return;
+    }
 
-        // TODO: Remove this after the legacy route format is fully sunset.
-        const legacyRedirectRoute = getLegacyLensRedirect(newAddress);
-        if (legacyRedirectRoute !== null) {
-            router.replace(encodeRouteForRouter(legacyRedirectRoute));
-            return;
-        }
+    const { name, query } = parseAddress(address);
+    const { params, address: nestedAddress } = parseQuery(query);
 
-        // If the route is missing a lens (e.g. "#/SomePage"), redirect
-        // to the view lens while preserving the raw page address.
-        if (!pageAddress.value?.length) {
-            const redirectRoute = composeAddress(
-                "v",
-                composeQuery(lensParams.value, lens.value),
-            );
-            router.replace(encodeRouteForRouter(redirectRoute));
-            return;
-        }
-    },
-    { immediate: true },
-);
+    // If the route is missing a lens (e.g. "#/SomePage"), redirect to the
+    // view lens while preserving the raw page address.
+    if (!nestedAddress?.length) {
+        navigateAddress(
+            composeAddress("v", composeQuery(params, name || "Social.Wiki")),
+        );
+        return;
+    }
+
+    lens.value = name;
+    lensParams.value = params;
+    pageAddress.value = nestedAddress;
+    routeReady.value = true;
+}
+
+function syncAddress() {
+    applyAddress(window.address ?? "");
+    syncNav();
+}
+
+function navigateAddress(address: string) {
+    navigateBrowserAddress(address);
+}
+
+window.addEventListener("querychange", syncAddress);
+if (window.address !== undefined) syncAddress();
 
 const loggingIn = ref(false);
 
@@ -215,19 +217,11 @@ function detachObservedTransclude() {
 function onNavigate(to: string) {
     // If it is relative, add the lens
     if (to.startsWith("?")) {
-        router.push(encodeRouteForRouter(composeAddress(lens.value, to)));
+        navigateAddress(composeAddress(lens.value, to));
         return;
     }
 
-    const baseUrl = new URL(document.baseURI);
-    const internalRoute = extractHashRoute(to, baseUrl.href);
-    if (internalRoute !== null) {
-        router.push(encodeRouteForRouter(internalRoute));
-        return;
-    }
-
-    const url = new URL(to, baseUrl).toString();
-    window.navigate(url);
+    window.navigate(to);
 }
 watch(
     transclude,
@@ -254,14 +248,22 @@ const stopHandlingNavigation = window.handleNavigation(onNavigate);
 onBeforeUnmount(() => {
     detachObservedTransclude();
     stopHandlingNavigation();
+    window.removeEventListener("querychange", syncAddress);
 });
 
+const homeRoute = "v?/Social.Wiki";
+const viewRoute = computed(() =>
+    composeAddress("v", composeQuery(undefined, pageAddress.value)),
+);
 const editRoute = computed(() => {
     const lensParams = new URLSearchParams(
         srcdoc.value ? { draft: srcdoc.value } : undefined,
     );
     return composeAddress("e", composeQuery(lensParams, pageAddress.value));
 });
+const historyRoute = computed(() =>
+    composeAddress("h", composeQuery(undefined, pageAddress.value)),
+);
 
 const isDropdownOpen = ref(false);
 
@@ -274,34 +276,22 @@ function navigateToInputAddress(inputAddress: string) {
     if (inputPageName === currentPageName) {
         // If the user only changed the query, keep the current lens/params
         // and just update the page address
-        router.push(
-            encodeRouteForRouter(
-                composeAddress(
-                    lens.value,
-                    composeQuery(lensParams.value, inputAddress),
-                ),
+        navigateAddress(
+            composeAddress(
+                lens.value,
+                composeQuery(lensParams.value, inputAddress),
             ),
         );
     } else {
         // Otherwise, navigate to the view lens
-        router.push(
-            encodeRouteForRouter(
-                composeAddress("v", composeQuery(undefined, inputAddress)),
-            ),
+        navigateAddress(
+            composeAddress("v", composeQuery(undefined, inputAddress)),
         );
     }
     blurActiveElement();
 }
 
 // Logic for open and closing navigation
-const navOpen = ref(true);
-const isSmall = ref(false);
-const mq = window.matchMedia("(min-width: 700px)");
-const syncNav = () => {
-    isSmall.value = !mq.matches;
-    navOpen.value = mq.matches;
-};
-const stopSyncingNavAfterNavigation = router.afterEach(syncNav);
 // mount, or route change sync the nav state
 onMounted(() => {
     syncNav();
@@ -309,7 +299,6 @@ onMounted(() => {
 });
 onUnmounted(() => {
     mq.removeEventListener("change", syncNav);
-    stopSyncingNavAfterNavigation();
 });
 
 function blurActiveElement() {
@@ -368,11 +357,11 @@ header {
     z-index: 1;
 }
 
-nav .router-link-exact-active {
+nav a.active {
     text-decoration: underline 2px;
     color: var(--text-color);
 }
-nav .router-link-exact-active:hover {
+nav a.active:hover {
     color: var(--text-color);
 }
 

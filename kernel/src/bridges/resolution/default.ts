@@ -1,5 +1,6 @@
 import { parseAddress } from "../../route";
 import { DEFAULT_BASE_URL } from "../../constants";
+import { resolveAuthoredRoute } from "../../url-route";
 import { loadDocument } from "./document";
 import type { DocumentResolver } from "./shared";
 
@@ -25,12 +26,12 @@ export function createDefaultResolver(
     // baseUrl interprets the requested address only. A document's stable base
     // is inherited separately through the navigation bridge.
     // It does not select lens assets; kernelUrl locates the default distribution.
-    const url = new URL(src, baseUrl);
-    if (!url.hash.startsWith("#/")) {
+    const route = resolveAuthoredRoute(src, baseUrl);
+    if (!route) {
       throw new Error(`Could not resolve transclusion: ${src}`);
     }
 
-    const { name: lens, query } = parseAddress(url.hash.slice(2));
+    const { name: lens, query } = parseAddress(route.address);
     if (!isLens(lens)) throw new Error(`Unrecognized lens: ${lens}`);
 
     return {

@@ -6,7 +6,6 @@ import { defineConfig, type Plugin, type UserConfig } from "vite";
 import { viteSingleFile } from "vite-plugin-singlefile";
 import {
   isPackageImport,
-  monacoWorkerBaseUrl,
   packageImportUrl,
 } from "../browser-imports.mts";
 
@@ -142,9 +141,6 @@ export function buildConfig(
       ...(entry === "index" ? [] : [readableLens(entry)]),
     ],
     esbuild: { legalComments: "inline" },
-    define: {
-      MONACO_WORKER_BASE_URL: JSON.stringify(monacoWorkerBaseUrl),
-    },
     build: {
       outDir: resolve(import.meta.dirname, "dist"),
       emptyOutDir: false,

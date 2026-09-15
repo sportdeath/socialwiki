@@ -2,6 +2,9 @@
  * Split an address into the next document name and the query delegated to it.
  * For example, `parseAddress("v?mode=compact/alice")` returns
  * `{ name: "v", query: "?mode=compact/alice" }`.
+ *
+ * Document names cannot contain `?`: the first `?` is always the delimiter
+ * between a document name and its query.
  */
 export function parseAddress(address?: string): {
   name: string;
@@ -17,6 +20,7 @@ export function parseAddress(address?: string): {
 /**
  * Join a document name to its delegated query, adding `?` when needed.
  * For example, `composeAddress("v", "/alice")` returns `"v?/alice"`.
+ * Document names cannot contain `?`, because it is the query delimiter.
  */
 export function composeAddress(name: string, query: string): string {
   if (!query.length) return name;

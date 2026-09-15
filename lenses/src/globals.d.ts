@@ -4,8 +4,6 @@ import "../../kernel/src/bridges/events/child";
 import "../../kernel/src/bridges/navigation/shared";
 
 declare global {
-  const MONACO_WORKER_BASE_URL: string;
-
   interface Window {
     /** The stable base URL recorded by the lens distribution's locator. */
     socialWikiLensesUrl: string;

@@ -1,4 +1,5 @@
 import styleCss from "./status-pages.css?inline";
+import { escapeHtml } from "@vue/shared";
 const style = `<style>${styleCss}</style>`;
 
 export const LoadingPage = `
@@ -19,12 +20,12 @@ export const PageNotFound = (pageName: string, initUrl: string) => `
 <html>
     <head>
       <meta charset="utf-8" />
-      <script src="${initUrl}"></script>
+      <script src="${escapeHtml(initUrl)}"></script>
       ${style}
     </head>
     <body>
         <h1 class="status">Nothing here…yet.</h1>
-        <a class="status-button" href="#/${window.route.composeAddress("e", window.route.composeQuery(undefined, pageName))}">
+        <a class="status-button" href="${escapeHtml(`#/${window.route.composeAddress("e", window.route.composeQuery(undefined, pageName))}`)}">
             Edit page
         </a>
     </body>
@@ -40,7 +41,7 @@ export const ErrorPage = (e: string) => `
     </head>
     <body>
         <h1 class="status">Error loading page.</h1>
-        <p>${e}</p>
+        <p>${escapeHtml(e)}</p>
     </body>
 </html>
 `;

@@ -100,7 +100,6 @@
 </template>
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { useRouter } from "vue-router";
 import {
     useGraffiti,
     useGraffitiSession,
@@ -108,7 +107,7 @@ import {
 import DialogFrame from "../utils/DialogFrame.vue";
 import type { Lens } from "../utils/lenses";
 import type { LensSources } from "./lens-resolver";
-import { decodeAddress, encodeRouteForRouter } from "./browser-route";
+import { navigateAddress } from "./browser-route";
 
 const { composeAddress, composeQuery, parseAddress, parseQuery } = window.route;
 const open = defineModel<boolean>({ required: true });
@@ -117,7 +116,6 @@ const props = defineProps<{
 }>();
 const graffiti = useGraffiti();
 const session = useGraffitiSession();
-const router = useRouter();
 const loggingOut = ref(false);
 const resetting = ref<Lens | null>(null);
 const modifying = ref<Lens | null>(null);
@@ -146,9 +144,7 @@ async function modifyLens(lens: Lens) {
     modifying.value = lens;
     try {
         const draft = await props.lensSources.getSource(lens);
-        const currentBrowserAddress = decodeAddress(
-            router.currentRoute.value.fullPath.replace(/^\//, ""),
-        );
+        const currentBrowserAddress = window.address ?? "";
         const { query } = parseAddress(currentBrowserAddress);
         const { address: pageAddress } = parseQuery(query);
         const editablePageAddress = composeAddress(
@@ -159,14 +155,12 @@ async function modifyLens(lens: Lens) {
             ),
         );
         open.value = false;
-        await router.push(
-            encodeRouteForRouter(
-                composeAddress(
-                    "e",
-                    composeQuery(
-                        new URLSearchParams({ draft }),
-                        editablePageAddress,
-                    ),
+        navigateAddress(
+            composeAddress(
+                "e",
+                composeQuery(
+                    new URLSearchParams({ draft }),
+                    editablePageAddress,
                 ),
             ),
         );

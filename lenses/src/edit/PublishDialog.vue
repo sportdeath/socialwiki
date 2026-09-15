@@ -109,7 +109,7 @@ const normalizedPublishSummary = computed(() =>
     publishDialogSummary.value.trim(),
 );
 const publishPageHref = computed(
-    () => `#/v?/${encodeURIComponent(normalizedPublishPageName.value)}`,
+    () => `#/v?/${normalizedPublishPageName.value}`,
 );
 const isPublishDialogValid = computed(
     () =>

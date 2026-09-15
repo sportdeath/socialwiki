@@ -4,6 +4,7 @@ import type {
   JSONSchema,
 } from "@graffiti-garden/api";
 import { loadDocument } from "../../../kernel/src/bridges/resolution/document";
+import { resolveAuthoredRoute } from "../../../kernel/src/url-route";
 import { lensesUrl } from "../utils/locator";
 import { useGraffitiDiscover } from "@graffiti-garden/wrapper-vue";
 import { nextTick, ref, watch } from "vue";
@@ -128,12 +129,12 @@ export function useLensSources(
   }
 
   const resolveDocument = async (src: string, signal?: AbortSignal) => {
-    const url = new URL(src, document.baseURI);
-    if (!url.hash.startsWith("#/")) {
+    const route = resolveAuthoredRoute(src, document.baseURI);
+    if (!route) {
       throw new Error(`Could not resolve transclusion: ${src}`);
     }
 
-    const { name: lens, query } = window.route.parseAddress(url.hash.slice(2));
+    const { name: lens, query } = window.route.parseAddress(route.address);
     if (!isGovernanceLens(lens)) throw new Error(`Unrecognized lens: ${lens}`);
 
     return {

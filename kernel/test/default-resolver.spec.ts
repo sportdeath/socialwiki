@@ -41,4 +41,22 @@ describe("default document resolution", () => {
     );
     expect(fetch).not.toHaveBeenCalled();
   });
+
+  it("passes decoded document names through to the lens", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("<html><head></head></html>")),
+    );
+    const resolve = createDefaultResolver(
+      "https://social.wiki/init.js",
+      "https://social.wiki/",
+    );
+
+    await expect(resolve("#/v?/😄")).resolves.toMatchObject({
+      query: "?/😄",
+    });
+    await expect(resolve("#/e?/100%20real")).resolves.toMatchObject({
+      query: "?/100%20real",
+    });
+  });
 });

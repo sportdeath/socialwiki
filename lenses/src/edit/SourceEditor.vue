@@ -68,16 +68,6 @@
                                     <label class="menu-checkbox">
                                         <input
                                             type="checkbox"
-                                            v-model="minimapEnabled"
-                                        />
-                                        Show minimap
-                                    </label>
-                                </li>
-
-                                <li>
-                                    <label class="menu-checkbox">
-                                        <input
-                                            type="checkbox"
                                             v-model="renderWhitespace"
                                         />
                                         Show whitespace
@@ -105,17 +95,7 @@
         <!-- Left pane body (Editor) -->
         <template #left-pane>
             <div class="pane">
-                <div
-                    v-show="!showDiff"
-                    ref="codeEditorElement"
-                    class="code-editor"
-                ></div>
-
-                <div
-                    v-show="showDiff"
-                    ref="diffEditorElement"
-                    class="code-editor"
-                ></div>
+                <div ref="editorElement" class="code-editor"></div>
             </div>
         </template>
 
@@ -126,15 +106,24 @@
 <script setup lang="ts">
 import {
     ref,
-    shallowRef,
-    computed,
     watch,
-    nextTick,
     onMounted,
     onBeforeUnmount,
 } from "vue";
-import * as monaco from "monaco-editor";
-import { initVimMode, type VimAdapterInstance } from "monaco-vim";
+import { basicSetup } from "codemirror";
+import { Compartment, EditorState, type Extension } from "@codemirror/state";
+import {
+    EditorView,
+    highlightWhitespace,
+    keymap,
+    type ViewUpdate,
+} from "@codemirror/view";
+import { acceptCompletion } from "@codemirror/autocomplete";
+import { indentWithTab } from "@codemirror/commands";
+import { html } from "@codemirror/lang-html";
+import { unifiedMergeView } from "@codemirror/merge";
+import { oneDark } from "@codemirror/theme-one-dark";
+import { vim } from "@replit/codemirror-vim";
 import "./toolbar.css";
 import TwoPaneLayout from "../utils/TwoPaneLayout.vue";
 
@@ -146,72 +135,13 @@ const props = defineProps<{
 }>();
 const emit = defineEmits<{ publish: []; download: [] }>();
 
-// --- Editor Settings ------------------------------------
-type MonacoTheme = "vs-dark" | "vs";
-const editorTheme = ref<MonacoTheme>("vs-dark");
-const darkMode = computed({
-    get: () => editorTheme.value === "vs-dark",
-    set: (enabled: boolean) => {
-        editorTheme.value = enabled ? "vs-dark" : "vs";
-    },
-});
-
+// --- Editor settings ------------------------------------
+const darkMode = ref(true);
 const wordWrap = ref(true);
-const minimapEnabled = ref(true);
 const renderWhitespace = ref(false);
 const vimModeEnabled = ref(false);
 
-// Apply Monaco theme globally when selection changes
-watch(editorTheme, (theme) => monaco.editor.setTheme(theme), {
-    immediate: true,
-});
-
-const monacoOptions =
-    computed<monaco.editor.IStandaloneEditorConstructionOptions>(() => ({
-        lineNumbers: "on",
-        automaticLayout: true,
-        wordWrap: wordWrap.value ? "on" : "off",
-        minimap: { enabled: minimapEnabled.value },
-        renderWhitespace: renderWhitespace.value ? "all" : "none",
-        smoothScrolling: true,
-        scrollBeyondLastLine: true,
-        mouseWheelZoom: true,
-        quickSuggestions: true,
-        suggestOnTriggerCharacters: true,
-        tabCompletion: "on",
-        parameterHints: { enabled: true },
-        lineNumbersMinChars: 3,
-    }));
-
-const codeEditorElement = ref<HTMLElement | null>(null);
-const diffEditorElement = ref<HTMLElement | null>(null);
-const codeEditorInstance =
-    shallowRef<monaco.editor.IStandaloneCodeEditor | null>(null);
-const diffEditorInstance =
-    shallowRef<monaco.editor.IStandaloneDiffEditor | null>(null);
-const vimAdapter = shallowRef<VimAdapterInstance | null>(null);
-let originalModel: monaco.editor.ITextModel | null = null;
-let modifiedModel: monaco.editor.ITextModel | null = null;
-
-const disposeVimMode = () => {
-    vimAdapter.value?.dispose();
-    vimAdapter.value = null;
-};
-
-const syncVimMode = () => {
-    disposeVimMode();
-    if (!vimModeEnabled.value) return;
-
-    const activeEditor = showDiff.value
-        ? (diffEditorInstance.value?.getModifiedEditor() ?? null)
-        : codeEditorInstance.value;
-
-    if (!activeEditor) return;
-    vimAdapter.value = initVimMode(activeEditor, null);
-};
-
 // --- Diff settings ------------------------------------
-
 const showDiff = ref(false);
 
 const viewMenuDetails = ref<HTMLDetailsElement | null>(null);
@@ -231,95 +161,101 @@ const onMenuPointerDown = (event: PointerEvent) => {
     }
 };
 
-// Keep diff editor options in sync reactively
-const diffOptions = computed(() => ({
-    ...monacoOptions.value,
-    renderSideBySide: false,
-}));
+const editorElement = ref<HTMLElement | null>(null);
+let editor: EditorView | null = null;
 
-// Both editors share the modified model, so toggling the diff never replaces
-// its value or clears Monaco's undo history.
-function mountCodeEditor() {
-    const codeElement = codeEditorElement.value;
-    if (!codeElement) throw new Error("Missing Monaco editor container");
+// Compartments let settings change without rebuilding the editor. The
+// document, selection, and undo history therefore survive diff/settings
+// toggles.
+const themeConfig = new Compartment();
+const wrappingConfig = new Compartment();
+const whitespaceConfig = new Compartment();
+const vimConfig = new Compartment();
+const diffConfig = new Compartment();
 
-    modifiedModel = monaco.editor.createModel(editorHtml.value, "html");
-    codeEditorInstance.value = monaco.editor.create(codeElement, {
-        ...monacoOptions.value,
-        model: modifiedModel,
-    });
-    modifiedModel.onDidChangeContent(() => {
-        const value = modifiedModel?.getValue();
-        if (value !== undefined && value !== editorHtml.value) {
-            editorHtml.value = value;
-        }
-    });
-    syncVimMode();
+function optional(enabled: boolean, extension: Extension): Extension {
+    return enabled ? extension : [];
 }
 
-function mountDiffEditor() {
-    const diffElement = diffEditorElement.value;
-    if (!diffElement || !modifiedModel) {
-        throw new Error("Missing Monaco diff editor container");
-    }
+function currentDiffExtension(): Extension {
+    return showDiff.value
+        ? unifiedMergeView({
+              original: props.baseline,
+              // Reject restores this chunk to the published baseline.
+              mergeControls: true,
+              gutter: true,
+              allowInlineDiffs: true,
+          })
+        : [];
+}
 
-    originalModel = monaco.editor.createModel(props.baseline, "html");
-    diffEditorInstance.value = monaco.editor.createDiffEditor(
-        diffElement,
-        diffOptions.value,
-    );
-    diffEditorInstance.value.setModel({
-        original: originalModel,
-        modified: modifiedModel,
-    });
+function syncEditorModel(update: ViewUpdate) {
+    if (!update.docChanged) return;
+    const value = update.state.doc.toString();
+    if (value !== editorHtml.value) editorHtml.value = value;
+}
+
+function reconfigure(compartment: Compartment, extension: Extension) {
+    editor?.dispatch({ effects: compartment.reconfigure(extension) });
 }
 
 watch(editorHtml, (html) => {
-    if (modifiedModel && modifiedModel.getValue() !== html) {
-        modifiedModel.setValue(html);
-    }
+    if (!editor || editor.state.doc.toString() === html) return;
+    editor.dispatch({
+        changes: { from: 0, to: editor.state.doc.length, insert: html },
+    });
 });
 watch(
     () => props.baseline,
-    (baseline) => {
-        if (originalModel && originalModel.getValue() !== baseline) {
-            originalModel.setValue(baseline);
-        }
-    },
+    () => reconfigure(diffConfig, currentDiffExtension()),
 );
-watch(vimModeEnabled, syncVimMode);
-watch(showDiff, async () => {
-    await nextTick();
-    if (showDiff.value && !diffEditorInstance.value) mountDiffEditor();
-    const activeEditor = showDiff.value
-        ? diffEditorInstance.value
-        : codeEditorInstance.value;
-    activeEditor?.layout();
-    syncVimMode();
-});
-watch(
-    monacoOptions,
-    (opts) => {
-        codeEditorInstance.value?.updateOptions(opts);
-        diffEditorInstance.value?.updateOptions({
-            ...opts,
-            renderSideBySide: false,
-        });
-    },
-    { deep: true },
+watch(showDiff, () => reconfigure(diffConfig, currentDiffExtension()));
+watch(darkMode, (enabled) =>
+    reconfigure(themeConfig, optional(enabled, oneDark)),
+);
+watch(wordWrap, (enabled) =>
+    reconfigure(wrappingConfig, optional(enabled, EditorView.lineWrapping)),
+);
+watch(renderWhitespace, (enabled) =>
+    reconfigure(whitespaceConfig, optional(enabled, highlightWhitespace())),
+);
+watch(vimModeEnabled, (enabled) =>
+    reconfigure(vimConfig, optional(enabled, vim())),
 );
 
 onMounted(() => {
     document.addEventListener("pointerdown", onMenuPointerDown);
-    mountCodeEditor();
+    const parent = editorElement.value;
+    if (!parent) throw new Error("Missing CodeMirror editor container");
+
+    editor = new EditorView({
+        parent,
+        state: EditorState.create({
+            doc: editorHtml.value,
+            extensions: [
+                basicSetup,
+                html(),
+                // Prefer accepting an open completion, then indent when no
+                // completion is active. CodeMirror otherwise leaves Tab to
+                // browser focus navigation for accessibility.
+                keymap.of([
+                    { key: "Tab", run: acceptCompletion },
+                    indentWithTab,
+                ]),
+                EditorView.updateListener.of(syncEditorModel),
+                themeConfig.of(oneDark),
+                wrappingConfig.of(EditorView.lineWrapping),
+                whitespaceConfig.of([]),
+                vimConfig.of([]),
+                diffConfig.of([]),
+            ],
+        }),
+    });
 });
 onBeforeUnmount(() => {
     document.removeEventListener("pointerdown", onMenuPointerDown);
-    disposeVimMode();
-    codeEditorInstance.value?.dispose();
-    diffEditorInstance.value?.dispose();
-    modifiedModel?.dispose();
-    originalModel?.dispose();
+    editor?.destroy();
+    editor = null;
 });
 defineExpose({ closeMenu: closeViewMenu });
 </script>
@@ -333,5 +269,17 @@ defineExpose({ closeMenu: closeViewMenu });
 .code-editor {
     flex: 1;
     min-height: 0;
+    overflow: hidden;
+}
+
+.code-editor :deep(.cm-editor) {
+    height: 100%;
+}
+
+.code-editor :deep(.cm-scroller) {
+    overflow: auto;
+    font-family:
+        ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+        monospace;
 }
 </style>

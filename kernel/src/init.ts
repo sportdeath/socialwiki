@@ -10,6 +10,7 @@ import {
   handleDocumentResolution,
   resolveDocument,
 } from "./bridges/resolution/shared";
+import { canonicalRouteUrl, decodeUrlAddress } from "./url-route";
 
 declare const KERNEL_IMPORT_MAP: { imports: Record<string, string> };
 
@@ -83,7 +84,7 @@ if (window.top !== window) {
       if (to.startsWith("?")) return;
 
       try {
-        const url = new URL(to, baseUrl);
+        const url = canonicalRouteUrl(to, baseUrl) ?? new URL(to, baseUrl);
         // Ignore non-http/s URLs, e.g. javascript:
         if (url.protocol !== "http:" && url.protocol !== "https:") return;
         window.location.href = url.href;
@@ -113,7 +114,9 @@ if (window.top !== window) {
     // Forward any changes to the route to the top-level document
     const syncRoute = () => {
       const hash = window.location.hash;
-      const query = hash.startsWith("#/") ? `?/${hash.slice(2)}` : "";
+      const query = hash.startsWith("#/")
+        ? `?/${decodeUrlAddress(hash.slice(2))}`
+        : "";
       if (transclude.getAttribute("query") !== query) {
         transclude.setAttribute("query", query);
       }
