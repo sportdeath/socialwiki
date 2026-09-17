@@ -28,4 +28,19 @@ describe("route URL serialization", () => {
       "https://social.wiki/#/v?/mypage?/something",
     );
   });
+
+  it("uses separate roots for query-relative and explicit root routes", () => {
+    const documentRoute = {
+      rootUrl: "https://social.wiki/",
+      queryRootUrl: "https://example.com/apps/browser.html",
+      address: "",
+    };
+
+    expect(serializeRouteUrl("?/v?/Social.Wiki", documentRoute)?.href).toBe(
+      "https://example.com/apps/browser.html#/v?/Social.Wiki",
+    );
+    expect(serializeRouteUrl("#/v?/Social.Wiki", documentRoute)?.href).toBe(
+      "https://social.wiki/#/v?/Social.Wiki",
+    );
+  });
 });

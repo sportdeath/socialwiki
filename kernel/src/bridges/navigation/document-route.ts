@@ -2,8 +2,10 @@ import { composeAddress, composeQuery, parseQuery } from "../../route";
 
 /** A decoded internal route to a document, excluding that document's query. */
 export type DocumentRoute = Readonly<{
-  /** The absolute web URL on which Social.Wiki routes are exposed. */
+  /** The configured target for explicit #/... routes. */
   rootUrl: string;
+  /** The current top-level URL on which query-relative routes are exposed. */
+  queryRootUrl?: string;
   /** The decoded Social.Wiki address from that root to this document. */
   address: string;
 }>;
@@ -16,7 +18,12 @@ export type DocumentRouteState = {
 export function isDocumentRoute(value: unknown): value is DocumentRoute {
   if (typeof value !== "object" || value === null) return false;
   const route = value as Record<string, unknown>;
-  return typeof route.rootUrl === "string" && typeof route.address === "string";
+  return (
+    typeof route.rootUrl === "string" &&
+    (route.queryRootUrl === undefined ||
+      typeof route.queryRootUrl === "string") &&
+    typeof route.address === "string"
+  );
 }
 
 export function createDocumentRouteState(initialDocumentRoute?: DocumentRoute) {
@@ -32,6 +39,7 @@ export function createDocumentRouteState(initialDocumentRoute?: DocumentRoute) {
     setDocumentRoute(nextDocumentRoute: DocumentRoute) {
       if (
         documentRoute?.rootUrl === nextDocumentRoute.rootUrl &&
+        documentRoute.queryRootUrl === nextDocumentRoute.queryRootUrl &&
         documentRoute.address === nextDocumentRoute.address
       ) {
         return;

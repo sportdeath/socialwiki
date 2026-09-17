@@ -138,6 +138,16 @@ export function useLensSources(
 
   return {
     getSource,
+    isModified(lens: Lens) {
+      const actor = session()?.actor;
+      return actor
+        ? lensVersions(
+            objects.value as PageVersionObject[],
+            lens,
+            actor,
+          ).length > 0
+        : false;
+    },
     resolveDocument,
     revision,
     async reset(lens: Lens, currentSession: GraffitiSession) {

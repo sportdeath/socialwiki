@@ -1,3 +1,3 @@
-// Standalone documents navigate through Social.Wiki unless they opt into a
-// different root with data-document-route on the kernel script.
+// Explicit #/... routes navigate through Social.Wiki unless the document opts
+// into a different root with data-document-route on the kernel script.
 export const DEFAULT_DOCUMENT_ROUTE = "https://social.wiki/";

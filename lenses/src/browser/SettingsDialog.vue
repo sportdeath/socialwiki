@@ -25,7 +25,12 @@
             </p>
 
             <div class="lens-row">
-                <strong>View</strong>
+                <div class="lens-name">
+                    <strong>View</strong>
+                    <span v-if="lensSources.isModified('v')" class="modified">
+                        Modified
+                    </span>
+                </div>
                 <button type="button" :disabled="busy" @click="modifyLens('v')">
                     {{ modifying === "v" ? "Opening..." : "Modify" }}
                 </button>
@@ -33,14 +38,19 @@
                     v-if="session"
                     type="button"
                     class="warning"
-                    :disabled="busy"
+                    :disabled="busy || !lensSources.isModified('v')"
                     @click="resetLens('v')"
                 >
                     {{ resetting === "v" ? "Resetting..." : "Reset" }}
                 </button>
             </div>
             <div class="lens-row">
-                <strong>Edit</strong>
+                <div class="lens-name">
+                    <strong>Edit</strong>
+                    <span v-if="lensSources.isModified('e')" class="modified">
+                        Modified
+                    </span>
+                </div>
                 <button type="button" :disabled="busy" @click="modifyLens('e')">
                     {{ modifying === "e" ? "Opening..." : "Modify" }}
                 </button>
@@ -48,14 +58,19 @@
                     v-if="session"
                     type="button"
                     class="warning"
-                    :disabled="busy"
+                    :disabled="busy || !lensSources.isModified('e')"
                     @click="resetLens('e')"
                 >
                     {{ resetting === "e" ? "Resetting..." : "Reset" }}
                 </button>
             </div>
             <div class="lens-row">
-                <strong>History</strong>
+                <div class="lens-name">
+                    <strong>History</strong>
+                    <span v-if="lensSources.isModified('h')" class="modified">
+                        Modified
+                    </span>
+                </div>
                 <button type="button" :disabled="busy" @click="modifyLens('h')">
                     {{ modifying === "h" ? "Opening..." : "Modify" }}
                 </button>
@@ -63,14 +78,22 @@
                     v-if="session"
                     type="button"
                     class="warning"
-                    :disabled="busy"
+                    :disabled="busy || !lensSources.isModified('h')"
                     @click="resetLens('h')"
                 >
                     {{ resetting === "h" ? "Resetting..." : "Reset" }}
                 </button>
             </div>
             <div class="lens-row">
-                <strong>Browser</strong>
+                <div class="lens-name">
+                    <strong>Browser</strong>
+                    <span
+                        v-if="lensSources.isModified('browser')"
+                        class="modified"
+                    >
+                        Modified
+                    </span>
+                </div>
                 <button
                     type="button"
                     :disabled="busy"
@@ -82,7 +105,7 @@
                     v-if="session"
                     type="button"
                     class="warning"
-                    :disabled="busy"
+                    :disabled="busy || !lensSources.isModified('browser')"
                     @click="resetLens('browser')"
                 >
                     {{
@@ -225,12 +248,18 @@ function reportSettingsError(action: string, error: unknown) {
     text-align: left;
 }
 
-.settings-actions > button:hover,
-.lens-row button:hover {
+.settings-actions > button:not(:disabled):hover,
+.lens-row button:not(:disabled):hover {
     background: var(--background-color-interactive-hover);
     border-color: var(--border-color-hover);
     color: var(--text-color);
     text-decoration: none;
+}
+
+.settings-actions > button:disabled,
+.lens-row button:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
 }
 
 .lens-settings {
@@ -255,14 +284,27 @@ function reportSettingsError(action: string, error: unknown) {
     padding-block: 0.3rem;
 }
 
+.lens-name {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+}
+
+.modified {
+    color: var(--warning-color);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
 .settings-actions > button.warning,
 .lens-row button.warning {
     color: var(--warning-color);
     border-color: var(--warning-color);
 }
 
-.settings-actions > button.warning:hover,
-.lens-row button.warning:hover {
+.settings-actions > button.warning:not(:disabled):hover,
+.lens-row button.warning:not(:disabled):hover {
     color: var(--warning-hover-color);
     border-color: var(--warning-hover-color);
 }

@@ -5,8 +5,11 @@ import {
 } from "./document-route";
 
 /** Serialize a decoded document route for the browser. */
-function documentRouteUrl(documentRoute: DocumentRoute): URL | null {
-  const url = new URL(documentRoute.rootUrl);
+function documentRouteUrl(
+  documentRoute: DocumentRoute,
+  rootUrl = documentRoute.rootUrl,
+): URL | null {
+  const url = new URL(rootUrl);
   if (url.protocol !== "http:" && url.protocol !== "https:") return null;
   url.hash = `#/${encodeUrlAddress(documentRoute.address)}`;
   return url;
@@ -20,9 +23,12 @@ export function serializeRouteUrl(
   to: string,
   documentRoute: DocumentRoute,
 ): URL | null {
+  // If the route is relative, i.e. it begins with a "?",
+  // make sure that it stays on the current document (queryRootUrl) rather
+  // than inheriting the default base (rootUrl)
   if (to.startsWith("?")) {
     const route = queryDocumentRoute(to, documentRoute);
-    return route ? documentRouteUrl(route) : null;
+    return route ? documentRouteUrl(route, route.queryRootUrl) : null;
   }
 
   // Read the authored hash directly: URL would preserve valid percent escapes,

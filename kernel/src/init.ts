@@ -70,6 +70,7 @@ if (window.top !== window) {
     rootDocumentRoute.hash = "";
     const rootRoute = {
       rootUrl: rootDocumentRoute.href,
+      queryRootUrl: documentUrl,
       address: "",
     };
     const documentRoute = createDocumentRouteState(rootRoute);
