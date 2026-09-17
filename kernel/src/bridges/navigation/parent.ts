@@ -1,41 +1,50 @@
 import type { EventsParent } from "../events/parent";
 import {
-  BASE_URL_RESPONSE_EVENT,
+  childDocumentRoute,
+  type DocumentRouteState,
+} from "./document-route";
+import {
   NAVIGATION_READY_EVENT,
   QUERY_EVENT,
 } from "./shared";
 
 export function installNavigationParent(
   events: EventsParent,
-  baseUrl: Promise<string>,
+  documentRoute: DocumentRouteState,
 ) {
   let query: string | undefined;
   let ready = false;
 
   const sendQuery = () => {
     if (!ready || query === undefined) return;
-    events.send(QUERY_EVENT, { query });
+    const parentRoute = documentRoute.getDocumentRoute();
+    if (!parentRoute) return;
+    const parentQuery =
+      typeof window.query === "string" ? window.query : undefined;
+    const childRoute = childDocumentRoute(parentRoute, parentQuery, query);
+    if (!childRoute) return;
+    events.send(QUERY_EVENT, {
+      query,
+      documentRoute: childRoute,
+    });
   };
+
+  const stopRouteUpdates = documentRoute.onDocumentRouteChange(sendQuery);
 
   const stopListening = events.listen((event) => {
     if (event.type !== NAVIGATION_READY_EVENT) return;
     event.preventDefault();
 
-    // A nested document may become ready before this document has received its
-    // own base. Wait before providing that context to its descendants.
-    void baseUrl.then((value) => {
-      // Query observers may resolve links, so establish their base first.
-      events.send(BASE_URL_RESPONSE_EVENT, { baseUrl: value });
-      // setQuery may run before the child is ready. Send its latest stored value
-      // now and push subsequent changes directly.
-      ready = true;
-      sendQuery();
-    });
+    // setQuery may run before the child is ready. Send its latest stored value
+    // now and push subsequent changes directly.
+    ready = true;
+    sendQuery();
   });
 
   return {
     destroy() {
       stopListening();
+      stopRouteUpdates();
     },
     setQuery(nextQuery: string) {
       query = nextQuery;

@@ -24,12 +24,9 @@ export function startBrowserLoader() {
   let loadVersion = 0;
 
   // The kernel gives the top-level route to this loader. Delegate that same
-  // address through the loader's transclude to whichever browser it selected.
+  // query through the loader's transclude to whichever browser it selected.
   function syncBrowserRoute() {
-    browser.setAttribute(
-      "query",
-      window.route.composeQuery(undefined, window.address ?? ""),
-    );
+    browser.setAttribute("query", window.query);
   }
 
   async function defaultBrowser(signal?: AbortSignal) {

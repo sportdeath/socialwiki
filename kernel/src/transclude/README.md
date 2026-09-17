@@ -8,7 +8,7 @@ communicate across that iframe boundary.
 
 ```html
 <sw-transclude
-  src="#/v?/example"
+  src="example?/profile"
   autosize="height"
   id="profile"
   name="Profile"
@@ -18,6 +18,9 @@ communicate across that iframe boundary.
 The element supports:
 
 - `src`: an address identifying a document that is passed to a document resolver.
+  If the `src` starts with `?`, the parameters preceding the first `/` are passed
+  to the resolving lens. For example, the default View lens will interpret
+  `?version=media-id/example` as a specific version of the page example.
 - `srcdoc`: HTML for directly rendering a document by its source code when `src` is absent. Alternatively, when `src` is present, it may hold the output source code of the document resolved from `src`.
 - `query`: state for a direct `srcdoc`; ignored when `src` is present because the query is part of the document address.
 - `autosize`: `width`, `height`, `both`, or a bare attribute for both axes. Makes the containing element resize to fit the child document.
@@ -50,8 +53,9 @@ Bridge handlers and ordinary event listeners run first. Calling
 
 ## Resolution and rendering
 
-Transclude on its own does not understand a `src` such as `#/v?/example`. Document requests
-are bubbled up until they are intercepted and a response it returned back down.
+Transclude on its own does not interpret a `src` such as `example?/profile`.
+Document requests are bubbled up until they are intercepted and a response is
+returned back down.
 
 ```text
 src
@@ -63,9 +67,9 @@ document resolver
 transclude frame
 ```
 
-The kernel establishes a top-level resolver that understands three "lenses",
-View (`v`), Edit (`e`), and History (`h`) which are returned and used to resolve
-the rest of the address (such as `?/example` in the `src`, `#/v?/example`).
+The kernel establishes a top-level fallback resolver that delegates the complete `src`
+address to its packaged View lens. Documents can replace this resolver with
+alternative View lenses to introduce different governance into the system.
 
 Any document can intercept resolution requests with `window.handleDocumentResolution()`
 and act as the browser for its own descendants.

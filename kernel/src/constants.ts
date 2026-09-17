@@ -1,2 +1,3 @@
-// Standalone documents navigate through Social.Wiki unless they declare a base.
-export const DEFAULT_BASE_URL = "https://social.wiki/";
+// Standalone documents navigate through Social.Wiki unless they opt into a
+// different root with data-document-route on the kernel script.
+export const DEFAULT_DOCUMENT_ROUTE = "https://social.wiki/";

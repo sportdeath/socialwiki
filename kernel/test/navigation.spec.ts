@@ -1,8 +1,11 @@
 import { expect, it, vi } from "vitest";
 import { installNavigationChild } from "../src/bridges/navigation/child";
+import { createDocumentRouteState } from "../src/bridges/navigation/document-route";
+import { installNavigationParent } from "../src/bridges/navigation/parent";
 import {
   handleNavigation,
   NAVIGATE_EVENT,
+  NAVIGATION_READY_EVENT,
   QUERY_EVENT,
 } from "../src/bridges/navigation/shared";
 import { createEventBridge } from "./events";
@@ -32,7 +35,10 @@ it("exposes coherent query state and navigates only on local changes", () => {
   };
   for (const event of changeEvents) window.addEventListener(event, record);
 
-  events.parent.send(QUERY_EVENT, { query: "?mode=compact/alice" });
+  events.parent.send(QUERY_EVENT, {
+    query: "?mode=compact/alice",
+    documentRoute: { rootUrl: "https://social.wiki/", address: "v" },
+  });
 
   expect(snapshots.map(({ event }) => event).sort()).toEqual(
     [...changeEvents].sort(),
@@ -97,6 +103,47 @@ it("exposes coherent query state and navigates only on local changes", () => {
   });
   percentLink.remove();
 
+  // Mirror the containing query update before preparing a native relative link.
+  events.parent.send(QUERY_EVENT, {
+    query: "?mode=compact&sort=new/alice",
+    documentRoute: { rootUrl: "https://social.wiki/", address: "v" },
+  });
+
+  const relativeRouteLink = document.createElement("a");
+  relativeRouteLink.setAttribute("href", "?/100%20real/😄");
+  document.body.append(relativeRouteLink);
+  relativeRouteLink.dispatchEvent(
+    new MouseEvent("mouseover", { bubbles: true, cancelable: true }),
+  );
+  const relativeRouteClick = new MouseEvent("click", {
+    bubbles: true,
+    cancelable: true,
+  });
+  relativeRouteLink.dispatchEvent(relativeRouteClick);
+
+  expect(relativeRouteLink.href).toContain(
+    "#/v?/100%2520real/%F0%9F%98%84",
+  );
+  expect(
+    emitted.filter(({ eventName }) => eventName === NAVIGATE_EVENT).at(-1),
+  ).toEqual({
+    eventName: NAVIGATE_EVENT,
+    payload: { to: "?/100%20real/😄" },
+  });
+
+  // A prepared link must be recomposed if only its document route changes.
+  events.parent.send(QUERY_EVENT, {
+    query: "?mode=compact&sort=new/alice",
+    documentRoute: { rootUrl: "https://social.wiki/", address: "e" },
+  });
+  relativeRouteLink.dispatchEvent(
+    new MouseEvent("pointerdown", { bubbles: true, cancelable: true }),
+  );
+  expect(relativeRouteLink.href).toContain(
+    "#/e?/100%2520real/%F0%9F%98%84",
+  );
+  relativeRouteLink.remove();
+
   const contextLink = document.createElement("a");
   contextLink.setAttribute("href", "#/v?/Crème brûlée");
   document.body.append(contextLink);
@@ -111,7 +158,7 @@ it("exposes coherent query state and navigates only on local changes", () => {
   expect(contextLink.href).toContain("#/v?/Cr%C3%A8me%20br%C3%BBl%C3%A9e");
   expect(
     emitted.filter(({ eventName }) => eventName === NAVIGATE_EVENT),
-  ).toHaveLength(2);
+  ).toHaveLength(3);
   contextLink.remove();
 
   const middleLink = document.createElement("a");
@@ -192,4 +239,48 @@ it("marks handled navigation so it does not pass through", () => {
 
   stopHandling();
   source.remove();
+});
+
+it("propagates document route changes when a child's query is unchanged", async () => {
+  const events = createEventBridge();
+  const received: Array<{ type: string; detail: unknown }> = [];
+  events.child.listen(QUERY_EVENT, (event) => {
+    received.push({ type: event.type, detail: event.detail });
+  });
+
+  Object.defineProperty(window, "query", {
+    configurable: true,
+    value: "?/alice",
+    writable: true,
+  });
+  const documentRoute = createDocumentRouteState({
+    rootUrl: "https://social.wiki/",
+    address: "v",
+  });
+  const parent = installNavigationParent(events.parent, documentRoute);
+  parent.setQuery("?/alice");
+  events.child.emit(NAVIGATION_READY_EVENT);
+
+  await vi.waitFor(() => expect(received).toHaveLength(1));
+  expect(received.at(-1)).toEqual({
+    type: QUERY_EVENT,
+    detail: {
+      query: "?/alice",
+      documentRoute: { rootUrl: "https://social.wiki/", address: "v" },
+    },
+  });
+
+  documentRoute.setDocumentRoute({
+    rootUrl: "https://social.wiki/",
+    address: "e",
+  });
+  expect(received.at(-1)).toEqual({
+    type: QUERY_EVENT,
+    detail: {
+      query: "?/alice",
+      documentRoute: { rootUrl: "https://social.wiki/", address: "e" },
+    },
+  });
+
+  parent.destroy();
 });

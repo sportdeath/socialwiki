@@ -345,7 +345,7 @@
                                         <a :href="editAddress"> Edit </a>
                                     </li>
                                     <li>
-                                        <a :href="previewAddress"> Link </a>
+                                        <a :href="previewHref"> Link </a>
                                     </li>
                                     <li
                                         v-if="
@@ -691,14 +691,16 @@ const previewAddress = computed(() => {
         );
     }
 
-    return `#/${composeAddress(
-        "v",
-        composeQuery(
-            lensParams,
-            composeAddress(pageName.value, pageQuery.value),
-        ),
-    )}`;
+    return composeQuery(
+        lensParams,
+        composeAddress(pageName.value, pageQuery.value),
+    );
 });
+const previewHref = computed(() =>
+    previewAddress.value
+        ? `#/${composeAddress("v", previewAddress.value)}`
+        : undefined,
+);
 const viewAddress = computed(
     () =>
         `#/${composeAddress(

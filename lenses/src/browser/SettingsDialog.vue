@@ -107,7 +107,6 @@ import {
 import DialogFrame from "../utils/DialogFrame.vue";
 import type { Lens } from "../utils/lenses";
 import type { LensSources } from "./lens-resolver";
-import { navigateAddress } from "./browser-route";
 
 const { composeAddress, composeQuery, parseAddress, parseQuery } = window.route;
 const open = defineModel<boolean>({ required: true });
@@ -155,14 +154,17 @@ async function modifyLens(lens: Lens) {
             ),
         );
         open.value = false;
-        navigateAddress(
+        window.navigate(
+          composeQuery(
+            undefined,
             composeAddress(
-                "e",
-                composeQuery(
-                    new URLSearchParams({ draft }),
-                    editablePageAddress,
-                ),
+              "e",
+              composeQuery(
+                new URLSearchParams({ draft }),
+                editablePageAddress,
+              ),
             ),
+          )
         );
     } catch (error) {
         reportSettingsError("Opening lens editor", error);

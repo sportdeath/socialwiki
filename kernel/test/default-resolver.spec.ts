@@ -5,58 +5,26 @@ describe("default document resolution", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it.each([
-    ["v", "view/index.html", "https://social.wiki/init.js"],
-    ["e", "edit/index.html", "http://localhost:5173/init.js"],
-    ["h", "history/index.html", "https://cdn.example/npm/social-wiki@0.1.0/dist/init.js"],
-  ])("resolves the %s lens", async (lens, file, kernelUrl) => {
+    ["alice", "?/alice"],
+    ["mypage?/myquery", "?/mypage?/myquery"],
+    ["😄", "?/😄"],
+    ["100%20real", "?/100%20real"],
+    ["?version=media-id/alice", "?version=media-id/alice"],
+  ])("delegates %s to the packaged View lens", async (src, query) => {
+    const kernelUrl = "https://social.wiki/init.js";
     const fetch = vi.fn(async () => new Response(
-      `<html><head><script src="../init.js"></script></head><body><h1>${lens}</h1></body></html>`,
+      "<html><head><script src=\"../init.js\"></script></head><body><h1>View</h1></body></html>",
     ));
     vi.stubGlobal("fetch", fetch);
-    const resolve = createDefaultResolver(
-      kernelUrl,
-      "https://wiki.example/app",
-    );
+    const resolve = createDefaultResolver(kernelUrl);
 
-    await expect(resolve(`#/${lens}?/alice`)).resolves.toEqual({
-      srcdoc: `<html><head><script src="${kernelUrl}"></script></head><body><h1>${lens}</h1></body></html>`,
-      query: "?/alice",
+    await expect(resolve(src)).resolves.toEqual({
+      srcdoc: `<html><head><script src="${kernelUrl}"></script></head><body><h1>View</h1></body></html>`,
+      query,
       status: "loading",
     });
     expect(String(fetch.mock.calls[0][0])).toBe(
-      new URL(file, kernelUrl).href,
+      "https://social.wiki/view/index.html",
     );
-  });
-
-  it("rejects an unknown lens without fetching it", async () => {
-    const fetch = vi.fn();
-    vi.stubGlobal("fetch", fetch);
-    const resolve = createDefaultResolver(
-      "https://kernel.example",
-      "https://wiki.example/app",
-    );
-
-    await expect(resolve("#/unknown?/alice")).rejects.toThrow(
-      "Unrecognized lens: unknown",
-    );
-    expect(fetch).not.toHaveBeenCalled();
-  });
-
-  it("passes decoded document names through to the lens", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => new Response("<html><head></head></html>")),
-    );
-    const resolve = createDefaultResolver(
-      "https://social.wiki/init.js",
-      "https://social.wiki/",
-    );
-
-    await expect(resolve("#/v?/😄")).resolves.toMatchObject({
-      query: "?/😄",
-    });
-    await expect(resolve("#/e?/100%20real")).resolves.toMatchObject({
-      query: "?/100%20real",
-    });
   });
 });

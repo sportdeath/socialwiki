@@ -1,6 +1,6 @@
 <template>
     <header>
-        <a :href="routeHref(homeRoute)">
+        <a :href="homeRoute">
             <h1>
                 <span class="brand-full">Social.Wiki</span>
                 <span class="brand-short" aria-hidden="true">SW</span>
@@ -9,6 +9,7 @@
 
         <AddressBar
             :address="pageAddress"
+            :route-for-input-address="routeForInputAddress"
             v-model="isDropdownOpen"
             @navigate="navigateToInputAddress"
             @focus="isSmall && (navOpen = false)"
@@ -21,7 +22,7 @@
                 <ul>
                     <li v-if="routeReady">
                         <a
-                            :href="routeHref(viewRoute)"
+                            :href="viewRoute"
                             :class="{ active: lens === 'v' }"
                             :aria-current="lens === 'v' ? 'page' : undefined"
                             title="The current version of this page"
@@ -31,7 +32,7 @@
                     </li>
                     <li v-if="routeReady">
                         <a
-                            :href="routeHref(editRoute)"
+                            :href="editRoute"
                             :class="{ active: lens === 'e' }"
                             :aria-current="lens === 'e' ? 'page' : undefined"
                             title="Edit the source code of this page"
@@ -41,7 +42,7 @@
                     </li>
                     <li v-if="routeReady">
                         <a
-                            :href="routeHref(historyRoute)"
+                            :href="historyRoute"
                             :class="{ active: lens === 'h' }"
                             :aria-current="lens === 'h' ? 'page' : undefined"
                             title="Past revisions of this page"
@@ -77,8 +78,12 @@
     />
     <main>
         <sw-transclude
-            v-if="session !== undefined && routeReady"
-            :key="`${session?.actor ?? 'anonymous'}:${lensRevision}`"
+            v-if="
+                session !== undefined &&
+                routeReady &&
+                (lens === 'v' || directLensSource !== undefined)
+            "
+            :key="`${session?.actor ?? 'anonymous'}:${lens}:${lensRevision}`"
             :id="lens"
             permission-scope="inherit"
             :name="
@@ -90,7 +95,9 @@
                         ? 'History'
                         : lens
             "
-            :src="`#/${composeAddress(lens, composeQuery(lensParams, pageAddress))}`"
+            :src="lens === 'v' ? lensQuery : undefined"
+            :srcdoc="lens === 'v' ? undefined : directLensSource"
+            :query="lens === 'v' ? undefined : lensQuery"
             ref="transclude"
         ></sw-transclude>
         <h1 v-else class="status dots">Page loading</h1>
@@ -114,19 +121,13 @@ import {
     useGraffitiSession,
 } from "@graffiti-garden/wrapper-vue";
 import { useLensSources } from "./lens-resolver";
-import {
-    getLegacyLensRedirect,
-    navigateAddress as navigateBrowserAddress,
-    routeHref,
-} from "./browser-route";
 const { composeAddress, composeQuery, parseAddress, parseQuery } = window.route;
 
 const graffiti = useGraffiti();
 const session = useGraffitiSession();
 
-// The browser owns lens selection. Replacing the forwarding resolver here
-// lets a person's own browser/v/e/h pages take precedence over the
-// distribution defaults without changing the kernel or nested documents.
+// The browser owns lens selection. Its resolver provides the selected View
+// lens to nested transclusions; Edit and History are loaded directly below.
 const lensSources = useLensSources(graffiti, () => session.value);
 const lensRevision = lensSources.revision;
 window.handleDocumentResolution(lensSources.resolveDocument);
@@ -139,6 +140,35 @@ const showSettingsDialog = ref(false);
 const navOpen = ref(true);
 const isSmall = ref(false);
 const mq = window.matchMedia("(min-width: 700px)");
+const lensQuery = computed(() =>
+    composeQuery(lensParams.value, pageAddress.value),
+);
+const directLensSource = ref<string>();
+let directLensLoad = 0;
+
+watch(
+    [lens, session, lensRevision],
+    async ([currentLens, currentSession]) => {
+        const load = ++directLensLoad;
+        directLensSource.value = undefined;
+        if (
+            currentSession === undefined ||
+            (currentLens !== "e" && currentLens !== "h")
+        ) {
+            return;
+        }
+
+        try {
+            const source = await lensSources.getSource(currentLens);
+            if (load === directLensLoad) directLensSource.value = source;
+        } catch (error) {
+            if (load === directLensLoad) {
+                console.error(`Could not load the ${currentLens} lens`, error);
+            }
+        }
+    },
+    { immediate: true },
+);
 
 function syncNav() {
     isSmall.value = !mq.matches;
@@ -155,21 +185,33 @@ function closeSettingsDialog() {
 }
 
 function applyAddress(address: string) {
-    // TODO: Remove this after the legacy route format is fully sunset.
-    const legacyRedirectRoute = getLegacyLensRedirect(address);
-    if (legacyRedirectRoute !== null) {
-        navigateAddress(legacyRedirectRoute);
-        return;
-    }
-
     const { name, query } = parseAddress(address);
     const { params, address: nestedAddress } = parseQuery(query);
 
-    // If the route is missing a lens (e.g. "#/SomePage"), redirect to the
-    // view lens while preserving the raw page address.
+    // A bare address is a page without a lens.
+    if (!query.length) {
+        window.navigate(
+            composeQuery(
+                undefined,
+                composeAddress(
+                    "v",
+                    composeQuery(undefined, name || "Social.Wiki"),
+                ),
+            ),
+        );
+        return;
+    }
+
+    // An existing lens with no page displays the home page.
     if (!nestedAddress?.length) {
-        navigateAddress(
-            composeAddress("v", composeQuery(params, name || "Social.Wiki")),
+        window.navigate(
+            composeQuery(
+                undefined,
+                composeAddress(
+                    name || "v",
+                    composeQuery(params, "Social.Wiki"),
+                ),
+            ),
         );
         return;
     }
@@ -185,15 +227,10 @@ function syncAddress() {
     syncNav();
 }
 
-function navigateAddress(address: string) {
-    navigateBrowserAddress(address);
-}
-
 window.addEventListener("querychange", syncAddress);
 if (window.address !== undefined) syncAddress();
 
 const loggingIn = ref(false);
-
 function login() {
     loggingIn.value = true;
     graffiti.login().finally(() => {
@@ -217,7 +254,12 @@ function detachObservedTransclude() {
 function onNavigate(to: string) {
     // If it is relative, add the lens
     if (to.startsWith("?")) {
-        navigateAddress(composeAddress(lens.value, to));
+        window.navigate(
+          composeQuery(
+            undefined,
+            composeAddress(lens.value, to)
+          )
+        )
         return;
     }
 
@@ -227,7 +269,9 @@ watch(
     transclude,
     (nextTransclude) => {
         detachObservedTransclude();
-        if (!nextTransclude) {
+        // Only a resolved View transclusion reflects the displayed page into
+        // srcdoc. Direct Edit/History srcdoc is the lens source itself.
+        if (!nextTransclude?.hasAttribute("src")) {
             srcdoc.value = null;
             return;
         }
@@ -251,43 +295,56 @@ onBeforeUnmount(() => {
     window.removeEventListener("querychange", syncAddress);
 });
 
-const homeRoute = "v?/Social.Wiki";
+const homeRoute = "?/v?/Social.Wiki";
 const viewRoute = computed(() =>
-    composeAddress("v", composeQuery(undefined, pageAddress.value)),
+    composeQuery(undefined,
+      composeAddress("v", composeQuery(undefined, pageAddress.value)),
+    )
 );
 const editRoute = computed(() => {
     const lensParams = new URLSearchParams(
         srcdoc.value ? { draft: srcdoc.value } : undefined,
     );
-    return composeAddress("e", composeQuery(lensParams, pageAddress.value));
+    return composeQuery(undefined,
+      composeAddress("e", composeQuery(lensParams, pageAddress.value))
+    );
 });
 const historyRoute = computed(() =>
-    composeAddress("h", composeQuery(undefined, pageAddress.value)),
+    composeQuery(
+      undefined,
+      composeAddress("h", composeQuery(undefined, pageAddress.value)),
+    )
 );
 
 const isDropdownOpen = ref(false);
 
 // When input is submitted, the route changes
 // Preserve the current lens when only the page's own query changes.
-function navigateToInputAddress(inputAddress: string) {
+function routeForInputAddress(inputAddress: string) {
     // Extract the page name from the input
     const { name: inputPageName } = parseAddress(inputAddress);
     const { name: currentPageName } = parseAddress(pageAddress.value);
     if (inputPageName === currentPageName) {
         // If the user only changed the query, keep the current lens/params
         // and just update the page address
-        navigateAddress(
+        return composeQuery(
+            undefined,
             composeAddress(
                 lens.value,
                 composeQuery(lensParams.value, inputAddress),
             ),
         );
-    } else {
-        // Otherwise, navigate to the view lens
-        navigateAddress(
-            composeAddress("v", composeQuery(undefined, inputAddress)),
-        );
     }
+
+    // Otherwise, navigate to the view lens
+    return composeQuery(
+        undefined,
+        composeAddress("v", composeQuery(undefined, inputAddress)),
+    );
+}
+
+function navigateToInputAddress(inputAddress: string) {
+    window.navigate(routeForInputAddress(inputAddress));
     blurActiveElement();
 }
 

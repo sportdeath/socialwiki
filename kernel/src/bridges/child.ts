@@ -10,7 +10,7 @@ export function installChildBridgeEndpoints() : BridgedServices {
   const events = installEventsChild();
   const createGraffiti = installGraffitiChild();
   const resolve = installResolutionChild(events);
-  const baseUrl = installNavigationChild(events);
+  const documentRoute = installNavigationChild(events);
   installAutosizeChild(events);
-  return { createGraffiti, resolve, baseUrl };
+  return { createGraffiti, resolve, documentRoute };
 }

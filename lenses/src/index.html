@@ -7,15 +7,6 @@
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="color-scheme" content="light dark" />
         <link rel="icon" href="data:," />
-        <script>
-            // Keep this browser's own address when the kernel wraps it.
-            // Descendants inherit this base for links, including new-tab clicks.
-            if (window.top === window) {
-                const base = document.createElement("base");
-                base.href = window.location.href;
-                document.head.prepend(base);
-            }
-        </script>
         <style>
             html,
             body,
@@ -27,7 +18,11 @@
             }
         </style>
         <script vite-ignore src="./locator.js"></script>
-        <script vite-ignore src="./init.js"></script>
+        <script
+            vite-ignore
+            src="./init.js"
+            data-document-route="#/"
+        ></script>
         <script type="module">
             import { startBrowserLoader } from "./bootstrap.ts";
 

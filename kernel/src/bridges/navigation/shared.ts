@@ -1,7 +1,6 @@
 export const NAVIGATE_EVENT = "sw-navigate";
 export const NAVIGATION_READY_EVENT = "sw-navigation-ready";
 export const QUERY_EVENT = "sw-query";
-export const BASE_URL_RESPONSE_EVENT = "sw-base-url-response";
 
 /**
  * Query state is observable through ordinary Window events:
@@ -28,6 +27,7 @@ declare global {
     /**
      * Requests navigation from the containing document. `to` is emitted
      * unchanged so each ancestor may interpret, rewrite, or forward it.
+     * A `?/...` destination changes the query of this document.
      */
     navigate: (to: string) => void;
 

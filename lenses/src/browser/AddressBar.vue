@@ -27,27 +27,32 @@
             @keydown="onDropdownKeydown"
         >
             <li v-if="addressInput !== pageAddress">
-                <button
-                    type="button"
-                    @click="navigateToVisitedPage(pageAddress ?? '')"
+                <a
+                    :href="routeForInputAddress(pageAddress || 'Social.Wiki')"
+                    @click="
+                        onVisitedPageClick(
+                            $event,
+                            pageAddress || 'Social.Wiki',
+                        )
+                    "
                 >
                     Current page: {{ pageAddress }}
-                </button>
+                </a>
             </li>
             <li
                 v-for="suggestion in historySuggestions"
                 :key="suggestion.address"
             >
-                <button
-                    type="button"
-                    @click="navigateToVisitedPage(suggestion.address)"
+                <a
+                    :href="routeForInputAddress(suggestion.address)"
+                    @click="onVisitedPageClick($event, suggestion.address)"
                 >
                     <span>{{ suggestion.address }}</span>
                     <small>
                         {{ suggestion.visits }}
                         {{ suggestion.visits === 1 ? "visit" : "visits" }}
                     </small>
-                </button>
+                </a>
             </li>
             <li v-if="historyEnabled === false">
                 <button type="button" @click="enableBrowserHistory">
@@ -62,6 +67,7 @@ import { computed, ref, watch, useTemplateRef, onBeforeUnmount } from "vue";
 import { useBrowserHistory } from "./browser-history";
 const props = defineProps<{
     address?: string;
+    routeForInputAddress: (address: string) => string;
 }>();
 const emit = defineEmits<{
     navigate: [address: string];
@@ -80,10 +86,21 @@ const {
     enable: enableBrowserHistory,
 } = useBrowserHistory(pageAddress, addressInput);
 
-function navigateToVisitedPage(address: string) {
+function onVisitedPageClick(event: MouseEvent, address: string) {
+    // Leave modified clicks entirely native so new-tab/window behavior does
+    // not unexpectedly alter the current address bar.
+    if (
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+    ) {
+        return;
+    }
+
     addressInput.value = address;
     isDropdownOpen.value = false;
-    navigateToInputAddress();
 }
 
 function navigateToInputAddress() {
@@ -293,7 +310,10 @@ search {
         z-index: 10;
 
         :is(a, button) {
-            display: block;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            align-items: baseline;
+            gap: 0.5rem;
             width: 100%;
             padding: 0.3rem;
             border-radius: 0.3rem;
@@ -305,14 +325,7 @@ search {
             cursor: pointer;
         }
 
-        button {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) auto;
-            align-items: baseline;
-            gap: 0.5rem;
-        }
-
-        button > span {
+        :is(a, button) > span {
             min-width: 0;
             overflow: hidden;
             text-overflow: ellipsis;

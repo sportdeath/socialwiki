@@ -42,7 +42,7 @@ it("keeps direct srcdoc as input and reflects uncanceled resolved-lens output", 
   expect(direct.getAttribute("srcdoc")).toBe("<p>Example</p>");
 
   const resolved = document.createElement("sw-transclude");
-  resolved.setAttribute("src", "#/v?/example");
+  resolved.setAttribute("src", "example");
   document.body.append(resolved);
   await vi.waitFor(() => expect(receivers.has(resolved)).toBe(true));
 
@@ -56,7 +56,7 @@ it("keeps direct srcdoc as input and reflects uncanceled resolved-lens output", 
 
 it("lets a resolved-lens host prevent output reflection", async () => {
   const element = document.createElement("sw-transclude");
-  element.setAttribute("src", "#/v?/example");
+  element.setAttribute("src", "example");
   element.addEventListener("sw-lens-output", (event) => event.preventDefault());
   document.body.append(element);
   await vi.waitFor(() => expect(receivers.has(element)).toBe(true));

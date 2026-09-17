@@ -30,7 +30,8 @@ export function defineTranscludeElement(
    * Displays a document inside a sandboxed iframe.
    *
    * Attributes:
-   * - src: identifies the document to display, such as "#/v?/my-cool-page".
+   * - src: identifies the document to display, such as "my-cool-page" or
+   *   "my-cool-page?/nested-query".
    * - srcdoc: directly supplies a document via its HTML source code. When src
    *   is present, it may be an output of what is displayed rather than an
    *   input to the transclude.

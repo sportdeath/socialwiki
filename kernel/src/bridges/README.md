@@ -16,6 +16,6 @@ entry points into functions that install all child or parent bridges at once:
 - `events`: a basic event channel used by higher-level bridges.
 - `navigation`: the ability for links clicked on in one document to make a change at a higher-level document.
 - `resolution`: the ability for a document to be resolved according to Social.Wiki's lenses.
-  Its default root policy recognizes Social.Wiki's `v`, `e`, and `h` lenses.
+  Its default root policy displays every address through Social.Wiki's View lens.
 - `autosize`: the ability for documents to adjust their size to fit their container
 - `graffiti`: a [graffiti](https://github.com/graffiti-garden/graffiti) connection.

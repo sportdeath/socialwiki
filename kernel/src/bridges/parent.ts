@@ -9,28 +9,28 @@ import { installResolutionParent } from "./resolution/parent";
 export function createParentBridgeEndpointInstaller(
   bridgedServices: BridgedServices,
 ) {
-  const { resolve, createGraffiti, baseUrl } = bridgedServices;
+  const { resolve, createGraffiti, documentRoute } = bridgedServices;
   return (
     host: HTMLElement,
     iframe: HTMLIFrameElement,
     onEvent: (event: CustomEvent<unknown>) => void,
   ) => {
     const events = installEventsParent(iframe, onEvent);
-    const navigation = installNavigationParent(events, baseUrl);
+    const navigationBridge = installNavigationParent(events, documentRoute);
     const autosize = installAutosizeParent(iframe, host, events);
     const resolution = installResolutionParent(events, resolve);
     const graffitiBridge = installGraffitiParent(iframe, host, createGraffiti());
 
     return {
       destroy() {
-        navigation.destroy();
+        navigationBridge.destroy();
         autosize.destroy();
         resolution.destroy();
         events.destroy();
         void graffitiBridge.destroy();
       },
       send: events.send,
-      setQuery: navigation.setQuery,
+      setQuery: navigationBridge.setQuery,
     };
   };
 }

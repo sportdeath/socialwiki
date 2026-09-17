@@ -1,7 +1,9 @@
 import { GraffitiGuarded } from "@graffiti-garden/wrapper-data-guard";
 import { installTransclude } from "./transclude";
 import { installChildBridgeEndpoints } from "./bridges/child";
-import { DEFAULT_BASE_URL } from "./constants";
+import { DEFAULT_DOCUMENT_ROUTE } from "./constants";
+import { createDocumentRouteState } from "./bridges/navigation/document-route";
+import { serializeRouteUrl } from "./bridges/navigation/route-serialization";
 import { handleNavigation } from "./bridges/navigation/shared";
 import { createParentBridgeEndpointInstaller } from "./bridges/parent";
 import { createDefaultResolver } from "./bridges/resolution/default";
@@ -10,7 +12,7 @@ import {
   handleDocumentResolution,
   resolveDocument,
 } from "./bridges/resolution/shared";
-import { canonicalRouteUrl, decodeUrlAddress } from "./url-route";
+import { decodeUrlAddress } from "./url-route";
 
 declare const KERNEL_IMPORT_MAP: { imports: Record<string, string> };
 
@@ -46,11 +48,7 @@ if (window.top !== window) {
   // If we are the top-level document, wrap the document in an iframe
   // while this document acts as the host for all nested documents
   const initializeHost = () => {
-    // Resource URLs follow the original document; navigation follows an
-    // explicit browser base or defaults to Social.Wiki.
     const documentUrl = window.location.href;
-    const baseUrl =
-      document.querySelector<HTMLBaseElement>("base[href]")?.href ?? DEFAULT_BASE_URL;
     const documentTitle = document.title;
     const html = serializeDocument(document, documentUrl);
 
@@ -59,32 +57,41 @@ if (window.top !== window) {
 
     // Install top-level services: Graffiti and resolution
     const graffiti = new GraffitiGuarded();
-    handleDocumentResolution(
-      createDefaultResolver(kernelUrl.href, baseUrl),
+    handleDocumentResolution(createDefaultResolver(kernelUrl.href));
+    // Most pages resolve URLs relative to a default route (https://social.wiki),
+    // but allow browser-like documents to override this route with their own roots
+    const configuredDocumentRoute = currentScript.getAttribute(
+      "data-document-route",
     );
+    const rootDocumentRoute = new URL(
+      configuredDocumentRoute ?? DEFAULT_DOCUMENT_ROUTE,
+      documentUrl,
+    );
+    rootDocumentRoute.hash = "";
+    const rootRoute = {
+      rootUrl: rootDocumentRoute.href,
+      address: "",
+    };
+    const documentRoute = createDocumentRouteState(rootRoute);
 
     // Make an installer that allows those services to be
     // bridged to sub-documents.
-    const resolve = resolveDocument;
     const bridgedServices = {
       createGraffiti: () => graffiti,
-      resolve,
-      baseUrl: Promise.resolve(baseUrl),
+      resolve: resolveDocument,
+      documentRoute,
     };
     const installParentBridgeEndpoints =
       createParentBridgeEndpointInstaller(bridgedServices);
 
     // Install the <sw-transclude> component for including sub-documents
-    installTransclude(resolve, installParentBridgeEndpoints);
+    installTransclude(resolveDocument, installParentBridgeEndpoints);
 
     // Handle navigation requests that have bubbled all the way to the top.
     handleNavigation((to) => {
-      // Query-only navigation belongs to a containing lens. At the root there
-      // is no address left in which to incorporate it.
-      if (to.startsWith("?")) return;
-
       try {
-        const url = canonicalRouteUrl(to, baseUrl) ?? new URL(to, baseUrl);
+        const url =
+          serializeRouteUrl(to, rootRoute) ?? new URL(to, rootDocumentRoute);
         // Ignore non-http/s URLs, e.g. javascript:
         if (url.protocol !== "http:" && url.protocol !== "https:") return;
         window.location.href = url.href;
