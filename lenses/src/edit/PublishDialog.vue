@@ -6,9 +6,7 @@
     >
         <h2 id="publish-title">Publish changes</h2>
         <form
-            ref="form"
             class="publish-form"
-            @keydown.enter="onEnter"
             @submit.prevent="submitPublishDialog"
         >
             <label class="publish-field">
@@ -78,8 +76,7 @@
                     Cancel
                 </button>
                 <button
-                    type="button"
-                    @click="submitPublishDialog"
+                    type="submit"
                     class="allow-button"
                     :disabled="publishing || !isPublishDialogValid"
                 >
@@ -95,7 +92,6 @@ import DialogFrame from "../utils/DialogFrame.vue";
 const open = defineModel<boolean>({ required: true });
 const props = defineProps<{ pageName: string; publishing: boolean }>();
 const emit = defineEmits<{ publish: [pageName: string, summary: string] }>();
-const form = useTemplateRef<HTMLFormElement>("form");
 const publishSummaryInput = useTemplateRef<HTMLInputElement>(
     "publishSummaryInput",
 );
@@ -141,29 +137,13 @@ function selectAllPublishPageName(event: FocusEvent | MouseEvent) {
     target.setSelectionRange(0, target.value.length);
 }
 
-// Sandboxed documents cannot submit forms. Validate explicitly and emit an
-// application action for both the button and Enter in a text input.
 function submitPublishDialog() {
-    if (
-        props.publishing ||
-        !form.value?.reportValidity() ||
-        !isPublishDialogValid.value
-    )
-        return;
+    if (props.publishing || !isPublishDialogValid.value) return;
     emit(
         "publish",
         normalizedPublishPageName.value,
         normalizedPublishSummary.value,
     );
-}
-function onEnter(event: KeyboardEvent) {
-    if (
-        !(event.target instanceof HTMLInputElement) ||
-        event.target.type !== "text"
-    )
-        return;
-    event.preventDefault();
-    submitPublishDialog();
 }
 </script>
 <style scoped>

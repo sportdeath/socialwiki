@@ -20,9 +20,9 @@
             for more information.
         </p>
         <footer>
-            <button type="button" class="secondary" @click="emit('cancel')">
+            <a :href="viewRoute" class="secondary">
                 Cancel
-            </button>
+            </a>
             <button type="button" class="allow-button" @click="open = false">
                 Continue to editor
             </button>
@@ -39,7 +39,7 @@ defineProps<{
     isProtectionBySessionActor: boolean;
     activeProtectionTrustSource: "default" | "trusted" | null;
     historyRoute: string;
+    viewRoute: string;
 }>();
-const emit = defineEmits<{ cancel: [] }>();
 const trustedEditorsRoute = "#/v?/trusted-editors";
 </script>

@@ -64,7 +64,7 @@
             :is-protection-by-session-actor="isProtectionBySessionActor"
             :active-protection-trust-source="activeProtectionTrustSource"
             :history-route="historyRoute"
-            @cancel="cancelProtectedEdit"
+            :view-route="viewRoute"
         />
 
         <div v-if="publishing" class="backdrop" @click.prevent="">
@@ -178,11 +178,6 @@ const graffiti = useGraffiti();
 const isProtectionBySessionActor = computed(
     () => activeProtection.value?.actor === session.value?.actor,
 );
-
-function cancelProtectedEdit() {
-    showProtectedDialog.value = false;
-    window.navigate(viewRoute.value);
-}
 
 async function waitForSessionStatusKnown() {
     if (session.value !== undefined) return;
