@@ -121,6 +121,7 @@ import {
     useGraffitiSession,
 } from "@graffiti-garden/wrapper-vue";
 import { useLensSources } from "./lens-resolver";
+import { ErrorPage } from "../utils/status-pages";
 const { composeAddress, composeQuery, parseAddress, parseQuery } = window.route;
 
 const graffiti = useGraffiti();
@@ -151,10 +152,12 @@ watch(
     async ([currentLens, currentSession]) => {
         const load = ++directLensLoad;
         directLensSource.value = undefined;
-        if (
-            currentSession === undefined ||
-            (currentLens !== "e" && currentLens !== "h")
-        ) {
+        if (currentSession === undefined || currentLens === "v") return;
+
+        if (currentLens !== "e" && currentLens !== "h") {
+            directLensSource.value = ErrorPage(
+                `Unknown lens: ${currentLens || "(empty)"}`,
+            );
             return;
         }
 
@@ -164,6 +167,10 @@ watch(
         } catch (error) {
             if (load === directLensLoad) {
                 console.error(`Could not load the ${currentLens} lens`, error);
+                const name = currentLens === "e" ? "Edit" : "History";
+                directLensSource.value = ErrorPage(
+                    `Could not load the ${name} lens: ${error instanceof Error ? error.message : String(error)}`,
+                );
             }
         }
     },

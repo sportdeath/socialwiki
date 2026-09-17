@@ -7,6 +7,7 @@ import type {
 import { loadDocument } from "../../kernel/src/bridges/resolution/document";
 import { lensesUrl } from "./utils/locator";
 import { getPageVersions } from "./utils/page-versions";
+import { ErrorPage } from "./utils/status-pages";
 
 function getBrowserElement() {
   const element = document.querySelector("sw-transclude");
@@ -71,6 +72,13 @@ export function startBrowserLoader() {
         syncBrowserRoute();
       } catch (fallbackError) {
         console.error("Could not load the default browser", fallbackError);
+        if (version !== loadVersion) return;
+        browser.setAttribute(
+          "srcdoc",
+          ErrorPage(
+            `Could not load the browser: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
+          ),
+        );
       }
     }
   }
