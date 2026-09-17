@@ -146,6 +146,7 @@ function createIframe() {
     "allow-modals",
     "allow-pointer-lock",
     "allow-downloads",
+    "allow-forms",
     // Permit user-initiated new tabs without letting them escape the sandbox.
     "allow-popups",
   );

@@ -1,5 +1,8 @@
 <template>
-    <search
+    <form
+        class="address-search"
+        role="search"
+        @submit.prevent="navigateToInputAddress"
         @focusin="onAddressFocusIn"
         ref="address-search"
         @focusout="onAddressFocusOut"
@@ -29,12 +32,6 @@
             <li v-if="addressInput !== pageAddress">
                 <a
                     :href="routeForInputAddress(pageAddress || 'Social.Wiki')"
-                    @click="
-                        onVisitedPageClick(
-                            $event,
-                            pageAddress || 'Social.Wiki',
-                        )
-                    "
                 >
                     Current page: {{ pageAddress }}
                 </a>
@@ -45,7 +42,6 @@
             >
                 <a
                     :href="routeForInputAddress(suggestion.address)"
-                    @click="onVisitedPageClick($event, suggestion.address)"
                 >
                     <span>{{ suggestion.address }}</span>
                     <small>
@@ -60,7 +56,7 @@
                 </button>
             </li>
         </ul>
-    </search>
+    </form>
 </template>
 <script setup lang="ts">
 import { computed, ref, watch, useTemplateRef, onBeforeUnmount } from "vue";
@@ -73,42 +69,29 @@ const emit = defineEmits<{
     navigate: [address: string];
     focus: [];
 }>();
+const isDropdownOpen = defineModel<boolean>({ required: true });
 const pageAddress = computed(() => props.address);
 // Partially couple the input address to the route address
 // When the route changes, the input changes
 const addressInput = ref(pageAddress.value);
-watch(pageAddress, (newVal) => (addressInput.value = newVal), {
-    immediate: true,
-});
+watch(
+    pageAddress,
+    (newVal) => {
+        addressInput.value = newVal;
+        isDropdownOpen.value = false;
+    },
+    { immediate: true },
+);
 const {
     enabled: historyEnabled,
     suggestions: historySuggestions,
     enable: enableBrowserHistory,
 } = useBrowserHistory(pageAddress, addressInput);
 
-function onVisitedPageClick(event: MouseEvent, address: string) {
-    // Leave modified clicks entirely native so new-tab/window behavior does
-    // not unexpectedly alter the current address bar.
-    if (
-        event.button !== 0 ||
-        event.metaKey ||
-        event.ctrlKey ||
-        event.shiftKey ||
-        event.altKey
-    ) {
-        return;
-    }
-
-    addressInput.value = address;
-    isDropdownOpen.value = false;
-}
-
 function navigateToInputAddress() {
     emit("navigate", addressInput.value || "Social.Wiki");
     exitAddressBar();
 }
-
-const isDropdownOpen = defineModel<boolean>({ required: true });
 
 function onAddressFocusIn(event: FocusEvent) {
     emit("focus");
@@ -152,12 +135,6 @@ function exitAddressBar() {
 }
 
 function onAddressInputKeydown(event: KeyboardEvent) {
-    if (event.key === "Enter") {
-        event.preventDefault();
-        navigateToInputAddress();
-        return;
-    }
-
     if (event.key === "Escape") {
         event.preventDefault();
         exitAddressBar();
@@ -262,16 +239,16 @@ function selectAddress(event: MouseEvent) {
 }
 </script>
 <style scoped>
-search:has(.dropdown) {
+.address-search:has(.dropdown) {
     border-bottom-left-radius: 0;
     border-bottom-right-radius: 0;
 }
 
-search:hover:not(:has(input[type="text"]:disabled)):not(:has(.dropdown)) {
+.address-search:hover:not(:has(input[type="text"]:disabled)):not(:has(.dropdown)) {
     background: var(--background-color-interactive-hover);
 }
 
-search {
+.address-search {
     flex: 1;
     min-width: 0;
     position: relative;

@@ -139,7 +139,6 @@
                         :key="version.url"
                     >
                         <article
-                            @click="onVersionClick($event, version)"
                             :id="version.url"
                             :class="{
                                 selected: isSelected(version),
@@ -150,17 +149,19 @@
                         >
                             <header>
                                 <h3>
-                                    <button
-                                        type="button"
+                                    <a
                                         class="version-select"
-                                        :aria-pressed="isSelected(version)"
-                                        :disabled="isProtected === undefined"
-                                        @click="selectPageVersion(version)"
+                                        :href="versionRoute(version)"
+                                        :aria-current="
+                                            isSelected(version)
+                                                ? 'true'
+                                                : undefined
+                                        "
                                     >
                                         {{
                                             formatSummary(version.value.summary)
                                         }}
-                                    </button>
+                                    </a>
                                 </h3>
                             </header>
 
@@ -415,7 +416,14 @@ import {
     useGraffitiDiscover,
     useGraffitiSession,
 } from "@graffiti-garden/wrapper-vue";
-import { computed, onBeforeUnmount, ref, useTemplateRef, watch } from "vue";
+import {
+    computed,
+    nextTick,
+    onBeforeUnmount,
+    ref,
+    useTemplateRef,
+    watch,
+} from "vue";
 import { annotationSchema, type AnnotationObject } from "../utils/schemas";
 import {
     computeTrustAnnotationsByActor,
@@ -440,26 +448,26 @@ function emitLensOutput(
 
 const pageName = ref("");
 const pageQuery = ref("");
-const selectedPageVersion = ref<PageVersionObject | null | undefined>(
-    undefined,
-);
+const requestedVersionUrl = ref<string | null>(null);
+let pendingVersionScroll: string | null = null;
+let hasReceivedQuery = false;
 
 function onQueryChange() {
     const { name: nextPageName, query: nextPageQuery } = parseAddress(
         window.address,
     );
-    const didChangePage = pageName.value !== nextPageName;
+    const nextVersionUrl = window.params.get("version");
 
     pageName.value = nextPageName;
     pageQuery.value = nextPageQuery;
-
-    if (didChangePage) {
-        // Avoid rendering stale preview routes while the new page versions load.
-        selectedPageVersion.value = undefined;
+    if (requestedVersionUrl.value !== nextVersionUrl) {
+        pendingVersionScroll = hasReceivedQuery ? null : nextVersionUrl;
+        requestedVersionUrl.value = nextVersionUrl;
     }
+    hasReceivedQuery = true;
 }
-window.addEventListener("addresschange", onQueryChange);
-onQueryChange();
+window.addEventListener("querychange", onQueryChange);
+if (window.address !== undefined) onQueryChange();
 
 const transclude = useTemplateRef<HTMLElement>("transclude");
 defineExpose({ transclude });
@@ -506,7 +514,7 @@ watch(transclude, (preview) => {
 onBeforeUnmount(() => {
     stopObservingPreview();
     stopHandlingNavigation();
-    window.removeEventListener("addresschange", onQueryChange);
+    window.removeEventListener("querychange", onQueryChange);
 });
 
 const { objects: pageVersionsAndAnnotations, isFirstPoll } =
@@ -627,8 +635,9 @@ async function republishPageVersion(
             `${action}: ${version.value.summary}`,
             session,
         );
-        if (pageName.value === version.value.object)
-            selectedPageVersion.value = created;
+        if (pageName.value === version.value.object) {
+            window.navigate(versionRoute(created));
+        }
     } catch (error) {
         reportError(action, error);
     } finally {
@@ -656,15 +665,14 @@ async function deleteSelectedPageVersion(
 const effectiveSelectedPageVersion = computed(() => {
     if (isProtected.value === undefined) return null;
 
-    const selected = selectedPageVersion.value;
+    const selected = requestedVersionUrl.value
+        ? pageVersions.value.find(
+              (version) => version.url === requestedVersionUrl.value,
+          )
+        : undefined;
     // Protection chooses the default preview, but History still lets the user
     // explicitly inspect an untrusted version without endorsing it.
-    if (
-        selected &&
-        pageVersions.value.some((version) => version.url === selected.url)
-    ) {
-        return selected;
-    }
+    if (selected) return selected;
 
     return pickVersion(
         pageVersions.value,
@@ -724,15 +732,13 @@ const editAddress = computed(
         )}`,
 );
 
-const selectPageVersion = (version: PageVersionObject) => {
-    if (isProtected.value === undefined) return;
-    selectedPageVersion.value = version;
-};
-
-function onVersionClick(event: MouseEvent, version: PageVersionObject) {
-    // The card is a pointer shortcut; its title remains the keyboard control.
-    if (event.target instanceof Element && event.target.closest("a, button, input, summary")) return;
-    selectPageVersion(version);
+function versionRoute(version: PageVersionObject) {
+    const params = new URLSearchParams(window.params);
+    params.set("version", version.url);
+    return composeQuery(
+        params,
+        composeAddress(pageName.value, pageQuery.value),
+    );
 }
 
 const isSelected = (version: PageVersionObject) =>
@@ -765,20 +771,26 @@ function timestamp(value: number, exact = false) {
     return exact ? date.toISOString() : date.toLocaleString();
 }
 
-watch(pageVersions, (versions) => {
-    if (!versions.length) {
-        selectedPageVersion.value = undefined;
-        return;
-    }
+watch(
+    [requestedVersionUrl, pageVersions],
+    async ([versionUrl, versions]) => {
+        if (
+            !versionUrl ||
+            pendingVersionScroll !== versionUrl ||
+            !versions.some((version) => version.url === versionUrl)
+        ) {
+            return;
+        }
 
-    const selectedUrl = selectedPageVersion.value?.url;
-    if (
-        selectedUrl &&
-        !versions.some((version) => version.url === selectedUrl)
-    ) {
-        selectedPageVersion.value = undefined;
-    }
-});
+        await nextTick();
+        if (requestedVersionUrl.value !== versionUrl) return;
+        const entry = document.getElementById(versionUrl);
+        if (!entry) return;
+        entry.scrollIntoView({ behavior: "smooth", block: "start" });
+        pendingVersionScroll = null;
+    },
+    { immediate: true },
+);
 
 watch([pageVersions, isFirstPoll], ([versions, firstPoll]) => {
     if (firstPoll) return;
@@ -929,6 +941,7 @@ async function toggleActorTrust(actor: string, session: GraffitiSession) {
 
 .history-list > li > article {
     cursor: pointer;
+    position: relative;
     border: 1px solid var(--border-color);
     border-radius: 0.5rem;
     padding: 0.75rem;
@@ -973,10 +986,26 @@ async function toggleActorTrust(actor: string, session: GraffitiSession) {
 }
 
 .version-select {
+    display: block;
     width: 100%;
     text-align: start;
     font: inherit;
     color: inherit;
+}
+
+/* Make the card itself part of the version link while keeping its controls
+   and actor link independently interactive. */
+.version-select::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+}
+
+.history-actor,
+.history-trust-inline,
+.history-list footer {
+    position: relative;
+    z-index: 1;
 }
 
 .history-meta {
