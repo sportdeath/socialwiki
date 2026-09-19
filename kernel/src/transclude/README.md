@@ -54,8 +54,10 @@ does not implement this functionality itself and bridges are designed to be inde
 which can listen with `window.addEventListener(eventName, listener)`.
 Events emitted by that document via `window.emit(eventName, payload)` can be
 observed with `transcludeEl.addEventListener(eventName, listener)`.
+Every bridged event name must begin with `sw-`; this keeps synthetic events
+from colliding with native DOM events such as `click` or `submit`.
 
-A transparent lens, like the View lens, may decide to propogate unhandled events
+A transparent lens, like the View lens, may decide to propagate unhandled events
 in either direction, but forwarding is not enabled by default:
 
 ```ts

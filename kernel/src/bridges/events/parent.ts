@@ -1,6 +1,8 @@
 import {
   EVENT_TO_CHILD,
   EVENT_TO_PARENT,
+  assertBridgedEventName,
+  isBridgedEventName,
   type BridgedEvent,
 } from "./shared";
 
@@ -19,7 +21,7 @@ export function installEventsParent(
     const data = event.data;
     if (typeof data !== "object" || data === null) return;
     const d = data as Record<string, unknown>;
-    if (d.type !== EVENT_TO_PARENT || typeof d.eventName !== "string") return;
+    if (d.type !== EVENT_TO_PARENT || !isBridgedEventName(d.eventName)) return;
 
     const childEvent = new CustomEvent(d.eventName, {
       detail: d.payload,
@@ -33,6 +35,7 @@ export function installEventsParent(
 
   window.addEventListener("message", onMessage);
   const send = (eventName: string, payload?: unknown) => {
+    assertBridgedEventName(eventName);
     if (destroyed) return;
     iframe.contentWindow?.postMessage(
       {

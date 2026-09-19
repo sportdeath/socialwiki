@@ -6,8 +6,22 @@ export const EVENT_TO_CHILD = "sw-event-in";
 
 export type BridgedEvent = CustomEvent<unknown>;
 
+/** Bridged names are custom-event names and must not collide with native DOM events. */
+export function isBridgedEventName(value: unknown): value is string {
+  return typeof value === "string" && value.startsWith("sw-");
+}
+
+export function assertBridgedEventName(
+  value: unknown,
+): asserts value is string {
+  if (!isBridgedEventName(value)) {
+    throw new TypeError('Bridged event names must start with "sw-"');
+  }
+}
+
 declare global {
   interface Window {
+    /** Emit an `sw-`-prefixed custom event to the containing transclusion. */
     emit: (eventName: string, payload?: unknown) => void;
 
     /**

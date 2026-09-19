@@ -1,3 +1,5 @@
+import { assertBridgedEventName } from "../src/bridges/events/shared";
+
 type ChildListener = (event: CustomEvent<unknown>) => void;
 type ParentListener = (event: CustomEvent<unknown>) => void;
 
@@ -8,10 +10,12 @@ export function createEventBridge() {
 
   const child = {
     emit(eventName: string, payload?: unknown) {
+      assertBridgedEventName(eventName);
       const event = new CustomEvent(eventName, { detail: payload, cancelable: true });
       for (const listener of parentListeners) listener(event);
     },
     listen(eventName: string, listener: ChildListener) {
+      assertBridgedEventName(eventName);
       const listeners = childListeners.get(eventName) ?? new Set();
       listeners.add(listener);
       childListeners.set(eventName, listeners);
@@ -29,6 +33,7 @@ export function createEventBridge() {
       return () => parentListeners.delete(listener);
     },
     send(eventName: string, payload?: unknown) {
+      assertBridgedEventName(eventName);
       const event = new CustomEvent(eventName, {
         detail: payload,
         cancelable: true,

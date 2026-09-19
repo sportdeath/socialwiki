@@ -1,4 +1,5 @@
 import type { ParentBridgeEndpointInstaller } from "../bridges/parent";
+import { assertBridgedEventName } from "../bridges/events/shared";
 import type {
   DocumentResolver,
   ResolvedDocument,
@@ -117,6 +118,7 @@ export function defineTranscludeElement(
     }
 
     send(eventName: string, payload?: unknown) {
+      assertBridgedEventName(eventName);
       this.#frame.send(eventName, payload);
     }
 

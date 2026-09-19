@@ -11,8 +11,8 @@ it("forwards only inbound events left unhandled by the child document", () => {
   const observe = vi.fn();
   const forward = vi.fn();
   const observeHandled = vi.fn();
-  window.addEventListener("public", observe);
-  window.addEventListener("handled", observeHandled);
+  window.addEventListener("sw-public", observe);
+  window.addEventListener("sw-handled", observeHandled);
   window.onUnhandledEvent = forward;
 
   const send = (eventName: string, payload: unknown) => {
@@ -24,25 +24,35 @@ it("forwards only inbound events left unhandled by the child document", () => {
     );
   };
 
-  send("public", { value: 1 });
+  send("sw-public", { value: 1 });
   expect(observe).toHaveBeenCalledWith(
-    expect.objectContaining({ type: "public", detail: { value: 1 } }),
+    expect.objectContaining({ type: "sw-public", detail: { value: 1 } }),
   );
   expect(forward).toHaveBeenCalledOnce();
 
-  events.listen("handled", (event) => event.preventDefault());
-  send("handled", { value: 2 });
+  events.listen("sw-handled", (event) => event.preventDefault());
+  send("sw-handled", { value: 2 });
   expect(observeHandled).not.toHaveBeenCalled();
   expect(forward).toHaveBeenCalledOnce();
 
   const block = (event: Event) => event.preventDefault();
-  window.addEventListener("blocked", block);
-  send("blocked", { value: 3 });
+  window.addEventListener("sw-blocked", block);
+  send("sw-blocked", { value: 3 });
   expect(forward).toHaveBeenCalledOnce();
 
-  window.removeEventListener("public", observe);
-  window.removeEventListener("handled", observeHandled);
-  window.removeEventListener("blocked", block);
+  const click = vi.fn();
+  window.addEventListener("click", click);
+  send("click", { value: 4 });
+  expect(click).not.toHaveBeenCalled();
+
+  expect(() => events.emit("click")).toThrow(
+    'Bridged event names must start with "sw-"',
+  );
+
+  window.removeEventListener("sw-public", observe);
+  window.removeEventListener("sw-handled", observeHandled);
+  window.removeEventListener("sw-blocked", block);
+  window.removeEventListener("click", click);
   window.onUnhandledEvent = undefined;
 });
 
@@ -53,7 +63,7 @@ it("validates the sender and lets listeners consume events before async work", a
   const events = installEventsParent(iframe, passThrough);
   const finish = vi.fn();
   const stopHandling = events.listen(async (event) => {
-    if (event.type !== "handled") return;
+    if (event.type !== "sw-handled") return;
     event.preventDefault();
     await Promise.resolve();
     finish(event.detail);
@@ -70,28 +80,37 @@ it("validates the sender and lets listeners consume events before async work", a
     );
   };
 
-  emit("public", { value: 1 });
-  emit("handled", { value: 2 });
+  emit("sw-public", { value: 1 });
+  emit("sw-handled", { value: 2 });
+  emit("click", { value: 3 });
   window.dispatchEvent(new MessageEvent("message", {
     source: window,
-    data: { type: EVENT_TO_PARENT, eventName: "public", payload: "spoofed" },
+    data: {
+      type: EVENT_TO_PARENT,
+      eventName: "sw-public",
+      payload: "spoofed",
+    },
   }));
 
   expect(passThrough).toHaveBeenCalledOnce();
   expect(passThrough).toHaveBeenCalledWith(expect.objectContaining({
-    type: "public", detail: { value: 1 },
+    type: "sw-public", detail: { value: 1 },
   }));
   expect(observe).toHaveBeenCalledTimes(2);
   expect(observe).toHaveBeenLastCalledWith(expect.objectContaining({
-    type: "handled", detail: { value: 2 }, defaultPrevented: true,
+    type: "sw-handled", detail: { value: 2 }, defaultPrevented: true,
   }));
   expect(finish).not.toHaveBeenCalled();
   await Promise.resolve();
   expect(finish).toHaveBeenCalledWith({ value: 2 });
 
   stopHandling();
-  emit("handled", { value: 3 });
+  emit("sw-handled", { value: 3 });
   expect(passThrough).toHaveBeenCalledTimes(2);
+
+  expect(() => events.send("click")).toThrow(
+    'Bridged event names must start with "sw-"',
+  );
 
   events.destroy();
   iframe.remove();

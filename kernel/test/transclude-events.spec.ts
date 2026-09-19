@@ -98,22 +98,26 @@ it("keeps srcdoc as input and exposes lens output only as an event", async () =>
 
 it("exposes events locally and forwards only when explicitly requested", () => {
   const element = transclude();
+  expect(() => element.send("click")).toThrow(
+    'Bridged event names must start with "sw-"',
+  );
+
   const listen = vi.fn();
   const forward = vi.fn();
-  element.addEventListener("example", listen);
+  element.addEventListener("sw-example", listen);
 
-  receive(element, "example", { value: 1 });
+  receive(element, "sw-example", { value: 1 });
   expect(listen).toHaveBeenCalledOnce();
 
   element.onUnhandledEvent = forward;
-  receive(element, "example", { value: 2 });
+  receive(element, "sw-example", { value: 2 });
   expect(listen).toHaveBeenCalledTimes(2);
   expect(forward).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
-    type: "example", detail: { value: 2 },
+    type: "sw-example", detail: { value: 2 },
   }));
 
   element.onUnhandledEvent = undefined;
-  receive(element, "example", { value: 3 });
+  receive(element, "sw-example", { value: 3 });
   expect(listen).toHaveBeenCalledTimes(3);
   expect(forward).toHaveBeenCalledOnce();
 });
@@ -208,13 +212,13 @@ it("forwards new event names across transparent boundaries until intercepted", (
   inner.onUnhandledEvent = ({ type, detail }) => receive(outer, type, detail);
   outer.onUnhandledEvent = vi.fn();
   const listen = vi.fn();
-  outer.addEventListener("new-event", listen);
+  outer.addEventListener("sw-new-event", listen);
 
-  receive(inner, "new-event", { value: 1 });
+  receive(inner, "sw-new-event", { value: 1 });
   expect(outer.onUnhandledEvent).toHaveBeenCalledOnce();
 
-  outer.addEventListener("new-event", (event) => event.preventDefault());
-  receive(inner, "new-event", { value: 2 });
+  outer.addEventListener("sw-new-event", (event) => event.preventDefault());
+  receive(inner, "sw-new-event", { value: 2 });
   expect(listen).toHaveBeenCalledTimes(2);
   expect(outer.onUnhandledEvent).toHaveBeenCalledOnce();
 });

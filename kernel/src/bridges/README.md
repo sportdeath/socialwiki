@@ -13,7 +13,8 @@ entry points into functions that install all child or parent bridges at once:
 
 ## Bridge Catalog
 
-- `events`: a basic event channel used by higher-level bridges.
+- `events`: a basic event channel used by higher-level bridges. Event names
+  must begin with `sw-` so they cannot impersonate native DOM events.
 - `navigation`: link handling across documents. Containers may replace the
   transclusion's default with `window.handleNavigation()`. A routed transclusion then
   composes query-relative navigation with its `route` and forwards it outward;

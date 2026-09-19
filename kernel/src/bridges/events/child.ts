@@ -1,6 +1,8 @@
 import {
   EVENT_TO_CHILD,
   EVENT_TO_PARENT,
+  assertBridgedEventName,
+  isBridgedEventName,
   type BridgedEvent,
 } from "./shared";
 
@@ -8,6 +10,7 @@ export function installEventsChild() {
   const listeners = new Map<string, Set<(event: BridgedEvent) => void>>();
 
   const emit = (eventName: string, payload?: unknown) => {
+    assertBridgedEventName(eventName);
     window.parent?.postMessage(
       {
         type: EVENT_TO_PARENT,
@@ -27,7 +30,7 @@ export function installEventsChild() {
     const data = event.data;
     if (typeof data !== "object" || data === null) return;
     const d = data as Record<string, unknown>;
-    if (d.type !== EVENT_TO_CHILD || typeof d.eventName !== "string") return;
+    if (d.type !== EVENT_TO_CHILD || !isBridgedEventName(d.eventName)) return;
 
     const childEvent = new CustomEvent(d.eventName, {
       detail: d.payload,
@@ -48,6 +51,7 @@ export function installEventsChild() {
      * hiding it from other listeners; call it before awaiting async work.
      */
     listen(eventName: string, receive: (event: BridgedEvent) => void) {
+      assertBridgedEventName(eventName);
       let eventListeners = listeners.get(eventName);
       if (!eventListeners) {
         eventListeners = new Set();
