@@ -1,6 +1,5 @@
 import type { EventsParent } from "../events/parent";
 import {
-  AUTOSIZE_MODE_EVENT,
   AUTOSIZE_SIZE_EVENT,
   type AutosizeMode,
   autosizesHeight,
@@ -9,15 +8,13 @@ import {
 } from "./shared";
 
 export function installAutosizeParent(
-  iframe: HTMLIFrameElement,
   element: HTMLElement,
   events: EventsParent,
 ) {
   let mode: AutosizeMode = "off";
+  let lastSize: { width: number; height: number } | null = null;
 
   const applySize = (payload: unknown) => {
-    if (mode === "off") return;
-
     // Size payload comes from an iframe; treat it as untrusted.
     if (typeof payload !== "object" || payload === null) return;
     const p = payload as Record<string, unknown>;
@@ -32,11 +29,18 @@ export function installAutosizeParent(
       return;
     }
 
+    lastSize = { width: p.width, height: p.height };
+    applyLastSize();
+  };
+
+  const applyLastSize = () => {
+    if (mode === "off" || !lastSize) return;
+
     if (autosizesHeight(mode)) {
-      element.style.height = `${p.height}px`;
+      element.style.height = `${lastSize.height}px`;
     }
     if (autosizesWidth(mode)) {
-      element.style.width = `${p.width}px`;
+      element.style.width = `${lastSize.width}px`;
     }
   };
 
@@ -44,11 +48,6 @@ export function installAutosizeParent(
     if (event.type !== AUTOSIZE_SIZE_EVENT) return;
     applySize(event.detail);
   });
-
-  const sendMode = () => {
-    // Child can reload/recreate documents; mode must be resent on demand.
-    events.send(AUTOSIZE_MODE_EVENT, { mode });
-  };
 
   const setAutosizeMode = () => {
     const value = element.getAttribute("autosize");
@@ -58,8 +57,7 @@ export function installAutosizeParent(
 
     if (!autosizesWidth(mode)) element.style.removeProperty("width");
     if (!autosizesHeight(mode)) element.style.removeProperty("height");
-
-    sendMode();
+    applyLastSize();
   };
 
   const observer = new MutationObserver(setAutosizeMode);
@@ -67,14 +65,12 @@ export function installAutosizeParent(
     attributes: true,
     attributeFilter: ["autosize"],
   });
-  iframe.addEventListener("load", sendMode);
   setAutosizeMode();
 
   return {
     destroy() {
       stopListening();
       observer.disconnect();
-      iframe.removeEventListener("load", sendMode);
     },
   };
 }

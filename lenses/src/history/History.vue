@@ -384,8 +384,9 @@
                 key="preview"
                 id="preview"
                 name="Preview"
-                ref="transclude"
                 :src="previewAddress"
+                :route="previewRoute"
+                @sw-lens-output="onPreviewOutput"
             ></sw-transclude>
             <sw-transclude
                 v-else
@@ -421,7 +422,6 @@ import {
     nextTick,
     onBeforeUnmount,
     ref,
-    useTemplateRef,
     watch,
 } from "vue";
 import { annotationSchema, type AnnotationObject } from "../utils/schemas";
@@ -437,17 +437,15 @@ import {
 } from "../utils/protection";
 import { LoadingPage } from "../utils/status-pages";
 
-const { composeAddress, composeQuery, parseAddress, parseQuery } = window.route;
+const { composeAddress, composeQuery, parseAddress } = window.route;
 
-function emitLensOutput(
-    status: "loading" | "not-found" | "ok" | "error",
-    srcdoc?: string,
-) {
+function emitLensOutput(status: string, srcdoc?: string) {
     window.emit("sw-lens-output", { status, srcdoc });
 }
 
 const pageName = ref("");
 const pageQuery = ref("");
+const historyParams = ref(new URLSearchParams());
 const requestedVersionUrl = ref<string | null>(null);
 let pendingVersionScroll: string | null = null;
 let hasReceivedQuery = false;
@@ -460,6 +458,7 @@ function onQueryChange() {
 
     pageName.value = nextPageName;
     pageQuery.value = nextPageQuery;
+    historyParams.value = new URLSearchParams(window.params);
     if (requestedVersionUrl.value !== nextVersionUrl) {
         pendingVersionScroll = hasReceivedQuery ? null : nextVersionUrl;
         requestedVersionUrl.value = nextVersionUrl;
@@ -469,51 +468,23 @@ function onQueryChange() {
 window.addEventListener("querychange", onQueryChange);
 if (window.address !== undefined) onQueryChange();
 
-const transclude = useTemplateRef<HTMLElement>("transclude");
-defineExpose({ transclude });
-let previewObserver: MutationObserver | undefined;
 const previewHtml = ref("");
 
-const outputPreviewIfReady = () => {
-    const preview = transclude.value;
-    if (!preview) return;
-
-    const status = preview.getAttribute("status");
-    const html = preview.getAttribute("srcdoc");
-    previewHtml.value = html ?? "";
-    if (status === "ok" && html !== null) {
-        emitLensOutput("ok", html);
+function onPreviewOutput(event: CustomEvent<unknown>) {
+    if (typeof event.detail !== "object" || event.detail === null) return;
+    const { status, srcdoc } = event.detail as Record<string, unknown>;
+    if (typeof status !== "string") return;
+    if (status === "ok") {
+        if (typeof srcdoc !== "string") return;
+        previewHtml.value = srcdoc;
+        emitLensOutput("ok", srcdoc);
+    } else {
+        previewHtml.value = "";
+        emitLensOutput(status);
     }
-};
-
-const stopHandlingNavigation = window.handleNavigation((to) => {
-    // If not relative, just pass it on
-    if (!to.startsWith("?")) return window.navigate(to);
-
-    // For relative queries strip out the version name
-    const { address } = parseQuery(to);
-    window.navigate(composeQuery(undefined, address));
-});
-
-function stopObservingPreview() {
-    previewObserver?.disconnect();
-    previewObserver = undefined;
 }
 
-watch(transclude, (preview) => {
-    stopObservingPreview();
-    if (!preview) return;
-    previewObserver = new MutationObserver(outputPreviewIfReady);
-    previewObserver.observe(preview, {
-        attributes: true,
-        attributeFilter: ["srcdoc", "status"],
-    });
-    outputPreviewIfReady();
-});
-
 onBeforeUnmount(() => {
-    stopObservingPreview();
-    stopHandlingNavigation();
     window.removeEventListener("querychange", onQueryChange);
 });
 
@@ -704,6 +675,12 @@ const previewAddress = computed(() => {
         composeAddress(pageName.value, pageQuery.value),
     );
 });
+// View resolves the private media ID above, while links expose History's
+// public version-object URL. The route lets the navigation default translate
+// between those two representations without a History-specific handler.
+const previewRoute = computed(() =>
+    composeQuery(historyParams.value, pageName.value),
+);
 const previewHref = computed(() =>
     previewAddress.value
         ? `#/${composeAddress("v", previewAddress.value)}`
@@ -845,11 +822,19 @@ const activeProtectionTrustSource = computed(() => {
 
 // Register this only after every computed dependency above exists: Vue reads
 // the source once when a watcher is created, even when it is not immediate.
-watch(previewAddress, (address) => {
-    if (address) return;
-    previewHtml.value = "";
-    emitLensOutput("loading");
-});
+watch(
+    [
+        pageName,
+        () => effectiveSelectedPageVersion.value?.value.result.media,
+    ],
+    () => {
+        // The previous version is no longer the document shown by History,
+        // even while the replacement View lens is still loading.
+        previewHtml.value = "";
+        emitLensOutput("loading");
+    },
+    { immediate: true },
+);
 
 const trustMutationActor = ref<string | null>(null);
 const isUpdatingTrust = (actor: string) => trustMutationActor.value === actor;

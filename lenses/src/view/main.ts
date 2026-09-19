@@ -23,7 +23,7 @@ import {
 } from "../utils/status-pages";
 import { getTrustContext } from "../utils/trust";
 
-const { composeAddress, composeQuery, parseAddress } = window.route;
+const { parseAddress } = window.route;
 
 // Make sure the transclude exists
 const foundTransclude = document.querySelector<TranscludeElement>("#transclude");
@@ -70,21 +70,6 @@ function setTranscludeSrcDoc(html: string, status: string) {
   transclude.setAttribute("srcdoc", html);
 }
 setTranscludeSrcDoc(LoadingPage, "loading");
-
-// Intercept navigation requests
-window.handleNavigation((to) => {
-  // Any relative navigation is passed-through to the containing document
-  if (!to.startsWith("?")) {
-    window.navigate(to);
-    return;
-  }
-
-  // A query-only link belongs to the displayed page, not to this view lens.
-  const { name: pageName } = parseAddress(requestedAddress);
-  window.navigate(
-    composeQuery(requestedLensParams, composeAddress(pageName, to)),
-  );
-});
 
 // Update the containing document with this lens's status and HTML.
 function emitLensOutput(status: string, srcdoc?: string) {
@@ -192,6 +177,7 @@ async function renderLens(force = false) {
   currentContentKey = contentKey;
 
   const renderVersion = ++activeRenderVersion;
+  emitLensOutput("loading");
   setTranscludeSrcDoc(LoadingPage, "loading");
 
   try {

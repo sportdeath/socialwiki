@@ -55,7 +55,7 @@ if (window.top !== window) {
     // Replace the document with a clean host for the root transclude below.
     document.documentElement.replaceChildren(document.createElement("body"));
 
-    // Install top-level services: Graffiti and resolution
+    // Install top-level services: Graffiti, default resolution, and default navigation
     const graffiti = new GraffitiGuarded();
     handleDocumentResolution(createDefaultResolver(kernelUrl.href));
     // Most pages resolve URLs relative to a default route (https://social.wiki),
@@ -75,6 +75,31 @@ if (window.top !== window) {
     };
     const documentRoute = createDocumentRouteState(rootRoute);
 
+    // Never let a sandboxed descendant replace the trusted host with executable
+    // code, inline content, a local file, or a browser-internal document. Other
+    // protocols remain available for external application handlers.
+    const BLOCKED_NAVIGATION_PROTOCOLS = new Set([
+      "javascript:",
+      "vbscript:",
+      "data:",
+      "blob:",
+      "filesystem:",
+      "file:",
+      "about:",
+    ]);
+    handleNavigation((to) => {
+      try {
+        const url =
+          serializeRouteUrl(to, rootRoute) ??
+          new URL(to, rootRoute.rootUrl);
+        if (BLOCKED_NAVIGATION_PROTOCOLS.has(url.protocol)) return;
+        // Otherwise, do a top-level redirect
+        window.location.href = url.href;
+      } catch {
+        // Ignore malformed requests.
+      }
+    });
+
     // Make an installer that allows those services to be
     // bridged to sub-documents.
     const bridgedServices = {
@@ -88,19 +113,6 @@ if (window.top !== window) {
     // Install the <sw-transclude> component for including sub-documents
     installTransclude(resolveDocument, installParentBridgeEndpoints);
 
-    // Handle navigation requests that have bubbled all the way to the top.
-    handleNavigation((to) => {
-      try {
-        const url =
-          serializeRouteUrl(to, rootRoute) ?? new URL(to, rootDocumentRoute);
-        // Ignore non-http/s URLs, e.g. javascript:
-        if (url.protocol !== "http:" && url.protocol !== "https:") return;
-        window.location.href = url.href;
-      } catch {
-        // Ignore malformed requests
-      }
-    });
-
     // Transclude the serialized document
     const transclude = document.createElement("sw-transclude");
     transclude.style.position = "fixed";
@@ -113,6 +125,9 @@ if (window.top !== window) {
     // The root frame is the origin's own document, not a separate permission
     // principal beneath it.
     transclude.setAttribute("permission-scope", "inherit");
+    // This iframe does not consume any part of the route,
+    // it is fully inherited by the transcluded document.
+    transclude.setAttribute("route", "");
     transclude.setAttribute(
       "name",
       documentTitle || new URL(documentUrl).hostname,

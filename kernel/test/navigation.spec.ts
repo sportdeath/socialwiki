@@ -3,6 +3,7 @@ import { installNavigationChild } from "../src/bridges/navigation/child";
 import { createDocumentRouteState } from "../src/bridges/navigation/document-route";
 import { installNavigationParent } from "../src/bridges/navigation/parent";
 import {
+  dispatchNavigation,
   handleNavigation,
   NAVIGATE_EVENT,
   NAVIGATION_READY_EVENT,
@@ -95,6 +96,7 @@ it("exposes coherent query state and navigates only on local changes", () => {
   percentLink.dispatchEvent(percentClick);
 
   expect(percentLink.href).toContain("#/v?/100%2520real");
+  expect(percentClick.defaultPrevented).toBe(true);
   expect(
     emitted.filter(({ eventName }) => eventName === NAVIGATE_EVENT).at(-1),
   ).toEqual({
@@ -142,7 +144,79 @@ it("exposes coherent query state and navigates only on local changes", () => {
   expect(relativeRouteLink.href).toContain(
     "#/e?/100%2520real/%F0%9F%98%84",
   );
+
+  // Relative routes use queryRootUrl, so a link must also be recomposed when
+  // that is the only part of its document route which changes.
+  events.parent.send(QUERY_EVENT, {
+    query: "?mode=compact&sort=new/alice",
+    documentRoute: {
+      rootUrl: "https://social.wiki/",
+      queryRootUrl: "https://first.example/browser.html",
+      address: "e",
+    },
+  });
+  relativeRouteLink.dispatchEvent(
+    new MouseEvent("pointerdown", { bubbles: true, cancelable: true }),
+  );
+  expect(relativeRouteLink.href).toContain("first.example/browser.html");
+
+  events.parent.send(QUERY_EVENT, {
+    query: "?mode=compact&sort=new/alice",
+    documentRoute: {
+      rootUrl: "https://social.wiki/",
+      queryRootUrl: "https://second.example/browser.html",
+      address: "e",
+    },
+  });
+  relativeRouteLink.dispatchEvent(
+    new MouseEvent("pointerdown", { bubbles: true, cancelable: true }),
+  );
+  expect(relativeRouteLink.href).toContain("second.example/browser.html");
+
+  // Removing route context must restore an href serialized under the old
+  // route, or a subsequent native new-tab action would use stale context.
+  events.parent.send(QUERY_EVENT, {
+    query: "?mode=compact&sort=new/alice",
+  });
+  relativeRouteLink.dispatchEvent(
+    new MouseEvent("pointerdown", { bubbles: true, cancelable: true }),
+  );
+  expect(relativeRouteLink.getAttribute("href")).toBe("?/100%20real/😄");
+
+  events.parent.send(QUERY_EVENT, {
+    query: "?mode=compact&sort=new/alice",
+    documentRoute: {
+      rootUrl: "https://social.wiki/",
+      queryRootUrl: "https://second.example/browser.html",
+      address: "e",
+    },
+  });
   relativeRouteLink.remove();
+
+  const fragmentLink = document.createElement("a");
+  fragmentLink.setAttribute("href", "#section");
+  const fragmentTarget = document.createElement("div");
+  fragmentTarget.id = "section";
+  fragmentTarget.scrollIntoView = vi.fn();
+  document.body.append(fragmentLink, fragmentTarget);
+  let fragmentPreventedByBridge: boolean | undefined;
+  const stopNativeFragmentNavigation = (event: Event) => {
+    fragmentPreventedByBridge = event.defaultPrevented;
+    event.preventDefault();
+  };
+  document.addEventListener("click", stopNativeFragmentNavigation);
+  fragmentLink.dispatchEvent(
+    new MouseEvent("click", { bubbles: true, cancelable: true }),
+  );
+  document.removeEventListener("click", stopNativeFragmentNavigation);
+
+  expect(fragmentPreventedByBridge).toBe(true);
+  expect(fragmentTarget.scrollIntoView).toHaveBeenCalledOnce();
+  expect(
+    emitted.filter(({ eventName }) => eventName === NAVIGATE_EVENT),
+  ).toHaveLength(3);
+  fragmentLink.remove();
+  fragmentTarget.remove();
 
   const contextLink = document.createElement("a");
   contextLink.setAttribute("href", "#/v?/Crème brûlée");
@@ -160,6 +234,26 @@ it("exposes coherent query state and navigates only on local changes", () => {
     emitted.filter(({ eventName }) => eventName === NAVIGATE_EVENT),
   ).toHaveLength(3);
   contextLink.remove();
+
+  const externalLink = document.createElement("a");
+  externalLink.href = "https://example.com/something";
+  document.body.append(externalLink);
+  let externalPreventedByBridge: boolean | undefined;
+  const stopExternalNavigation = (event: Event) => {
+    externalPreventedByBridge = event.defaultPrevented;
+    event.preventDefault();
+  };
+  document.addEventListener("click", stopExternalNavigation);
+  externalLink.dispatchEvent(
+    new MouseEvent("click", { bubbles: true, cancelable: true }),
+  );
+  document.removeEventListener("click", stopExternalNavigation);
+
+  expect(externalPreventedByBridge).toBe(true);
+  expect(
+    emitted.filter(({ eventName }) => eventName === NAVIGATE_EVENT),
+  ).toHaveLength(4);
+  externalLink.remove();
 
   const middleLink = document.createElement("a");
   middleLink.setAttribute("href", "#/v?/日本語");
@@ -221,24 +315,66 @@ it("exposes coherent query state and navigates only on local changes", () => {
   for (const event of changeEvents) window.removeEventListener(event, record);
 });
 
-it("marks handled navigation so it does not pass through", () => {
+it("uses an installed navigation handler instead of the fallback", () => {
   const source = document.createElement("div");
-  document.body.append(source);
   const onNavigate = vi.fn();
+  const fallback = vi.fn();
   const stopHandling = handleNavigation(onNavigate);
-  const event = new CustomEvent(NAVIGATE_EVENT, {
-    detail: { to: "?/alice" },
-    bubbles: true,
-    cancelable: true,
-  });
 
-  source.dispatchEvent(event);
-
-  expect(event.defaultPrevented).toBe(true);
+  dispatchNavigation("?/alice", source, fallback);
   expect(onNavigate).toHaveBeenCalledWith("?/alice", source);
+  expect(fallback).not.toHaveBeenCalled();
 
   stopHandling();
-  source.remove();
+  dispatchNavigation("?/bob", source, fallback);
+  expect(fallback).toHaveBeenCalledOnce();
+});
+
+it("handles navigation inside the navigation bridge", () => {
+  const events = createEventBridge();
+  const host = document.createElement("sw-transclude");
+  host.setAttribute("srcdoc", "<p>Example</p>");
+  const parent = installNavigationParent(
+    host,
+    events.parent,
+    createDocumentRouteState(),
+  );
+  const onNavigate = vi.fn();
+  const stopHandling = handleNavigation(onNavigate);
+
+  events.child.emit(NAVIGATE_EVENT, { to: "?/handled" });
+  expect(onNavigate).toHaveBeenCalledWith("?/handled", host);
+  expect(host.hasAttribute("query")).toBe(false);
+
+  stopHandling();
+  events.child.emit(NAVIGATE_EVENT, { to: "?/default" });
+  expect(host.getAttribute("query")).toBe("?/default");
+
+  parent.destroy();
+});
+
+it("delivers a transclusion query without document-route context", () => {
+  const events = createEventBridge();
+  const emitted: Array<{ eventName: string; payload: unknown }> = [];
+  events.parent.listen((event) => {
+    emitted.push({ eventName: event.type, payload: event.detail });
+  });
+  installNavigationChild(events.child);
+  const parent = installNavigationParent(
+    document.createElement("sw-transclude"),
+    events.parent,
+    createDocumentRouteState(),
+  );
+
+  parent.setQuery("?/Social.Wiki");
+  events.child.emit(NAVIGATION_READY_EVENT);
+
+  expect(window.query).toBe("?/Social.Wiki");
+  expect(window.address).toBe("Social.Wiki");
+  expect(emitted.some(({ eventName }) => eventName === NAVIGATE_EVENT)).toBe(
+    false,
+  );
+  parent.destroy();
 });
 
 it("propagates document route changes when a child's query is unchanged", async () => {
@@ -257,7 +393,12 @@ it("propagates document route changes when a child's query is unchanged", async 
     rootUrl: "https://social.wiki/",
     address: "v",
   });
-  const parent = installNavigationParent(events.parent, documentRoute);
+  const parent = installNavigationParent(
+    document.createElement("sw-transclude"),
+    events.parent,
+    documentRoute,
+  );
+  parent.setRoute("");
   parent.setQuery("?/alice");
   events.child.emit(NAVIGATION_READY_EVENT);
 
@@ -280,6 +421,58 @@ it("propagates document route changes when a child's query is unchanged", async 
       query: "?/alice",
       documentRoute: { rootUrl: "https://social.wiki/", address: "e" },
     },
+  });
+
+  parent.destroy();
+});
+
+it("recomputes a child document route when its route changes", async () => {
+  const events = createEventBridge();
+  const received: Array<{ type: string; detail: unknown }> = [];
+  events.child.listen(QUERY_EVENT, (event) => {
+    received.push({ type: event.type, detail: event.detail });
+  });
+
+  const parent = installNavigationParent(
+    document.createElement("sw-transclude"),
+    events.parent,
+    createDocumentRouteState({
+      rootUrl: "https://social.wiki/",
+      address: "v",
+    }),
+  );
+  parent.setRoute("alice");
+  parent.setQuery("?/alice");
+  events.child.emit(NAVIGATION_READY_EVENT);
+
+  await vi.waitFor(() => expect(received).toHaveLength(1));
+  expect(received.at(-1)).toEqual({
+    type: QUERY_EVENT,
+    detail: {
+      query: "?/alice",
+      documentRoute: {
+        rootUrl: "https://social.wiki/",
+        address: "v?/alice",
+      },
+    },
+  });
+
+  parent.setRoute("?version=media-id/bob");
+  expect(received.at(-1)).toEqual({
+    type: QUERY_EVENT,
+    detail: {
+      query: "?/alice",
+      documentRoute: {
+        rootUrl: "https://social.wiki/",
+        address: "v?version=media-id/bob",
+      },
+    },
+  });
+
+  parent.setRoute(undefined);
+  expect(received.at(-1)).toEqual({
+    type: QUERY_EVENT,
+    detail: { query: "?/alice" },
   });
 
   parent.destroy();

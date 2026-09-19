@@ -27,6 +27,7 @@ export class TranscludeFrame {
   readonly #shadow: ShadowRoot;
   readonly #loadingIframe = document.createElement("iframe");
   #displayedFrame: DisplayedFrame | null = null;
+  #route: string | undefined;
 
   constructor(
     host: HTMLElement,
@@ -40,14 +41,22 @@ export class TranscludeFrame {
 
     const style = document.createElement("style");
     style.textContent = `
-      iframe { width: 100%; height: 100%; border: none; }
-      :host { display: block; width: 100%; height: 100%; overflow: clip; }
+      iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: none; }
+      :host {
+        position: relative;
+        display: block;
+        width: 100%;
+        height: 100%;
+        min-height: 150px;
+        overflow: clip;
+      }
     `;
 
     // Keep a status page visible while the next document loads instead of
     // showing stale content or about:blank.
     this.#loadingIframe.title = "Social.Wiki Loading";
     this.#loadingIframe.srcdoc = LoadingPage;
+    this.#loadingIframe.style.zIndex = "1";
     this.#shadow.append(style, this.#loadingIframe);
   }
 
@@ -58,7 +67,7 @@ export class TranscludeFrame {
   /** Stops the current document and shows the loading page. */
   showLoading() {
     this.#disposeFrame();
-    this.#loadingIframe.style.removeProperty("display");
+    this.#loadingIframe.style.removeProperty("visibility");
   }
 
   render(next: ResolvedDocument) {
@@ -72,6 +81,11 @@ export class TranscludeFrame {
     this.#replaceFrame(next);
   }
 
+  setRoute(route?: string) {
+    this.#route = route;
+    this.#displayedFrame?.bridges.setRoute(route);
+  }
+
   send(eventName: string, payload?: unknown) {
     this.#displayedFrame?.bridges.send(eventName, payload);
   }
@@ -80,7 +94,6 @@ export class TranscludeFrame {
     this.showLoading();
 
     const iframe = createIframe();
-    iframe.style.display = "none";
 
     // Chrome behaves better with blob URLs for top-level sandboxed content.
     // Nested frames use srcdoc because Firefox can block parent-created
@@ -89,6 +102,14 @@ export class TranscludeFrame {
     const blobUrl = useBlob
       ? URL.createObjectURL(new Blob([next.srcdoc], { type: "text/html" }))
       : null;
+    // Safari before version 27 rejects deeply nested about:srcdoc documents
+    // as prohibited self-references (WebKit bug 305276). Once a nested frame
+    // uses a sandboxed data URL, keep its descendants on data URLs as well;
+    // returning to srcdoc at a greater total depth triggers the same failure.
+    // https://bugs.webkit.org/show_bug.cgi?id=305276
+    const dataUrl = /^(about:srcdoc|data:)/.test(window.location.href)
+      ? `data:text/html;charset=utf-8,${encodeURIComponent(next.srcdoc)}`
+      : null;
 
     iframe.addEventListener(
       "load",
@@ -96,8 +117,9 @@ export class TranscludeFrame {
         const displayedFrame = this.#displayedFrame;
         if (displayedFrame?.iframe !== iframe) return;
 
-        iframe.style.removeProperty("display");
-        this.#loadingIframe.style.display = "none";
+        // Keep the reusable status document laid out so Safari does not
+        // reconstruct it later with a stale or zero-width viewport.
+        this.#loadingIframe.style.visibility = "hidden";
       },
       { once: true },
     );
@@ -105,6 +127,7 @@ export class TranscludeFrame {
     // Set the source before appending so the first load is the target rather
     // than the initial about:blank document.
     if (blobUrl) iframe.src = blobUrl;
+    else if (dataUrl) iframe.src = dataUrl;
     else iframe.srcdoc = next.srcdoc;
     this.#shadow.append(iframe);
 
@@ -119,6 +142,7 @@ export class TranscludeFrame {
       blobUrl,
       srcdoc: next.srcdoc,
     };
+    bridges.setRoute(this.#route);
     bridges.setQuery(next.query);
   }
 

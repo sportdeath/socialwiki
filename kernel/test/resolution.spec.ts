@@ -24,12 +24,10 @@ describe("the resolution bridge", () => {
     const firstDocument = {
       srcdoc: "<p>first</p>",
       query: "?/first",
-      status: "ok",
     };
     const secondDocument = {
       srcdoc: "<p>second</p>",
       query: "?/second",
-      status: "ok",
     };
 
     await vi.waitFor(() => {

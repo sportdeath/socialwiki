@@ -9,7 +9,6 @@ export function createDefaultResolver(kernelUrl: string): DocumentResolver {
       // Lens HTML lives beside init.js
       srcdoc: await loadDocument(new URL("view/index.html", kernelUrl), signal),
       query: src.startsWith("?") ? src : composeQuery(undefined, src),
-      status: "loading",
     };
   };
 }

@@ -26,16 +26,14 @@ declare global {
 
     /**
      * Requests navigation from the containing document. `to` is emitted
-     * unchanged so each ancestor may interpret, rewrite, or forward it.
-     * A `?/...` destination changes the query of this document.
+     * unchanged so each ancestor may interpret, rewrite, or forward it. If no
+     * handler does, the containing transclusion applies its `route` default.
      */
     navigate: (to: string) => void;
 
     /**
-     * Intercepts navigation that reaches this document. Without a handler the
-     * event continues bubbling locally and may be forwarded by the containing
-     * transclude's onUnhandledEvent callback. A handler may forward it with
-     * `navigate()`.
+     * Replaces the default handling of navigation from this document's
+     * transclusions. A handler may forward a request with `navigate()`.
      * Returns a function which removes the handler.
      */
     handleNavigation: typeof handleNavigation;
@@ -81,24 +79,24 @@ declare global {
   }
 }
 
-export function handleNavigation(
-  onNavigate: (to: string, source: HTMLElement) => void,
-) {
-  const listener = (event: Event) => {
-    if (event.defaultPrevented || !(event instanceof CustomEvent)) return;
-    const payload = event.detail;
-    if (typeof payload !== "object" || payload === null) return;
-    const { to } = payload as Record<string, unknown>;
-    if (typeof to !== "string" || !(event.target instanceof HTMLElement)) {
-      return;
-    }
+type NavigationHandler = (to: string, source: HTMLElement) => void;
+let navigationHandler: NavigationHandler | undefined;
 
-    // Installing a handler means interception. It must explicitly call
-    // window.navigate(to) if the request should continue to an ancestor.
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    onNavigate(to, event.target);
+export function handleNavigation(
+  onNavigate: NavigationHandler,
+) {
+  navigationHandler = onNavigate;
+  return () => {
+    if (navigationHandler === onNavigate) navigationHandler = undefined;
   };
-  window.addEventListener(NAVIGATE_EVENT, listener);
-  return () => window.removeEventListener(NAVIGATE_EVENT, listener);
+}
+
+/** Use this document's handler, or the requesting transclusion's fallback. */
+export function dispatchNavigation(
+  to: string,
+  source: HTMLElement,
+  fallback: () => void,
+) {
+  if (navigationHandler) navigationHandler(to, source);
+  else fallback();
 }

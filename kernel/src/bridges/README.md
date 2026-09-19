@@ -14,7 +14,14 @@ entry points into functions that install all child or parent bridges at once:
 ## Bridge Catalog
 
 - `events`: a basic event channel used by higher-level bridges.
-- `navigation`: the ability for links clicked on in one document to make a change at a higher-level document.
+- `navigation`: link handling across documents. Containers may replace the
+  transclusion's default with `window.handleNavigation()`. A routed transclusion then
+  composes query-relative navigation with its `route` and forwards it outward;
+  an empty route forwards unchanged. An unrouted side transclusion instead
+  keeps unhandled query-relative navigation local and ignores other unhandled
+  destinations. The same route serializes native link affordances such as
+  hover, copying, and opening a new tab. Fragment-only links (`#` or `#section`,
+  but not a Social.Wiki route beginning `#/`) scroll within their own document.
 - `resolution`: the ability for a document to be resolved according to Social.Wiki's lenses.
   Its default root policy displays every address through Social.Wiki's View lens.
 - `autosize`: the ability for documents to adjust their size to fit their container

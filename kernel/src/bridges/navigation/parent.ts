@@ -4,34 +4,49 @@ import {
   type DocumentRouteState,
 } from "./document-route";
 import {
+  dispatchNavigation,
+  NAVIGATE_EVENT,
   NAVIGATION_READY_EVENT,
   QUERY_EVENT,
 } from "./shared";
+import { handleDefaultNavigation } from "./default";
 
 export function installNavigationParent(
+  host: HTMLElement,
   events: EventsParent,
   documentRoute: DocumentRouteState,
 ) {
   let query: string | undefined;
+  let route: string | undefined;
   let ready = false;
 
   const sendQuery = () => {
     if (!ready || query === undefined) return;
     const parentRoute = documentRoute.getDocumentRoute();
-    if (!parentRoute) return;
-    const parentQuery =
-      typeof window.query === "string" ? window.query : undefined;
-    const childRoute = childDocumentRoute(parentRoute, parentQuery, query);
-    if (!childRoute) return;
+    const childRoute = parentRoute
+      ? childDocumentRoute(parentRoute, route)
+      : null;
     events.send(QUERY_EVENT, {
       query,
-      documentRoute: childRoute,
+      ...(childRoute ? { documentRoute: childRoute } : {}),
     });
   };
 
   const stopRouteUpdates = documentRoute.onDocumentRouteChange(sendQuery);
 
   const stopListening = events.listen((event) => {
+    if (event.type === NAVIGATE_EVENT) {
+      const payload = event.detail;
+      if (typeof payload !== "object" || payload === null) return;
+      const { to } = payload as Record<string, unknown>;
+      if (typeof to !== "string") return;
+
+      event.preventDefault();
+      dispatchNavigation(to, host, () =>
+        handleDefaultNavigation(host, to),
+      );
+      return;
+    }
     if (event.type !== NAVIGATION_READY_EVENT) return;
     event.preventDefault();
 
@@ -45,6 +60,10 @@ export function installNavigationParent(
     destroy() {
       stopListening();
       stopRouteUpdates();
+    },
+    setRoute(nextRoute?: string) {
+      route = nextRoute;
+      sendQuery();
     },
     setQuery(nextQuery: string) {
       query = nextQuery;

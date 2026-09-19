@@ -6,8 +6,6 @@
 export type ResolvedDocument = {
   srcdoc: string;
   query: string;
-  /** Initial transclude status until the document reports its own output. */
-  status: string;
 };
 
 /**
@@ -25,8 +23,7 @@ export function isResolvedDocument(value: unknown): value is ResolvedDocument {
   const candidate = value as Record<string, unknown>;
   return (
     typeof candidate.srcdoc === "string" &&
-    typeof candidate.query === "string" &&
-    typeof candidate.status === "string"
+    typeof candidate.query === "string"
   );
 }
 

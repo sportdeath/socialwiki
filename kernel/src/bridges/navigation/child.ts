@@ -147,9 +147,13 @@ export function installNavigationChild(events: EventsChild) {
     const p = payload as Record<string, unknown>;
     if (typeof p.query !== "string") return;
 
-    // Establish the document's absolute route before notifying local query
-    // observers, which may immediately create nested transclusions.
-    if (!isDocumentRoute(p.documentRoute)) return;
+    // A document route provides context for links, but is not required to
+    // deliver the query which tells this transclusion what to display. Its
+    // omission deliberately clears any route previously assigned to the frame.
+    if (
+      p.documentRoute !== undefined &&
+      !isDocumentRoute(p.documentRoute)
+    ) return;
     documentRoute.setDocumentRoute(p.documentRoute);
 
     const { params, address } = route.parseQuery(p.query);
@@ -212,6 +216,8 @@ export function installNavigationChild(events: EventsChild) {
     if (
       prepared?.canonicalHref === authoredHref &&
       prepared.documentRoute?.rootUrl === currentDocumentRoute?.rootUrl &&
+      prepared.documentRoute?.queryRootUrl ===
+        currentDocumentRoute?.queryRootUrl &&
       prepared.documentRoute?.address === currentDocumentRoute?.address
     ) {
       return prepared.sourceHref;
@@ -222,7 +228,16 @@ export function installNavigationChild(events: EventsChild) {
         : authoredHref;
 
     try {
-      if (!currentDocumentRoute) return sourceHref;
+      if (!currentDocumentRoute) {
+        // Removing a transclude's route turns it into a side transclusion.
+        // Restore any href serialized under its previous route so native
+        // new-tab actions do not retain stale parent context.
+        if (prepared?.canonicalHref === authoredHref) {
+          link.setAttribute("href", sourceHref);
+          preparedLinks.delete(link);
+        }
+        return sourceHref;
+      }
       const destination = serializeRouteUrl(sourceHref, currentDocumentRoute);
       if (!destination) {
         preparedLinks.delete(link);
@@ -267,6 +282,28 @@ export function installNavigationChild(events: EventsChild) {
     const href = link.getAttribute("href");
     if (typeof href !== "string") return;
 
+    // Native fragments in srcdoc resolve against the containing document's
+    // base URL and can reload that parent inside this frame. Scroll locally
+    // instead. `#/...` remains an absolute Social.Wiki route.
+    if (href.startsWith("#") && !href.startsWith("#/")) {
+      e.preventDefault();
+      const encodedName = href.slice(1);
+      if (!encodedName) {
+        document.documentElement.scrollIntoView();
+        return;
+      }
+      let name = encodedName;
+      try {
+        name = decodeURIComponent(encodedName);
+      } catch {
+        // Match the literal fragment when it is not valid percent encoding.
+      }
+      const target =
+        document.getElementById(name) ?? document.getElementsByName(name)[0];
+      target?.scrollIntoView();
+      return;
+    }
+
     // This also covers keyboard-generated clicks without a preceding pointer
     // or context-menu event.
     const navigationHref = canonicalizeRouteLink(link) ?? href;
@@ -280,6 +317,9 @@ export function installNavigationChild(events: EventsChild) {
       document.querySelector("base[target]")?.getAttribute("target");
     if (target?.trim().toLowerCase() === "_blank") return;
 
+    // Give containing documents the first opportunity to handle every normal
+    // click. Otherwise, the containing transclude applies its route default;
+    // only an unrouted side transclusion limits its fallback to relative queries.
     e.preventDefault();
     window.navigate(navigationHref);
   });

@@ -21,7 +21,6 @@ describe("default document resolution", () => {
     await expect(resolve(src)).resolves.toEqual({
       srcdoc: `<html><head><script src="${kernelUrl}"></script></head><body><h1>View</h1></body></html>`,
       query,
-      status: "loading",
     });
     expect(String(fetch.mock.calls[0][0])).toBe(
       "https://social.wiki/view/index.html",

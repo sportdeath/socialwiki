@@ -40,9 +40,9 @@
             <template #preview>
                 <div class="pane">
                     <sw-transclude
-                        @sw-navigate="onPreviewNavigate"
                         :id="previewTranscludeId"
                         name="Preview"
+                        :route="previewRoute"
                         :query="pageQuery"
                         :key="refreshKey"
                         :srcdoc="previewHtml"
@@ -141,24 +141,14 @@ watch(hasUnsavedChanges, (isDirty, wasDirty) => {
     }, 320);
 });
 
-function onPreviewNavigate(e: Event) {
-    if (!(e instanceof CustomEvent) || typeof e.detail?.to !== "string") return;
-    e.preventDefault();
-    const to = e.detail.to;
-
-    // If not relative, just pass it on
-    if (!to.startsWith("?")) return window.navigate(to);
-
-    // If it is relative, add the page name and the params
-    const { name } = parseAddress(window.address);
-    const newTo = composeQuery(window.params, composeAddress(name, to));
-    window.navigate(newTo);
-}
-
 const pageName = ref("");
 const pageQuery = ref("");
+const editParams = ref(new URLSearchParams());
 const pageAddress = computed(() =>
     composeAddress(pageName.value, pageQuery.value),
+);
+const previewRoute = computed(() =>
+    composeQuery(editParams.value, pageName.value),
 );
 const historyRoute = computed(
     () =>
@@ -274,7 +264,7 @@ async function refreshPageProtection(page: string, requestId: number) {
 function onQueryChange() {
     if (window.address === undefined) return;
 
-    const lensParams = new URLSearchParams(window.params);
+    const lensParams = window.params;
     const { name: nextPageName, query: nextPageQuery } = parseAddress(
         window.address,
     );
@@ -282,6 +272,7 @@ function onQueryChange() {
 
     pageName.value = nextPageName;
     pageQuery.value = nextPageQuery;
+    editParams.value = lensParams;
 
     if (didChangePage) {
         const requestId = ++activeProtectionRequest;

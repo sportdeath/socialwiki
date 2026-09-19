@@ -36,11 +36,14 @@ export function createDocumentRouteState(initialDocumentRoute?: DocumentRoute) {
       listeners.add(listener);
       return () => listeners.delete(listener);
     },
-    setDocumentRoute(nextDocumentRoute: DocumentRoute) {
+    setDocumentRoute(nextDocumentRoute?: DocumentRoute) {
       if (
-        documentRoute?.rootUrl === nextDocumentRoute.rootUrl &&
-        documentRoute.queryRootUrl === nextDocumentRoute.queryRootUrl &&
-        documentRoute.address === nextDocumentRoute.address
+        documentRoute === nextDocumentRoute ||
+        (documentRoute !== undefined &&
+          nextDocumentRoute !== undefined &&
+          documentRoute.rootUrl === nextDocumentRoute.rootUrl &&
+          documentRoute.queryRootUrl === nextDocumentRoute.queryRootUrl &&
+          documentRoute.address === nextDocumentRoute.address)
       ) {
         return;
       }
@@ -48,7 +51,7 @@ export function createDocumentRouteState(initialDocumentRoute?: DocumentRoute) {
       for (const listener of listeners) listener();
     },
   } satisfies DocumentRouteState & {
-    setDocumentRoute(documentRoute: DocumentRoute): void;
+    setDocumentRoute(documentRoute?: DocumentRoute): void;
   };
 }
 
@@ -67,35 +70,37 @@ export function queryDocumentRoute(
   return { ...documentRoute, address: nextAddress };
 }
 
-/**
- * Find the absolute route to a child, excluding the query delivered to that
- * child. Transparent documents which receive the same query retain the same
- * route. Other documents consume the prefix of their parent's delegated
- * address which precedes the child's query.
- */
+function normalizeChildRoute(route: string) {
+  return route.startsWith("?") ? route : composeQuery(undefined, route);
+}
+
+/** Find the route explicitly assigned to a child transclusion. */
 export function childDocumentRoute(
   documentRoute: DocumentRoute,
-  parentQuery: string | undefined,
-  childQuery: string,
+  route: string | undefined,
 ): DocumentRoute | null {
-  if (parentQuery === undefined || parentQuery === childQuery) {
-    return documentRoute;
-  }
+  // No route attribute makes this an independent side transclusion. Its query
+  // is still delivered, but it receives no public route for serializing links.
+  if (route === undefined) return null;
+  // An explicitly empty route contributes no address and therefore preserves
+  // the containing document's route unchanged.
+  if (route === "") return documentRoute;
 
-  const { params, address } = parseQuery(parentQuery);
-  // A side transclusion which is not represented inside the parent's address
-  // inherits that complete address as its parent information.
-  let routeQuery = parentQuery;
-  if (address !== undefined) {
-    if (!childQuery) {
-      routeQuery = composeQuery(params, address);
-    } else if (address.endsWith(childQuery)) {
-      routeQuery = composeQuery(
-        params,
-        address.slice(0, -childQuery.length),
-      );
-    }
-  }
+  return queryDocumentRoute(normalizeChildRoute(route), documentRoute);
+}
 
-  return queryDocumentRoute(routeQuery, documentRoute);
+/**
+ * Apply a routed transclusion's public route to navigation from its child.
+ * `null` means the transclusion has no route and retains its local fallback.
+ */
+export function resolveChildNavigation(
+  route: string | undefined,
+  to: string,
+): string | null {
+  if (route === undefined) return null;
+  if (!to.startsWith("?") || route === "") return to;
+
+  const { params, address } = parseQuery(normalizeChildRoute(route));
+  if (address === undefined) return null;
+  return composeQuery(params, composeAddress(address, to));
 }

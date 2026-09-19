@@ -32,26 +32,27 @@ export function defineTranscludeElement(
    * Attributes:
    * - src: identifies the document to display, such as "my-cool-page" or
    *   "my-cool-page?/nested-query".
-   * - srcdoc: directly supplies a document via its HTML source code. When src
-   *   is present, it may be an output of what is displayed rather than an
-   *   input to the transclude.
+   * - srcdoc: directly supplies a document via its HTML source code when src
+   *   is absent.
    * - query: is state passed to a direct srcdoc, such as
    *   "?mode=edit&section=2". It is ignored when src is present because src
-   *   contains its own query.
+   *   can include the whole query i.e. "my-coolpage?mode=edit"
+   * - route: places this document in the containing document's public route.
+   *   An absent route makes an independent side transclusion, an empty route
+   *   preserves the containing route, and a value advances it by that address
+   *   or explicit query.
    * - autosize: controls the host's size; it accepts "off" (the default),
    *   "width", "height", or "both". A bare autosize attribute means "both".
    * - permission-scope: when set to "inherit", the containing document trusts
    *   this document to use its Graffiti permission scope instead of adding a
    *   new source segment.
-   * - status: reports the current result; it is an output, not an input.
    */
   class SocialWikiTransclude extends HTMLElement implements TranscludeElement {
     onUnhandledEvent?: TranscludeElement["onUnhandledEvent"];
 
-    // Only attributes which require an immediate reaction are observed;
-    // status is only written by this element.
+    // Only attributes which require an immediate reaction are observed.
     static get observedAttributes() {
-      return ["src", "srcdoc", "query"];
+      return ["src", "srcdoc", "query", "route"];
     }
 
     // The frame is where the document is actually rendered using an iframe.
@@ -75,6 +76,7 @@ export function defineTranscludeElement(
     }
 
     connectedCallback() {
+      this.#syncRoute();
       void this.#render();
     }
 
@@ -86,6 +88,10 @@ export function defineTranscludeElement(
     }
 
     attributeChangedCallback(name: string) {
+      if (name === "route") {
+        this.#syncRoute();
+        return;
+      }
       // Attribute callbacks also run on detached elements. connectedCallback
       // will render the latest values once this element is in the document.
       if (!this.isConnected) return;
@@ -102,8 +108,8 @@ export function defineTranscludeElement(
           });
         }
       } else if (name === "srcdoc" && this.hasAttribute("src")) {
-        // src selects the running lens. While it is present, srcdoc is an
-        // output reflected by that lens, not a replacement for the lens.
+        // src selects the running document. While it is present, srcdoc is
+        // neither an input nor an output of this element.
         return;
       } else {
         void this.#render();
@@ -112,6 +118,11 @@ export function defineTranscludeElement(
 
     send(eventName: string, payload?: unknown) {
       this.#frame.send(eventName, payload);
+    }
+
+    #syncRoute() {
+      const route = this.getAttribute("route");
+      this.#frame.setRoute(route === null ? undefined : route);
     }
 
     async #render() {
@@ -130,7 +141,6 @@ export function defineTranscludeElement(
         this.#display({
           srcdoc: srcdoc ?? LoadingPage,
           query: srcdoc === null ? "" : (this.getAttribute("query") ?? ""),
-          status: srcdoc === null ? "loading" : "ok",
         });
         return;
       }
@@ -138,7 +148,6 @@ export function defineTranscludeElement(
       // Keep the current iframe alive while resolving. If the resolver returns
       // the same srcdoc, TranscludeFrame can reuse the lens with its new query.
       this.#resolvedDocument = null;
-      this.setAttribute("status", "loading");
       const request = new AbortController();
       this.#resolutionRequest = request;
       try {
@@ -152,7 +161,6 @@ export function defineTranscludeElement(
             error instanceof Error ? error.message : String(error),
           ),
           query: "",
-          status: "error",
         });
       } finally {
         if (this.#resolutionRequest === request) {
@@ -163,52 +171,13 @@ export function defineTranscludeElement(
 
     #display(resolvedDocument: ResolvedDocument) {
       this.#resolvedDocument = resolvedDocument;
-      this.setAttribute("status", resolvedDocument.status);
       this.#frame.render(resolvedDocument);
     }
 
     #receiveFrameEvent(event: CustomEvent<unknown>) {
       this.dispatchEvent(event);
 
-      // Reflection is the default action of lens output and can therefore be
-      // intercepted like other bridge behavior with preventDefault().
-      if (!event.defaultPrevented && event.type === "sw-lens-output") {
-        this.#acceptLensOutput(event.detail);
-      }
-
-      // Wait for containing-document handlers (e.g. navigation) before offering
-      // the event to a transparent lens's forwarding callback.
       if (!event.defaultPrevented) this.onUnhandledEvent?.(event);
-    }
-
-    #acceptLensOutput(output: unknown) {
-      // The iframe may be running a lens which produces another HTML document.
-      // The lens reports that result to its containing transclude, for example:
-      //
-      // window.emit("sw-lens-output", {
-      //   status: "ok",
-      //   srcdoc: "<article>Hello</article>",
-      // });
-      //
-      // A direct srcdoc is input owned by the host. Only a resolved src uses
-      // srcdoc as an output slot for the lens's resulting document.
-      if (!this.hasAttribute("src")) return;
-
-      // This value arrived from another window, so check its shape before use.
-      if (typeof output !== "object" || output === null) return;
-      const { status, srcdoc } = output as Record<string, unknown>;
-      if (
-        typeof status !== "string" ||
-        (srcdoc !== undefined && typeof srcdoc !== "string")
-      ) {
-        return;
-      }
-
-      this.setAttribute("status", status);
-      // A lens may report a status such as "not-found" without HTML. Remove
-      // any previous output so it is not mistaken for the current result.
-      if (srcdoc === undefined) this.removeAttribute("srcdoc");
-      else this.setAttribute("srcdoc", srcdoc);
     }
   }
 

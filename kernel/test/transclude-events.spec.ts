@@ -1,6 +1,11 @@
 import { afterAll, afterEach, expect, it, vi } from "vitest";
 import type { ParentBridgeEndpointInstaller } from "../src/bridges/parent";
-import { handleNavigation } from "../src/bridges/navigation/shared";
+import { handleDefaultNavigation } from "../src/bridges/navigation/default";
+import {
+  dispatchNavigation,
+  handleNavigation,
+  NAVIGATE_EVENT,
+} from "../src/bridges/navigation/shared";
 import { defineTranscludeElement } from "../src/transclude/element";
 
 // Supply events at the frame boundary without loading an actual child document.
@@ -8,15 +13,23 @@ import { defineTranscludeElement } from "../src/transclude/element";
 vi.stubGlobal("origin", "null");
 afterAll(() => vi.unstubAllGlobals());
 const receivers = new WeakMap<HTMLElement, Parameters<ParentBridgeEndpointInstaller>[2]>();
-const resolveDocument = vi.fn(async () => ({
+const receivedQueries = new WeakMap<HTMLElement, ReturnType<typeof vi.fn>>();
+const receivedRoutes = new WeakMap<HTMLElement, ReturnType<typeof vi.fn>>();
+const resolveDocument = vi.fn(async (src: string) => ({
   srcdoc: "<p>Lens</p>",
-  query: "",
-  status: "loading",
+  query: src.startsWith("?") ? src : `?/${src}`,
 }));
-defineTranscludeElement(resolveDocument, (host, _iframe, receive) => {
-  receivers.set(host, receive);
-  return { destroy() {}, send() {}, setQuery() {} };
-});
+defineTranscludeElement(
+  resolveDocument,
+  (host, _iframe, receive) => {
+    receivers.set(host, receive);
+    const setQuery = vi.fn();
+    const setRoute = vi.fn();
+    receivedQueries.set(host, setQuery);
+    receivedRoutes.set(host, setRoute);
+    return { destroy() {}, send() {}, setQuery, setRoute };
+  },
+);
 
 function transclude() {
   const element = document.createElement("sw-transclude");
@@ -26,14 +39,37 @@ function transclude() {
 }
 
 function receive(element: HTMLElement, type: string, detail: unknown) {
-  receivers.get(element)!(new CustomEvent(type, {
+  const event = new CustomEvent(type, {
     detail, bubbles: true, composed: true, cancelable: true,
-  }));
+  });
+  if (type === NAVIGATE_EVENT && typeof detail === "object" && detail !== null) {
+    const { to } = detail as Record<string, unknown>;
+    if (typeof to === "string") {
+      event.preventDefault();
+      dispatchNavigation(to, element, () =>
+        handleDefaultNavigation(element, to),
+      );
+    }
+  }
+  if (!event.defaultPrevented) receivers.get(element)!(event);
 }
 
 afterEach(() => document.body.replaceChildren());
 
-it("keeps direct srcdoc as input and reflects uncanceled resolved-lens output", async () => {
+it("distinguishes absent, empty, and explicit routes", () => {
+  const element = transclude();
+  const setRoute = receivedRoutes.get(element)!;
+
+  expect(setRoute).toHaveBeenLastCalledWith(undefined);
+  element.setAttribute("route", "");
+  expect(setRoute).toHaveBeenLastCalledWith("");
+  element.setAttribute("route", "home");
+  expect(setRoute).toHaveBeenLastCalledWith("home");
+  element.removeAttribute("route");
+  expect(setRoute).toHaveBeenLastCalledWith(undefined);
+});
+
+it("keeps srcdoc as input and exposes lens output only as an event", async () => {
   const direct = transclude();
   receive(direct, "sw-lens-output", {
     status: "ok",
@@ -43,30 +79,21 @@ it("keeps direct srcdoc as input and reflects uncanceled resolved-lens output", 
 
   const resolved = document.createElement("sw-transclude");
   resolved.setAttribute("src", "example");
+  const onOutput = vi.fn();
+  resolved.addEventListener("sw-lens-output", onOutput);
   document.body.append(resolved);
   await vi.waitFor(() => expect(receivers.has(resolved)).toBe(true));
 
-  receive(resolved, "sw-lens-output", {
+  const output = {
     status: "ok",
     srcdoc: "<p>Resolved output</p>",
-  });
-  expect(resolved.getAttribute("status")).toBe("ok");
-  expect(resolved.getAttribute("srcdoc")).toBe("<p>Resolved output</p>");
-});
-
-it("lets a resolved-lens host prevent output reflection", async () => {
-  const element = document.createElement("sw-transclude");
-  element.setAttribute("src", "example");
-  element.addEventListener("sw-lens-output", (event) => event.preventDefault());
-  document.body.append(element);
-  await vi.waitFor(() => expect(receivers.has(element)).toBe(true));
-
-  receive(element, "sw-lens-output", {
-    status: "ok",
-    srcdoc: "<p>Output</p>",
-  });
-  expect(element.getAttribute("status")).toBe("loading");
-  expect(element.hasAttribute("srcdoc")).toBe(false);
+  };
+  receive(resolved, "sw-lens-output", output);
+  expect(onOutput).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ detail: output }),
+  );
+  expect(resolved.hasAttribute("status")).toBe(false);
+  expect(resolved.hasAttribute("srcdoc")).toBe(false);
 });
 
 it("exposes events locally and forwards only when explicitly requested", () => {
@@ -91,8 +118,9 @@ it("exposes events locally and forwards only when explicitly requested", () => {
   expect(forward).toHaveBeenCalledOnce();
 });
 
-it("lets document navigation handlers intercept before generic forwarding", () => {
+it("lets document navigation handlers replace the transclusion default", () => {
   const element = transclude();
+  element.setAttribute("route", "home");
   element.onUnhandledEvent = vi.fn();
   const navigate = vi.fn();
   const stopHandling = handleNavigation(navigate);
@@ -102,6 +130,75 @@ it("lets document navigation handlers intercept before generic forwarding", () =
     expect(element.onUnhandledEvent).not.toHaveBeenCalled();
   } finally {
     stopHandling();
+  }
+});
+
+it("applies only unhandled relative navigation within the transclusion", async () => {
+  const resolved = document.createElement("sw-transclude");
+  resolved.setAttribute("src", "Social.Wiki");
+  document.body.append(resolved);
+  await vi.waitFor(() => expect(receivers.has(resolved)).toBe(true));
+  const resolutionsBeforeNavigation = resolveDocument.mock.calls.length;
+
+  receive(resolved, "sw-navigate", { to: "?/something" });
+  expect(resolved.getAttribute("src")).toBe("?/Social.Wiki?/something");
+  await vi.waitFor(() =>
+    expect(resolveDocument).toHaveBeenCalledTimes(
+      resolutionsBeforeNavigation + 1,
+    ),
+  );
+  expect(receivedQueries.get(resolved)).toHaveBeenLastCalledWith(
+    "?/Social.Wiki?/something",
+  );
+
+  receive(resolved, "sw-navigate", { to: "#/v?/pinkcord" });
+  receive(resolved, "sw-navigate", { to: "https://example.com/" });
+  expect(resolved.getAttribute("src")).toBe("?/Social.Wiki?/something");
+  expect(receivedQueries.get(resolved)).toHaveBeenCalledTimes(2);
+
+  const direct = transclude();
+  receive(direct, "sw-navigate", { to: "?/something" });
+  expect(direct.getAttribute("query")).toBe("?/something");
+
+  resolved.setAttribute("src", "OtherPage");
+  await vi.waitFor(() => {
+    expect(resolveDocument).toHaveBeenCalledTimes(
+      resolutionsBeforeNavigation + 2,
+    );
+  });
+
+  const versioned = document.createElement("sw-transclude");
+  versioned.setAttribute("src", "?version=media-id/internal-name?/old");
+  document.body.append(versioned);
+  await vi.waitFor(() => expect(receivers.has(versioned)).toBe(true));
+  receive(versioned, "sw-navigate", { to: "?/new" });
+  expect(versioned.getAttribute("src")).toBe(
+    "?version=media-id/internal-name?/new",
+  );
+});
+
+it("uses route as the default for navigation out of a transclusion", () => {
+  const originalNavigate = window.navigate;
+  const navigate = vi.fn();
+  window.navigate = navigate;
+  try {
+    const routed = transclude();
+    routed.setAttribute("route", "?version=object-url/page");
+    receive(routed, "sw-navigate", { to: "?/test" });
+    receive(routed, "sw-navigate", { to: "https://example.com/" });
+
+    expect(navigate.mock.calls).toEqual([
+      ["?version=object-url/page?/test"],
+      ["https://example.com/"],
+    ]);
+    expect(routed.getAttribute("query")).toBeNull();
+
+    const transparent = transclude();
+    transparent.setAttribute("route", "");
+    receive(transparent, "sw-navigate", { to: "?/other" });
+    expect(navigate).toHaveBeenLastCalledWith("?/other");
+  } finally {
+    window.navigate = originalNavigate;
   }
 });
 

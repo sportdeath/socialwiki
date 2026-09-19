@@ -132,7 +132,6 @@ export function useLensSources(
       query: src.startsWith("?")
         ? src
         : window.route.composeQuery(undefined, src),
-      status: "loading",
     };
   };
 

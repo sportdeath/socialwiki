@@ -16,8 +16,12 @@ export function createParentBridgeEndpointInstaller(
     onEvent: (event: CustomEvent<unknown>) => void,
   ) => {
     const events = installEventsParent(iframe, onEvent);
-    const navigationBridge = installNavigationParent(events, documentRoute);
-    const autosize = installAutosizeParent(iframe, host, events);
+    const navigationBridge = installNavigationParent(
+      host,
+      events,
+      documentRoute,
+    );
+    const autosize = installAutosizeParent(host, events);
     const resolution = installResolutionParent(events, resolve);
     const graffitiBridge = installGraffitiParent(iframe, host, createGraffiti());
 
@@ -30,6 +34,7 @@ export function createParentBridgeEndpointInstaller(
         void graffitiBridge.destroy();
       },
       send: events.send,
+      setRoute: navigationBridge.setRoute,
       setQuery: navigationBridge.setQuery,
     };
   };

@@ -95,10 +95,11 @@
                         ? 'History'
                         : lens
             "
+            :route="lensRoute"
             :src="lens === 'v' ? lensQuery : undefined"
             :srcdoc="lens === 'v' ? undefined : directLensSource"
             :query="lens === 'v' ? undefined : lensQuery"
-            ref="transclude"
+            @sw-lens-output="onLensOutput"
         ></sw-transclude>
         <h1 v-else class="status dots">Page loading</h1>
     </main>
@@ -111,7 +112,6 @@ import {
     onMounted,
     onUnmounted,
     ref,
-    useTemplateRef,
     watch,
 } from "vue";
 import SettingsDialog from "./SettingsDialog.vue";
@@ -137,6 +137,9 @@ const lens = ref("");
 const lensParams = ref<URLSearchParams | undefined>(undefined);
 const pageAddress = ref<string | undefined>(undefined);
 const routeReady = ref(false);
+// The latest document produced by View or History. Any route change
+// invalidates it until the active lens reports its new output.
+const srcdoc = ref<string | null>(null);
 const showSettingsDialog = ref(false);
 const navOpen = ref(true);
 const isSmall = ref(false);
@@ -144,6 +147,23 @@ const mq = window.matchMedia("(min-width: 700px)");
 const lensQuery = computed(() =>
     composeQuery(lensParams.value, pageAddress.value),
 );
+// A lens's query says what it displays; its route identifies the public
+// document from which descendant links resolve. Edit and History are that
+// document themselves, so their routes are simply "e" and "h". View is
+// transparent to the page it renders, so its route must identify that page.
+// For example, displaying Social.Wiki?/guide gives View the route
+// v?/Social.Wiki: /guide remains query state inside the rendered page.
+const lensRoute = computed(() => {
+    if (lens.value !== "v") return lens.value;
+
+    // Lens parameters select the rendered version and therefore remain part
+    // of its public identity; only the query delegated to the page is omitted.
+    const { name: pageName } = parseAddress(pageAddress.value);
+    return composeAddress(
+        lens.value,
+        composeQuery(lensParams.value, pageName),
+    );
+});
 const directLensSource = ref<string>();
 let directLensLoad = 0;
 
@@ -223,6 +243,19 @@ function applyAddress(address: string) {
         return;
     }
 
+    const { name: nextPageName } = parseAddress(nestedAddress);
+    const { name: currentPageName } = parseAddress(pageAddress.value);
+    if (
+        name !== lens.value ||
+        nextPageName !== currentPageName ||
+        (params?.toString() ?? "") !== (lensParams.value?.toString() ?? "")
+    ) {
+        // A new lens, lens configuration, or page invalidates the retained
+        // output. The page's own query does not: View updates that state
+        // without reloading or re-emitting the same source document.
+        srcdoc.value = null;
+    }
+
     lens.value = name;
     lensParams.value = params;
     pageAddress.value = nestedAddress;
@@ -245,60 +278,22 @@ function login() {
     });
 }
 
-// Watch transclude srcdoc for draft updates and listen for explicit
-// navigation events from the transclude element.
-const transclude = useTemplateRef<HTMLElement>("transclude");
-const srcdoc = ref<string | null>(null);
-let observer: MutationObserver | undefined;
-let observedTransclude: HTMLElement | null = null;
-
-function detachObservedTransclude() {
-    observer?.disconnect();
-    observer = undefined;
-    observedTransclude = null;
-}
-
-function onNavigate(to: string) {
-    // If it is relative, add the lens
-    if (to.startsWith("?")) {
-        window.navigate(
-          composeQuery(
-            undefined,
-            composeAddress(lens.value, to)
-          )
-        )
+// Keep the active lens's document so Edit can start from exactly what View or
+// History is displaying. Direct lenses use srcdoc for their own source, so
+// their output must come through the lens-output contract instead.
+function onLensOutput(event: CustomEvent<unknown>) {
+    if (typeof event.detail !== "object" || event.detail === null) return;
+    const { status, srcdoc: output } = event.detail as Record<string, unknown>;
+    if (
+        typeof status !== "string" ||
+        (output !== undefined && typeof output !== "string")
+    ) {
         return;
     }
-
-    window.navigate(to);
+    srcdoc.value = output ?? null;
 }
-watch(
-    transclude,
-    (nextTransclude) => {
-        detachObservedTransclude();
-        // Only a resolved View transclusion reflects the displayed page into
-        // srcdoc. Direct Edit/History srcdoc is the lens source itself.
-        if (!nextTransclude?.hasAttribute("src")) {
-            srcdoc.value = null;
-            return;
-        }
 
-        observedTransclude = nextTransclude;
-        observer = new MutationObserver(() => {
-            srcdoc.value = observedTransclude?.getAttribute("srcdoc") ?? null;
-        });
-        observer.observe(observedTransclude, {
-            attributes: true,
-            attributeFilter: ["srcdoc"],
-        });
-        srcdoc.value = observedTransclude.getAttribute("srcdoc") ?? null;
-    },
-    { immediate: true },
-);
-const stopHandlingNavigation = window.handleNavigation(onNavigate);
 onBeforeUnmount(() => {
-    detachObservedTransclude();
-    stopHandlingNavigation();
     window.removeEventListener("querychange", syncAddress);
 });
 
@@ -309,11 +304,16 @@ const viewRoute = computed(() =>
     )
 );
 const editRoute = computed(() => {
-    const lensParams = new URLSearchParams(
-        srcdoc.value ? { draft: srcdoc.value } : undefined,
-    );
+    // While already editing, preserve the live draft carried by this route.
+    // From View or History, seed Edit with the document that lens produced.
+    const editParams =
+        lens.value === "e"
+            ? new URLSearchParams(lensParams.value)
+            : new URLSearchParams(
+                  srcdoc.value ? { draft: srcdoc.value } : undefined,
+              );
     return composeQuery(undefined,
-      composeAddress("e", composeQuery(lensParams, pageAddress.value))
+      composeAddress("e", composeQuery(editParams, pageAddress.value))
     );
 });
 const historyRoute = computed(() =>

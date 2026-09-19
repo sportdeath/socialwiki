@@ -85,7 +85,6 @@ export function startBrowserLoader() {
 
   // The loader is transparent to the selected browser: routes and unhandled
   // application events continue across this otherwise invisible document.
-  window.handleNavigation((to) => window.navigate(to));
   browser.onUnhandledEvent = (event) => window.emit(event.type, event.detail);
   window.addEventListener("querychange", syncBrowserRoute);
   graffiti.sessionEvents.addEventListener("login", (event) => {
