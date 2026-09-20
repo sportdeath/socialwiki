@@ -4,6 +4,7 @@ import { installEventsChild } from "./events/child";
 import { installGraffitiChild } from "./graffiti/child";
 import { installNavigationChild } from "./navigation/child";
 import { installResolutionChild } from "./resolution/child";
+import { installPeripheralsChild } from "./peripherals/child";
 
 /** Install the child half of every capability provided over an iframe boundary. */
 export function installChildBridgeEndpoints() : BridgedServices {
@@ -12,5 +13,6 @@ export function installChildBridgeEndpoints() : BridgedServices {
   const resolve = installResolutionChild(events);
   const documentRoute = installNavigationChild(events);
   installAutosizeChild(events);
-  return { createGraffiti, resolve, documentRoute };
+  const peripherals = installPeripheralsChild();
+  return { createGraffiti, resolve, documentRoute, peripherals };
 }

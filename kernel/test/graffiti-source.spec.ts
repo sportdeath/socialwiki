@@ -39,4 +39,24 @@ describe("Graffiti transclude sources", () => {
     expect(captureSession(host, { actor: "alice", source: [page] }).source)
       .toEqual([page]);
   });
+
+  it("keeps fallback identity stable while reading changed labels per request", () => {
+    const host = document.createElement("sw-transclude");
+    const first = captureSession(host, { actor: "alice" }).source!;
+    host.setAttribute("name", "Renamed");
+    expect(captureSession(host, { actor: "alice" }).source)
+      .toEqual([{ id: first[0].id, name: "Renamed" }]);
+    host.id = "new-document";
+    expect(captureSession(host, { actor: "alice" }).source)
+      .toEqual([{ id: "new-document", name: "Renamed" }]);
+  });
+
+  it("keeps unknown inheritance values isolated and preserves ancestor order", () => {
+    const host = document.createElement("sw-transclude");
+    host.id = "parent";
+    host.setAttribute("permission-scope", "unknown");
+    const child = { id: "child", name: "Child" };
+    expect(captureSession(host, { actor: "alice", source: [child] }).source)
+      .toEqual([{ id: "parent", name: "Unnamed" }, child]);
+  });
 });

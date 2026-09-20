@@ -18,6 +18,7 @@
             @focusout="addressFocused = false"
             @dragstart.prevent
         />
+        <slot name="actions" />
         <ul
             ref="address-dropdown"
             class="dropdown"

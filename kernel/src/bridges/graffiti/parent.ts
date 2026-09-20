@@ -1,7 +1,7 @@
 import type { Graffiti, GraffitiSession } from "@graffiti-garden/api";
 import { serveGraffiti } from "@graffiti-garden/wrapper-iframe-rpc/host";
+import { withParentSource, type SourceSegment } from "../source";
 
-type SourceSegment = { id: string; name: string };
 type SessionWithSource = GraffitiSession & { source?: SourceSegment[] };
 
 // TypeScript parameter types do not exist at runtime. Keep the session slots
@@ -17,18 +17,6 @@ const sessionArgumentIndex = new Map<keyof Graffiti, number>([
   ["deleteMedia", 1],
   ["logout", 0],
 ]);
-
-const fallbackIds = new WeakMap<HTMLElement, string>();
-
-function sourceFromElement(element: HTMLElement): SourceSegment {
-  // Read attributes for each call, so changing them needs no frame bookkeeping.
-  let id = element.id || fallbackIds.get(element);
-  if (!id) {
-    id = Math.random().toString(36).slice(2, 10);
-    fallbackIds.set(element, id);
-  }
-  return { id, name: element.getAttribute("name") || "Unnamed" };
-}
 
 function isSession(value: unknown): value is SessionWithSource {
   return (
@@ -58,12 +46,7 @@ export function withTranscludeSource(
             : [];
           args[index] = {
             ...session,
-            // Scope inheritance is chosen by the containing document on the
-            // host element. The sandboxed child cannot grant it to itself.
-            source:
-              host.getAttribute("permission-scope") === "inherit"
-                ? childSource
-                : [sourceFromElement(host), ...childSource],
+            source: withParentSource(host, childSource),
           } satisfies SessionWithSource;
         }
 

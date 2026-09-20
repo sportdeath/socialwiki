@@ -176,9 +176,6 @@ function createIframe() {
     "allow-popups",
   );
   iframe.allow = [
-    "camera *",
-    "microphone *",
-    "geolocation *",
     "fullscreen *",
     "clipboard-read *",
     "clipboard-write *",

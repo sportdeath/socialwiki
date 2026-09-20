@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "A web held in common.",
   "files": [
+    "theme.css",
     "kernel/src",
     "dist",
     "README.md",

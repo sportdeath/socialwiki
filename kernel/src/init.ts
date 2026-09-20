@@ -6,6 +6,7 @@ import { createDocumentRouteState } from "./bridges/navigation/document-route";
 import { serializeRouteUrl } from "./bridges/navigation/route-serialization";
 import { handleNavigation } from "./bridges/navigation/shared";
 import { createParentBridgeEndpointInstaller } from "./bridges/parent";
+import { createPeripheralsHost } from "./bridges/peripherals/host";
 import { createDefaultResolver } from "./bridges/resolution/default";
 import { serializeDocument } from "./bridges/resolution/document";
 import {
@@ -55,8 +56,9 @@ if (window.top !== window) {
     // Replace the document with a clean host for the root transclude below.
     document.documentElement.replaceChildren(document.createElement("body"));
 
-    // Install top-level services: Graffiti, default resolution, and default navigation
+    // Install top-level services: Graffiti, peripherals, resolution, and navigation
     const graffiti = new GraffitiGuarded();
+    const peripherals = createPeripheralsHost();
     handleDocumentResolution(createDefaultResolver(kernelUrl.href));
     // Most pages resolve URLs relative to a default route (https://social.wiki),
     // but allow browser-like documents to override this route with their own roots
@@ -106,6 +108,7 @@ if (window.top !== window) {
       createGraffiti: () => graffiti,
       resolve: resolveDocument,
       documentRoute,
+      peripherals,
     };
     const installParentBridgeEndpoints =
       createParentBridgeEndpointInstaller(bridgedServices);

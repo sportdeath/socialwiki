@@ -5,12 +5,13 @@ import { installGraffitiParent } from "./graffiti/parent";
 import { installNavigationParent } from "./navigation/parent";
 import type { NavigableTransclude } from "./navigation/shared";
 import { installResolutionParent } from "./resolution/parent";
+import { installPeripheralsParent } from "./peripherals/parent";
 
 /** Create an installer that can be used to connect this document to a transcluded iframe */
 export function createParentBridgeEndpointInstaller(
   bridgedServices: BridgedServices,
 ) {
-  const { resolve, createGraffiti, documentRoute } = bridgedServices;
+  const { resolve, createGraffiti, documentRoute, peripherals } = bridgedServices;
   return (
     host: NavigableTransclude,
     iframe: HTMLIFrameElement,
@@ -25,6 +26,7 @@ export function createParentBridgeEndpointInstaller(
     const autosize = installAutosizeParent(host, events);
     const resolution = installResolutionParent(events, resolve);
     const graffitiBridge = installGraffitiParent(iframe, host, createGraffiti());
+    const peripheralsBridge = installPeripheralsParent(iframe, host, peripherals);
 
     return {
       destroy() {
@@ -33,6 +35,7 @@ export function createParentBridgeEndpointInstaller(
         resolution.destroy();
         events.destroy();
         void graffitiBridge.destroy();
+        peripheralsBridge.destroy();
       },
       send: events.send,
       setRoute: navigationBridge.setRoute,

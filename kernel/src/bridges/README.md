@@ -11,6 +11,11 @@ Both sides use symmetric entry points such as `installEventsChild()` and
 entry points into functions that install all child or parent bridges at once:
 `installChildBridgeEndpoints` and `createParentBridgeEndpointInstaller`.
 
+`source.ts` provides shared transclusion name/ID and permission-scope composition
+for guarded bridges. Ancestors intentionally control descendant scopes; a parent
+can delegate its own scope with `permission-scope="inherit"`. Graffiti uses these
+helpers, and future guarded bridges should use the same identity logic.
+
 ## Bridge Catalog
 
 - `events`: a basic event channel used by higher-level bridges. Event names
@@ -28,3 +33,6 @@ entry points into functions that install all child or parent bridges at once:
   Its default root policy displays every address through Social.Wiki's View lens.
 - `autosize`: the ability for documents to adjust their size to fit their container
 - `graffiti`: a [graffiti](https://github.com/graffiti-garden/graffiti) connection.
+- `peripherals`: a shared guarded connection for browser capabilities, with
+  API-specific adapters. Its first adapter restores `navigator.geolocation`.
+  See [peripherals](peripherals/README.md) for permission and lifecycle behavior.

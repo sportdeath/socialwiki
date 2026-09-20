@@ -2,6 +2,7 @@
 import "../../kernel/src/bridges/graffiti/child";
 import "../../kernel/src/bridges/events/child";
 import "../../kernel/src/bridges/navigation/shared";
+import "../../kernel/src/bridges/peripherals/child";
 
 declare global {
   interface Window {

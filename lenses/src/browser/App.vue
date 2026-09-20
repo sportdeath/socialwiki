@@ -13,7 +13,20 @@
             v-model="isDropdownOpen"
             @navigate="navigateToInputAddress"
             @focus="isSmall && (navOpen = false)"
-        />
+        >
+            <template #actions>
+                <button
+                    type="button"
+                    class="guard-permissions"
+                    title="Show app permissions"
+                    aria-label="Show app permissions"
+                    @click="openPeripheralPermissions"
+                >
+                    <span class="permissions-shield-icon" aria-hidden="true"></span>
+                    <span class="permissions-full">Permissions</span>
+                </button>
+            </template>
+        </AddressBar>
 
         <details :open="navOpen">
             <summary @click.prevent="navOpen = !navOpen">Menu</summary>
@@ -208,6 +221,14 @@ function syncNav() {
 function openSettingsDialog() {
     showSettingsDialog.value = true;
     isDropdownOpen.value = false;
+}
+
+function openPeripheralPermissions() {
+    isDropdownOpen.value = false;
+    if (isSmall.value) navOpen.value = false;
+    void window.showPeripheralPermissions().catch((error: unknown) => {
+        console.error("Could not open peripheral permissions", error);
+    });
 }
 
 function closeSettingsDialog() {
@@ -414,6 +435,36 @@ header {
 .brand-short {
     display: none;
 }
+
+.guard-permissions {
+    flex: 0 0 auto;
+    align-self: stretch;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    padding: 0.5rem;
+    border: none;
+    border-left: 1px solid var(--border-color);
+    border-radius: 0 0.5rem 0.5rem 0;
+    font: inherit;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--secondary-color);
+    background: var(--background-color-interactive);
+}
+.guard-permissions:hover {
+    color: var(--secondary-hover-color);
+    background: var(--background-color-interactive-hover);
+}
+.permissions-shield-icon {
+    display: inline-block;
+    width: 1rem;
+    height: 1rem;
+    background-color: currentColor;
+    mask: url("./permissions-shield.svg") center / contain no-repeat;
+    -webkit-mask: url("./permissions-shield.svg") center / contain no-repeat;
+}
 .backdrop {
     position: absolute;
     left: 0;
@@ -439,6 +490,9 @@ nav a.active:hover {
 }
 
 @media (max-width: 699px) {
+    .permissions-full {
+        display: none;
+    }
     .brand-full {
         display: none;
     }
