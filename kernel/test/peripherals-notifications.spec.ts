@@ -120,6 +120,17 @@ it("does not request native permission when the site guard denies", async () => 
   expect(s.Native.requestPermission).not.toHaveBeenCalled();
 });
 
+it("releases a dismissed authorization and permits a fresh request", async () => {
+  const ask = vi.fn<AskPermission>(async () => ({ allow: false, remember: false }));
+  const s = setup(ask);
+  expect(await s.Notifications.requestPermission()).toBe("default");
+  expect(ask.mock.calls[0][2].aborted).toBe(true);
+  expect(s.Native.requestPermission).not.toHaveBeenCalled();
+  ask.mockResolvedValueOnce({ allow: true, remember: false });
+  expect(await s.Notifications.requestPermission()).toBe("granted");
+  expect(ask.mock.calls[1][2].aborted).toBe(false);
+});
+
 it("coalesces concurrent permission requests and supports the legacy callback", async () => {
   const s = setup(); const callback = vi.fn();
   const first = s.Notifications.requestPermission(callback); const second = s.Notifications.requestPermission();

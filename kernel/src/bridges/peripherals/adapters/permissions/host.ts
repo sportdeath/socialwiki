@@ -1,7 +1,6 @@
 import type { HostAdapter } from "../../shared";
 import { observeNotificationPermission } from "../notifications/state";
-
-export const permissionNames = ["geolocation", "camera", "microphone", "notifications"];
+import { permissionNames } from "./shared";
 
 /** A document is permitted only when both the site guard and browser permit it. */
 export function createPermissionsAdapter(native: Permissions | undefined = navigator.permissions): HostAdapter {

@@ -34,5 +34,6 @@ helpers, and future guarded bridges should use the same identity logic.
 - `autosize`: the ability for documents to adjust their size to fit their container
 - `graffiti`: a [graffiti](https://github.com/graffiti-garden/graffiti) connection.
 - `peripherals`: a shared guarded connection for browser capabilities, with
-  API-specific adapters. Its first adapter restores `navigator.geolocation`.
+  adapters for geolocation, camera/microphone, local files, notifications,
+  and permission queries.
   See [peripherals](peripherals/README.md) for permission and lifecycle behavior.

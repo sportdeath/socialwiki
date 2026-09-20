@@ -147,7 +147,7 @@ Limits:
 - OS notification settings, focus modes, and browser support still determine
   visibility, icons, vibration, and `requireInteraction` behavior.
 
-See [the manual notification test](../../../test/browser/notifications/README.md)
+See [the manual notification test](../../../test/browser/peripherals/README.md)
 and [the native API example](../../../../examples/notifications.html).
 
 ### Standards maintenance
@@ -248,7 +248,7 @@ Limits of API transparency:
 
 The [media capture specification](https://www.w3.org/TR/mediacapture-streams/)
 and [WebRTC specification](https://www.w3.org/TR/webrtc/) define the native APIs.
-The earlier [portability results](../../../test/browser/peripherals/MEDIA.md)
+The [manual checks and retained findings](../../../test/browser/peripherals/README.md)
 cover the transport; actual browser tests of this integrated adapter are manual.
 
 ## Manual demo
@@ -343,8 +343,8 @@ and [writable stream options](https://developer.mozilla.org/en-US/docs/Web/API/F
 [examples/peripheral-compatibility.html](../../../../examples/peripheral-compatibility.html)
 uses ordinary browser calls for permission state changes, device selection,
 file permission checks, directory iteration/resolution, handle comparison, and
-stream piping. Paste it into the editor, or run the file test server and open
-`http://127.0.0.1:52180/?app=compatibility` for three real nested transclusions.
+stream piping. Paste it into the editor, or run the [manual example server](../../../test/browser/peripherals/README.md)
+and open `http://127.0.0.1:52181/compatibility` for three real nested transclusions.
 Browser testing is manual. Tests cover host/child behavior with fake devices and
 files; passing them is not a claim that codecs, picker activation, or every
 third-party library have been validated in real browsers.

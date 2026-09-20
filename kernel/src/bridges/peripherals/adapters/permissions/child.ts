@@ -1,12 +1,12 @@
 import type { PeripheralsService } from "../../shared";
+import { permissionNames } from "./shared";
 
-const names = new Set(["geolocation", "camera", "microphone", "notifications"]);
 export function installPermissionsAdapter(service: PeripheralsService) {
   const permissions = navigator.permissions ?? {};
   const nativeQuery = permissions.query?.bind(permissions);
   const query = createPermissionQuery(service);
   Object.defineProperty(permissions, "query", { configurable: true, writable: true,
-    value: (descriptor: PermissionDescriptor) => names.has(descriptor?.name) ? query(descriptor)
+    value: (descriptor: PermissionDescriptor) => permissionNames.includes(descriptor?.name) ? query(descriptor)
       : nativeQuery ? nativeQuery(descriptor) : Promise.reject(new TypeError("Unsupported permission name.")) });
   Object.defineProperty(navigator, "permissions", { configurable: true, value: permissions });
 }

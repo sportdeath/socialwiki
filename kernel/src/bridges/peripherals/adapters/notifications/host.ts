@@ -32,6 +32,7 @@ export function createNotificationsAdapter(native: typeof Notification | undefin
             const allowed = await context!.permissions.authorize(context!.source,
               [{ capability: "notifications", label: "notifications" }], grant.signal, () => grant?.abort());
             if (!allowed || grant.signal.aborted) {
+              grant.abort(); // A refused request must not remain in the active-permissions table.
               emit({ type: "permission", id, permission: notificationPermission(context!, native!) }); return;
             }
           }
