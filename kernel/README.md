@@ -30,7 +30,7 @@ Social.Wiki documents receive:
 - `window.addEventListener(eventName, listener)` for listening for events sent from the parent document.
 - `window.onUnhandledEvent` for listening for events from the parent document after other listeners have declined them.
 - `window.navigate(to)` for requesting navigation to a new route. 
-- `window.handleNavigation(onNavigate)` for intercepting navigation requests from child documents.
+- `window.handleNavigation(onNavigate)` for intercepting navigation requests from child documents. Its callback receives `(to, transclude)`, and `transclude.navigate(to)` applies relative navigation locally.
 - `window.query`, `window.params`, and `window.address` for reading and changing the current route.
 - `window.route.parseAddress`, `window.route.parseQuery`, `window.route.composeAddress`, and `window.route.composeQuery` for parsing and composing routes.
 - `window.handleDocumentResolution(documentResolver)` for intercepting document resolution requests.

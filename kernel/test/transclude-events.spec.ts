@@ -4,9 +4,13 @@ import { handleDefaultNavigation } from "../src/bridges/navigation/default";
 import {
   dispatchNavigation,
   handleNavigation,
+  type NavigableTransclude,
   NAVIGATE_EVENT,
 } from "../src/bridges/navigation/shared";
-import { defineTranscludeElement } from "../src/transclude/element";
+import {
+  defineTranscludeElement,
+  type TranscludeElement,
+} from "../src/transclude/element";
 
 // Supply events at the frame boundary without loading an actual child document.
 // Match a sandboxed lens's origin so frames use srcdoc instead of blob URLs.
@@ -38,7 +42,7 @@ function transclude() {
   return element;
 }
 
-function receive(element: HTMLElement, type: string, detail: unknown) {
+function receive(element: TranscludeElement, type: string, detail: unknown) {
   const event = new CustomEvent(type, {
     detail, bubbles: true, composed: true, cancelable: true,
   });
@@ -63,8 +67,8 @@ it("distinguishes absent, empty, and explicit routes", () => {
   expect(setRoute).toHaveBeenLastCalledWith(undefined);
   element.setAttribute("route", "");
   expect(setRoute).toHaveBeenLastCalledWith("");
-  element.setAttribute("route", "home");
-  expect(setRoute).toHaveBeenLastCalledWith("home");
+  element.setAttribute("route", "?/home");
+  expect(setRoute).toHaveBeenLastCalledWith("?/home");
   element.removeAttribute("route");
   expect(setRoute).toHaveBeenLastCalledWith(undefined);
 });
@@ -124,13 +128,16 @@ it("exposes events locally and forwards only when explicitly requested", () => {
 
 it("lets document navigation handlers replace the transclusion default", () => {
   const element = transclude();
-  element.setAttribute("route", "home");
+  element.setAttribute("route", "?/home");
   element.onUnhandledEvent = vi.fn();
-  const navigate = vi.fn();
+  const navigate = vi.fn((to: string, transclude: NavigableTransclude) => {
+    transclude.navigate(to);
+  });
   const stopHandling = handleNavigation(navigate);
   try {
     receive(element, "sw-navigate", { to: "?/alice" });
     expect(navigate).toHaveBeenCalledWith("?/alice", element);
+    expect(element.getAttribute("query")).toBe("?/alice");
     expect(element.onUnhandledEvent).not.toHaveBeenCalled();
   } finally {
     stopHandling();
@@ -161,8 +168,11 @@ it("applies only unhandled relative navigation within the transclusion", async (
   expect(receivedQueries.get(resolved)).toHaveBeenCalledTimes(2);
 
   const direct = transclude();
-  receive(direct, "sw-navigate", { to: "?/something" });
+  direct.navigate("?/something");
   expect(direct.getAttribute("query")).toBe("?/something");
+  expect(() => direct.navigate("#/v?/elsewhere")).toThrow(
+    'Local transclusion navigation must start with "?"',
+  );
 
   resolved.setAttribute("src", "OtherPage");
   await vi.waitFor(() => {
@@ -201,6 +211,13 @@ it("uses route as the default for navigation out of a transclusion", () => {
     transparent.setAttribute("route", "");
     receive(transparent, "sw-navigate", { to: "?/other" });
     expect(navigate).toHaveBeenLastCalledWith("?/other");
+
+    const absolute = transclude();
+    absolute.setAttribute("route", "#/v?version=object-url/page");
+    receive(absolute, "sw-navigate", { to: "?/absolute" });
+    expect(navigate).toHaveBeenLastCalledWith(
+      "#/v?version=object-url/page?/absolute",
+    );
   } finally {
     window.navigate = originalNavigate;
   }

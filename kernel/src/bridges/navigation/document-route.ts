@@ -70,10 +70,6 @@ export function queryDocumentRoute(
   return { ...documentRoute, address: nextAddress };
 }
 
-function normalizeChildRoute(route: string) {
-  return route.startsWith("?") ? route : composeQuery(undefined, route);
-}
-
 /** Find the route explicitly assigned to a child transclusion. */
 export function childDocumentRoute(
   documentRoute: DocumentRoute,
@@ -85,22 +81,44 @@ export function childDocumentRoute(
   // An explicitly empty route contributes no address and therefore preserves
   // the containing document's route unchanged.
   if (route === "") return documentRoute;
+  // A rooted route replaces the containing document's address. It also uses
+  // rootUrl for relative links rather than inheriting a browser-like
+  // document's queryRootUrl.
+  if (route.startsWith("#/")) {
+    return { rootUrl: documentRoute.rootUrl, address: route.slice(2) };
+  }
+  // Relative routes use their canonical query form. Requiring the leading
+  // `?` keeps them unambiguous with rooted `#/...` routes and permits a page
+  // whose literal name starts with `#/` to be written as `?/#/...`.
+  if (!route.startsWith("?")) return null;
 
-  return queryDocumentRoute(normalizeChildRoute(route), documentRoute);
+  return queryDocumentRoute(route, documentRoute);
 }
 
 /**
  * Apply a routed transclusion's public route to navigation from its child.
- * `null` means the transclusion has no route and retains its local fallback.
+ * `null` means the supplied route is not valid.
  */
 export function resolveChildNavigation(
-  route: string | undefined,
+  route: string,
   to: string,
 ): string | null {
-  if (route === undefined) return null;
-  if (!to.startsWith("?") || route === "") return to;
+  if (route === "") return to;
 
-  const { params, address } = parseQuery(normalizeChildRoute(route));
+  const isRelativeRoute = route.startsWith("?");
+  const isRootRoute = route.startsWith("#/");
+  if (!isRelativeRoute && !isRootRoute) return null;
+  if (!to.startsWith("?")) return to;
+
+  if (isRootRoute) {
+    const nextRoute = queryDocumentRoute(to, {
+      rootUrl: "",
+      address: route.slice(2),
+    });
+    return nextRoute ? `#/${nextRoute.address}` : null;
+  }
+
+  const { params, address } = parseQuery(route);
   if (address === undefined) return null;
   return composeQuery(params, composeAddress(address, to));
 }

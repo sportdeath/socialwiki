@@ -9,7 +9,7 @@ communicate across that iframe boundary.
 ```html
 <sw-transclude
   src="my-cool-profile"
-  route="profile"
+  route="?/profile"
   autosize="height"
   id="profile"
   name="Profile"
@@ -29,12 +29,19 @@ The element supports:
   `query="?/mysubpage"`.
   When `src` is present query is not used as the query is implicitly contained in the
   src, e.g. `src="mypage?/mysubpage"`
-- `route`: the child's public route relative to the containing document. For example if the page
+- `route`: the child's public route. For example if the page
   `#/v?/mypage` transcludes the document `src="theias-cool-page"` from the query `?/theia`,
-  setting `route="?/theia"` or equivalently `route="theia"` ensures that relative routes
+  setting `route="?/theia"` ensures that relative routes
   within the transcluded document resolve appropriately to something like
-  `#/v?/mypage?/theia?internal-param=something`. An empty value (`route=""`)
-  passes through the containing document's route unchanged.
+  `#/v?/mypage?/theia?internal-param=something`. Relative routes always use
+  their canonical `?/...` form; bare address shorthand is not accepted. A
+  rooted value such as `route="#/v?/theia"` gives the child an absolute public
+  route instead of nesting it beneath the containing document. This allows a
+  containing document to handle ordinary navigation locally while copied and
+  new-tab links still identify the child's standalone location. A literal page
+  name beginning with `#/` remains available as a relative route such as
+  `route="?/#/page"`. An empty value (`route=""`) passes through the containing
+  document's route unchanged.
   When no `route` attribute is present, the child is a "side transclusion":
   it can still navigate internally but has no containing route for serializing
   relative links into browser URLs.
@@ -69,6 +76,17 @@ window.onUnhandledEvent = ({ type, detail }) => transclude.send(type, detail);
 
 Navigation requests can be intercepted with `window.handleNavigation()`, otherwise
 they are performed according to the `route` attribute.
+
+The handler receives both the requested destination and the transclusion that
+requested it. `transclude.navigate()` applies a relative query locally and
+reflects it into `src` or `query`; `window.navigate()` sends a request upward:
+
+```ts
+window.handleNavigation((to, transclude) => {
+  if (to.startsWith("?")) transclude.navigate(to);
+  else window.navigate(to);
+});
+```
 
 ## Resolution and rendering
 

@@ -33,8 +33,10 @@ declare global {
 
     /**
      * Replaces the default handling of navigation from this document's
-     * transclusions. A handler may forward a request with `navigate()`.
-     * Returns a function which removes the handler.
+     * transclusions. The handler receives the requesting transclusion, whose
+     * `navigate()` method applies relative navigation locally; it may instead
+     * forward a request upward with `window.navigate()`. Returns a function
+     * which removes the handler.
      */
     handleNavigation: typeof handleNavigation;
 
@@ -79,7 +81,16 @@ declare global {
   }
 }
 
-type NavigationHandler = (to: string, source: HTMLElement) => void;
+/** The part of a transclusion used by the navigation bridge. */
+export interface NavigableTransclude extends HTMLElement {
+  /** Apply a relative navigation within this transcluded document. */
+  navigate(to: string): void;
+}
+
+type NavigationHandler = (
+  to: string,
+  transclude: NavigableTransclude,
+) => void;
 let navigationHandler: NavigationHandler | undefined;
 
 export function handleNavigation(
@@ -94,9 +105,9 @@ export function handleNavigation(
 /** Use this document's handler, or the requesting transclusion's fallback. */
 export function dispatchNavigation(
   to: string,
-  source: HTMLElement,
+  transclude: NavigableTransclude,
   fallback: () => void,
 ) {
-  if (navigationHandler) navigationHandler(to, source);
+  if (navigationHandler) navigationHandler(to, transclude);
   else fallback();
 }

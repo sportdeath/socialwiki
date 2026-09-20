@@ -316,17 +316,19 @@ it("exposes coherent query state and navigates only on local changes", () => {
 });
 
 it("uses an installed navigation handler instead of the fallback", () => {
-  const source = document.createElement("div");
+  const transclude = Object.assign(document.createElement("div"), {
+    navigate: vi.fn(),
+  });
   const onNavigate = vi.fn();
   const fallback = vi.fn();
   const stopHandling = handleNavigation(onNavigate);
 
-  dispatchNavigation("?/alice", source, fallback);
-  expect(onNavigate).toHaveBeenCalledWith("?/alice", source);
+  dispatchNavigation("?/alice", transclude, fallback);
+  expect(onNavigate).toHaveBeenCalledWith("?/alice", transclude);
   expect(fallback).not.toHaveBeenCalled();
 
   stopHandling();
-  dispatchNavigation("?/bob", source, fallback);
+  dispatchNavigation("?/bob", transclude, fallback);
   expect(fallback).toHaveBeenCalledOnce();
 });
 
@@ -334,6 +336,7 @@ it("handles navigation inside the navigation bridge", () => {
   const events = createEventBridge();
   const host = document.createElement("sw-transclude");
   host.setAttribute("srcdoc", "<p>Example</p>");
+  host.navigate = (to) => host.setAttribute("query", to);
   const parent = installNavigationParent(
     host,
     events.parent,
@@ -441,7 +444,7 @@ it("recomputes a child document route when its route changes", async () => {
       address: "v",
     }),
   );
-  parent.setRoute("alice");
+  parent.setRoute("?/alice");
   parent.setQuery("?/alice");
   events.child.emit(NAVIGATION_READY_EVENT);
 

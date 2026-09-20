@@ -19,8 +19,9 @@ entry points into functions that install all child or parent bridges at once:
   transclusion's default with `window.handleNavigation()`. A routed transclusion then
   composes query-relative navigation with its `route` and forwards it outward;
   an empty route forwards unchanged. An unrouted side transclusion instead
-  keeps unhandled query-relative navigation local and ignores other unhandled
-  destinations. The same route serializes native link affordances such as
+  calls `transclude.navigate()` to keep unhandled query-relative navigation
+  local and ignores other unhandled destinations. The same route serializes
+  native link affordances such as
   hover, copying, and opening a new tab. Fragment-only links (`#` or `#section`,
   but not a Social.Wiki route beginning `#/`) scroll within their own document.
 - `resolution`: the ability for a document to be resolved according to Social.Wiki's lenses.

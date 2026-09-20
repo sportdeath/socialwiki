@@ -1,4 +1,5 @@
 import type { ParentBridgeEndpointInstaller } from "../bridges/parent";
+import type { NavigableTransclude } from "../bridges/navigation/shared";
 import type { ResolvedDocument } from "../bridges/resolution/shared";
 import { LoadingPage } from "../status-pages";
 
@@ -21,7 +22,7 @@ type DisplayedFrame = {
  * - connect and destroy the iframe's bridges.
  */
 export class TranscludeFrame {
-  readonly #host: HTMLElement;
+  readonly #host: NavigableTransclude;
   readonly #installParentBridgeEndpoints: ParentBridgeEndpointInstaller;
   readonly #onEvent: (event: CustomEvent<unknown>) => void;
   readonly #shadow: ShadowRoot;
@@ -30,7 +31,7 @@ export class TranscludeFrame {
   #route: string | undefined;
 
   constructor(
-    host: HTMLElement,
+    host: NavigableTransclude,
     installParentBridgeEndpoints: ParentBridgeEndpointInstaller,
     onEvent: (event: CustomEvent<unknown>) => void,
   ) {

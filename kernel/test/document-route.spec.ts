@@ -59,10 +59,10 @@ describe("document routes", () => {
       "v?/mypage",
     ],
     [
-      "a bare child address",
+      "a noncanonical child address",
       "",
       "v",
-      "v",
+      null,
     ],
     [
       "an explicit child query",
@@ -74,6 +74,12 @@ describe("document routes", () => {
       "a versioned page",
       "v",
       "?version=media-id/mypage",
+      "v?version=media-id/mypage",
+    ],
+    [
+      "an absolute child route",
+      "h?/mypage",
+      "#/v?version=media-id/mypage",
       "v?version=media-id/mypage",
     ],
   ])("derives the document route for %s", (
@@ -93,9 +99,23 @@ describe("document routes", () => {
     );
   });
 
+  it("roots an absolute child route at the configured site", () => {
+    expect(
+      childDocumentRoute(
+        {
+          rootUrl: "https://social.wiki/",
+          queryRootUrl: "https://example.com/browser.html",
+          address: "h?/mypage",
+        },
+        "#/v?/standalone",
+      ),
+    ).toEqual({
+      rootUrl: "https://social.wiki/",
+      address: "v?/standalone",
+    });
+  });
+
   it.each([
-    ["an unrouted relative link", undefined, "?/test", null],
-    ["an unrouted external link", undefined, "https://example.com/", null],
     ["a transparent relative link", "", "?/test", "?/test"],
     [
       "a transparent external link",
@@ -103,14 +123,27 @@ describe("document routes", () => {
       "https://example.com/",
       "https://example.com/",
     ],
-    ["a bare route", "home", "?/test", "?/home?/test"],
+    ["a noncanonical route", "home", "?/test", null],
+    ["a canonical relative route", "?/home", "?/test", "?/home?/test"],
+    [
+      "a relative page whose name begins with a root marker",
+      "?/#/page",
+      "?/test",
+      "?/#/page?/test",
+    ],
     [
       "a parameterized route",
       "?version=object-url/page",
       "?/test",
       "?version=object-url/page?/test",
     ],
-    ["a routed root link", "home", "#/v?/other", "#/v?/other"],
+    ["a routed root link", "?/home", "#/v?/other", "#/v?/other"],
+    [
+      "an absolute route",
+      "#/v?version=object-url/page",
+      "?/test",
+      "#/v?version=object-url/page?/test",
+    ],
   ])("resolves navigation from %s", (_description, route, to, expected) => {
     expect(resolveChildNavigation(route, to)).toBe(expected);
   });

@@ -1,19 +1,28 @@
 import type { ParentBridgeEndpointInstaller } from "../bridges/parent";
 import { assertBridgedEventName } from "../bridges/events/shared";
+import type { NavigableTransclude } from "../bridges/navigation/shared";
 import type {
   DocumentResolver,
   ResolvedDocument,
 } from "../bridges/resolution/shared";
+import {
+  composeAddress,
+  composeQuery,
+  parseAddress,
+  parseQuery,
+} from "../route";
 import { ErrorPage, LoadingPage } from "../status-pages";
 import { TranscludeFrame } from "./frame";
 
-export interface TranscludeElement extends HTMLElement {
+export interface TranscludeElement extends NavigableTransclude {
   /**
    * Receives child events after DOM dispatch, unless a bridge intercepted them
    * or a listener called preventDefault(). Listening alone does not consume an
    * event. Forwarding is opt-in: payloads remain untrusted when forwarded.
    */
   onUnhandledEvent?: (event: CustomEvent<unknown>) => void;
+  /** Apply a relative navigation by reflecting it into `src` or `query`. */
+  navigate(to: string): void;
   send(eventName: string, payload?: unknown): void;
 }
 
@@ -40,8 +49,8 @@ export function defineTranscludeElement(
    *   can include the whole query i.e. "my-coolpage?mode=edit"
    * - route: places this document in the containing document's public route.
    *   An absent route makes an independent side transclusion, an empty route
-   *   preserves the containing route, and a value advances it by that address
-   *   or explicit query.
+   *   preserves the containing route, `?/...` advances it relative to the
+   *   containing document, and `#/...` identifies an absolute root route.
    * - autosize: controls the host's size; it accepts "off" (the default),
    *   "width", "height", or "both". A bare autosize attribute means "both".
    * - permission-scope: when set to "inherit", the containing document trusts
@@ -120,6 +129,30 @@ export function defineTranscludeElement(
     send(eventName: string, payload?: unknown) {
       assertBridgedEventName(eventName);
       this.#frame.send(eventName, payload);
+    }
+
+    navigate(to: string) {
+      if (!to.startsWith("?")) {
+        throw new TypeError(
+          'Local transclusion navigation must start with "?"',
+        );
+      }
+
+      const src = this.getAttribute("src");
+      if (src !== null) {
+        const sourceQuery = src.startsWith("?")
+          ? src
+          : composeQuery(undefined, src);
+        const { params, address } = parseQuery(sourceQuery);
+        if (address === undefined) return;
+        const { name } = parseAddress(address);
+        this.setAttribute(
+          "src",
+          composeQuery(params, composeAddress(name, to)),
+        );
+      } else if (this.hasAttribute("srcdoc")) {
+        this.setAttribute("query", to);
+      }
     }
 
     #syncRoute() {

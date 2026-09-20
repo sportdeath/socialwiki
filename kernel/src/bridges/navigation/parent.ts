@@ -5,6 +5,7 @@ import {
 } from "./document-route";
 import {
   dispatchNavigation,
+  type NavigableTransclude,
   NAVIGATE_EVENT,
   NAVIGATION_READY_EVENT,
   QUERY_EVENT,
@@ -12,7 +13,7 @@ import {
 import { handleDefaultNavigation } from "./default";
 
 export function installNavigationParent(
-  host: HTMLElement,
+  host: NavigableTransclude,
   events: EventsParent,
   documentRoute: DocumentRouteState,
 ) {

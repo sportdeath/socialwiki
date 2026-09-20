@@ -3,6 +3,7 @@ import { installAutosizeParent } from "./autosize/parent";
 import { installEventsParent } from "./events/parent";
 import { installGraffitiParent } from "./graffiti/parent";
 import { installNavigationParent } from "./navigation/parent";
+import type { NavigableTransclude } from "./navigation/shared";
 import { installResolutionParent } from "./resolution/parent";
 
 /** Create an installer that can be used to connect this document to a transcluded iframe */
@@ -11,7 +12,7 @@ export function createParentBridgeEndpointInstaller(
 ) {
   const { resolve, createGraffiti, documentRoute } = bridgedServices;
   return (
-    host: HTMLElement,
+    host: NavigableTransclude,
     iframe: HTMLIFrameElement,
     onEvent: (event: CustomEvent<unknown>) => void,
   ) => {

@@ -149,19 +149,22 @@ const lensQuery = computed(() =>
 );
 // A lens's query says what it displays; its route identifies the public
 // document from which descendant links resolve. Edit and History are that
-// document themselves, so their routes are simply "e" and "h". View is
+// document themselves, so their routes are `?/e` and `?/h`. View is
 // transparent to the page it renders, so its route must identify that page.
 // For example, displaying Social.Wiki?/guide gives View the route
-// v?/Social.Wiki: /guide remains query state inside the rendered page.
+// ?/v?/Social.Wiki: /guide remains query state inside the rendered page.
 const lensRoute = computed(() => {
-    if (lens.value !== "v") return lens.value;
+    if (lens.value !== "v") return composeQuery(undefined, lens.value);
 
     // Lens parameters select the rendered version and therefore remain part
     // of its public identity; only the query delegated to the page is omitted.
     const { name: pageName } = parseAddress(pageAddress.value);
-    return composeAddress(
-        lens.value,
-        composeQuery(lensParams.value, pageName),
+    return composeQuery(
+        undefined,
+        composeAddress(
+            lens.value,
+            composeQuery(lensParams.value, pageName),
+        ),
     );
 });
 const directLensSource = ref<string>();
