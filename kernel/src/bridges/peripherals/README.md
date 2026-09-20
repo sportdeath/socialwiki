@@ -1,9 +1,11 @@
 # Peripherals bridge
 
 One Penpal connection per iframe carries peripheral requests, results, and
-cancellation. Requests and open-document registrations use the same open/close
-subscription lifecycle. API-specific adapters live in `adapters/`; geolocation is the
-first. Add future adapters to the registry in `adapters/index.ts` without
+cancellation. A request-scoped `send` call carries adapter controls back to the
+host through the same ancestor chain; sibling frames cannot address one another's
+requests. Requests and open-document registrations use the same open/close
+subscription lifecycle. API-specific adapters live in `adapters/`: geolocation
+and media (camera/microphone). Add future adapters to the registry in `adapters/index.ts` without
 duplicating transport, scope composition, permission UI, or lifecycle cleanup.
 
 - `parent.ts` assigns the containing transclusion's scope with the same
@@ -15,7 +17,8 @@ duplicating transport, scope composition, permission UI, or lifecycle cleanup.
   authorization, starts native work, and owns cancellation and revocation.
   AbortSignal ties each request's authorization, native cleanup, and pagehide
   listener to one lifetime. Adapter updates follow the browser's asynchronous
-  callback contract.
+  callback contract. An adapter declares every permission its prepared operation
+  needs; all must be granted before native work starts.
 - `permissions.ts` remembers explicit Allow or Deny decisions by capability
   and full source-ID path in the top-level origin's localStorage. Names are
   display labels. If storage is unavailable, decisions last for this host
@@ -66,6 +69,56 @@ Applications should request location normally and handle its success/error
 callbacks. The browser's location availability, OS permission, and acquisition
 timeout still apply. See the [Geolocation specification](https://www.w3.org/TR/geolocation/).
 
+## Camera and microphone adapter
+
+`navigator.mediaDevices.getUserMedia({ audio, video })` returns a native receiving
+`MediaStream`. Preview, `MediaRecorder`, Web Audio, and onward WebRTC consumers
+use native tracks. A combined request asks once: “Allow this site to access your camera and
+microphone?” Remembered decisions are checked first; the prompt asks only for
+permissions still needed, and a remembered denial blocks the request. Both grants
+are required before the native capture call. Remember this decision applies to
+each permission in the prompt; decisions remain separate in the Permissions table. The browser/OS also controls access at the trusted host origin.
+
+One native WebRTC connection sends media directly from the host to the requesting
+leaf, even through nested documents. Penpal relays offer/answer and trickle ICE;
+there is no custom media serialization and no STUN/TURN server. Browsers that
+block local WebRTC candidates cannot use this bridge. Connection setup is bounded
+to 30 seconds; a disconnect lasting 10 seconds ends capture. Waiting for a user to
+answer the native device prompt has no deadline, as with ordinary getUserMedia.
+If that prompt resolves after cancellation, its tracks are immediately stopped.
+
+The host owns capture and transmission. Revoking either permission ends that
+request's whole stream, including receiver clones. Stopping the final local track
+of one kind stops that device; stopping the final kind closes the connection.
+Navigation, frame teardown, pagehide, and failed transport also stop capture.
+Separate getUserMedia calls have independent capture lifetimes.
+
+Narrow hooks on MediaStreamTrack and MediaStream prototypes track only bridged
+tracks, including `track.clone()` and `new MediaStream([track]).clone()`. Other
+tracks retain native behavior. `applyConstraints()` is forwarded to the capture
+track, with native error names and `OverconstrainedError.constraint` preserved.
+`getSettings()`, `getCapabilities()`, and `getConstraints()` return cached host
+capture metadata; constraint application refreshes it.
+
+Limits of API transparency:
+
+- WebRTC encodes media: it can add latency, compression, and receiver adaptation.
+  Host capture settings do not guarantee identical received dimensions/quality.
+- Clones share one host capture track per kind. Applying constraints through a
+  clone affects that shared track; independent per-clone capture constraints are
+  not implemented. Metadata changes outside applyConstraints are not pushed.
+- `enabled` and native mute/unmute behavior operate on receiving tracks. Disabling
+  them silences/hides their output but does not release the host device. Use stop.
+- Device enumeration/selection UI, devicechange forwarding, screen capture, and
+  `navigator.permissions.query()` are not bridged. Initial device constraints can
+  still be passed to getUserMedia. A document without native MediaDevices receives
+  an EventTarget exposing getUserMedia, not a branded MediaDevices instance.
+
+The [media capture specification](https://www.w3.org/TR/mediacapture-streams/)
+and [WebRTC specification](https://www.w3.org/TR/webrtc/) define the native APIs.
+The earlier [portability results](../../../test/browser/peripherals/MEDIA.md)
+cover the transport; actual browser tests of this integrated adapter are manual.
+
 ## Manual demo
 
 Paste [examples/geolocation.html](../../../../examples/geolocation.html)
@@ -77,3 +130,15 @@ plots the result on a coordinate grid, and uses no third-party map service.
 Try denial, click-away dismissal, a remembered decision after reload, stop
 watching, and revocation from the address-bar shield. The shared host/adapter
 and lifecycle logic also have unit tests in `kernel/test/peripherals*.spec.ts`.
+
+For camera/microphone, paste [examples/media.html](../../../../examples/media.html).
+It offers camera, microphone, or both, a muted preview, microphone meter, a video
+constraint control, and a five-second recording with explicit playback controls.
+It uses only standard APIs and uploads nothing.
+
+In Safari/Chromium/Firefox, try each device alone and both together, denial and
+remembered choices, Stop, revoking either permission, and navigation while live.
+Check that the browser's capture indicator clears after Stop/revocation (assuming
+no other app is using that device). Also try recording, changing video width,
+concurrent pages, and a nested transclusion. Unit tests use fake devices/peers to
+check lifecycle and signaling; they do not establish real-browser media quality.

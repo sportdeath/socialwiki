@@ -9,13 +9,18 @@ export type PeripheralRequest = {
 };
 export type PeripheralUpdate =
   | { type: "data"; value: unknown }
-  | { type: "error"; name: string; message: string }
+  | { type: "error"; name: string; message: string; constraint?: string }
   | { type: "end" };
 export type PeripheralSink = (update: PeripheralUpdate) => void;
+export type PeripheralSession = {
+  stop(): void;
+  /** Messages stay within this request and its existing permission scope. */
+  send?(message: unknown): Promise<unknown>;
+};
 export type PeripheralsService = {
-  // Returns a cancellation function immediately, even before permission is decided.
+  // Returns a session immediately, even before permission is decided.
   // Updates are asynchronous, like the underlying browser APIs.
-  start(request: PeripheralRequest, update: PeripheralSink): () => void;
+  start(request: PeripheralRequest, update: PeripheralSink): PeripheralSession;
   showPermissions(source: SourceSegment[]): void | Promise<void>;
   registerDocument(source: SourceSegment[]): () => void;
 };
@@ -25,15 +30,19 @@ export type Subscription =
 export type ParentMethods = {
   open(id: number, subscription: Subscription): void;
   close(id: number): void;
+  send(id: number, message: unknown): Promise<unknown>;
   showPermissions(source: SourceSegment[]): void | Promise<void>;
 };
 export type ChildMethods = { update(id: number, value: PeripheralUpdate): void };
 export type PermissionDescription = { label: string };
+export type PermissionRequirement = PermissionDescription & { capability: string };
 export type HostAdapter = {
-  permission: PermissionDescription;
   // Validate before prompting. The returned operation may touch native APIs
   // only when the host guard has authorized this request.
-  prepare(method: string, args: unknown[]): (update: PeripheralSink) => () => void;
+  prepare(method: string, args: unknown[]): {
+    permissions: PermissionRequirement[];
+    start(update: PeripheralSink): PeripheralSession;
+  };
 };
 
 export function validateSubscription(value: Subscription): Subscription {

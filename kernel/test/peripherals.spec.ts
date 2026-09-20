@@ -52,7 +52,7 @@ describe("peripherals guard and geolocation adapter", () => {
     let answer!: (value: { allow: boolean; remember: boolean }) => void;
     const s = setup(() => new Promise((resolve) => { answer = resolve; }));
     const update = vi.fn();
-    const stop = s.service.start(request, update);
+    const { stop } = s.service.start(request, update);
     await flush(); stop();
     answer({ allow: true, remember: true });
     await flush();
@@ -103,7 +103,7 @@ describe("standard geolocation facade", () => {
   function facade() {
     let emit!: PeripheralSink;
     const stop = vi.fn();
-    const start = vi.fn<PeripheralsService["start"]>((_r, update) => { emit = update; return stop; });
+    const start = vi.fn<PeripheralsService["start"]>((_r, update) => { emit = update; return { stop }; });
     return { api: createGeolocationFacade({ start }), start, stop, emit: (v: Parameters<PeripheralSink>[0]) => emit(v) };
   }
   it("returns a synchronous watch ID, passes options and reconstructs position JSON", async () => {
@@ -151,15 +151,15 @@ describe("standard geolocation facade", () => {
 });
 
 describe("shared peripheral grants", () => {
-  const description = { label: "location", description: "Read location" };
+  const requirements = [{ capability: "geolocation", label: "location" }];
   it("keeps remembered decisions for the session if persistence fails", async () => {
     const storage = new DOMStorage();
     vi.spyOn(storage, "setItem").mockImplementation(() => { throw new Error("Storage unavailable"); });
     const ask = vi.fn(async () => ({ allow: true, remember: true }));
     const permissions = createPeripheralPermissions({ storage, ask });
     const signal = new AbortController().signal;
-    expect(await permissions.authorize(request, description, signal)).toBe(true);
-    expect(await permissions.authorize(request, description, signal)).toBe(true);
+    expect(await permissions.authorize(request.source, requirements, signal)).toBe(true);
+    expect(await permissions.authorize(request.source, requirements, signal)).toBe(true);
     expect(ask).toHaveBeenCalledTimes(1);
   });
   it("does not retain access when saved decisions become invalid", async () => {
@@ -167,7 +167,7 @@ describe("shared peripheral grants", () => {
       ask: async () => ({ allow: true, remember: true }) });
     const controller = new AbortController();
     const revoked = vi.fn(() => controller.abort());
-    await permissions.authorize(request, description, controller.signal, revoked);
+    await permissions.authorize(request.source, requirements, controller.signal, revoked);
     localStorage.setItem(PERMISSION_STORAGE_KEY, "invalid JSON");
     window.dispatchEvent(new StorageEvent("storage", { key: PERMISSION_STORAGE_KEY }));
     expect(revoked).toHaveBeenCalledTimes(1);
@@ -176,25 +176,25 @@ describe("shared peripheral grants", () => {
     const ask = vi.fn(async () => ({ allow: false, remember: true }));
     const p = createPeripheralPermissions({ storage: localStorage, ask });
     const signal = new AbortController().signal;
-    expect(await p.authorize(request, description, signal)).toBe(false);
+    expect(await p.authorize(request.source, requirements, signal)).toBe(false);
     const restored = createPeripheralPermissions({ storage: localStorage, ask });
-    expect(await restored.authorize(request, description, signal)).toBe(false);
+    expect(await restored.authorize(request.source, requirements, signal)).toBe(false);
     expect(ask).toHaveBeenCalledTimes(1);
     restored.revoke(request);
-    expect(await restored.authorize(request, description, signal)).toBe(false);
+    expect(await restored.authorize(request.source, requirements, signal)).toBe(false);
     expect(ask).toHaveBeenCalledTimes(2);
   });
   it("remembers by capability and full ID path, not display names, across host instances", async () => {
     const ask = vi.fn(async () => ({ allow: true, remember: true }));
     const p = createPeripheralPermissions({ storage: localStorage, ask });
     const signal = new AbortController().signal;
-    await p.authorize(request, description, signal);
+    await p.authorize(request.source, requirements, signal);
     const restored = createPeripheralPermissions({ storage: localStorage, ask });
-    await restored.authorize({ ...request, source: [{ id: "page-v1", name: "Renamed" }] }, description, signal);
+    await restored.authorize([{ id: "page-v1", name: "Renamed" }], requirements, signal);
     expect(ask).toHaveBeenCalledTimes(1);
-    await restored.authorize({ ...request, source: [{ id: "page-v2", name: "Map" }] }, description, signal);
-    await restored.authorize({ ...request, capability: "camera" }, description, signal);
-    await restored.authorize({ ...request, source: [{ id: "other-parent", name: "Other" }, ...source] }, description, signal);
+    await restored.authorize([{ id: "page-v2", name: "Map" }], requirements, signal);
+    await restored.authorize(source, [{ capability: "camera", label: "camera" }], signal);
+    await restored.authorize([{ id: "other-parent", name: "Other" }, ...source], requirements, signal);
     expect(ask).toHaveBeenCalledTimes(4);
     expect(localStorage.getItem(PERMISSION_STORAGE_KEY)).not.toContain("latitude");
   });
@@ -202,21 +202,67 @@ describe("shared peripheral grants", () => {
     const ask = vi.fn().mockResolvedValueOnce({ allow: true, remember: false }).mockResolvedValue({ allow: true, remember: true });
     const p = createPeripheralPermissions({ storage: localStorage, ask });
     const signal = new AbortController().signal;
-    await p.authorize(request, description, signal);
+    await p.authorize(request.source, requirements, signal);
     expect(localStorage.getItem(PERMISSION_STORAGE_KEY)).toBeNull();
-    await p.authorize(request, description, signal);
+    await p.authorize(request.source, requirements, signal);
     p.revoke(request);
-    await p.authorize(request, description, signal);
+    await p.authorize(request.source, requirements, signal);
     expect(ask).toHaveBeenCalledTimes(3);
   });
   it("clearing saved grants in another tab revokes active requests", async () => {
     const p = createPeripheralPermissions({ storage: localStorage, ask: async () => ({ allow: true, remember: true }) });
     const callback = vi.fn();
     const controller = new AbortController();
-    await p.authorize(request, description, controller.signal, callback);
+    await p.authorize(request.source, requirements, controller.signal, callback);
     localStorage.clear();
     window.dispatchEvent(new StorageEvent("storage", { key: null }));
     expect(callback).toHaveBeenCalledTimes(1);
     controller.abort();
+  });
+});
+
+describe("combined peripheral grants", () => {
+  const requirements = [{ capability: "camera", label: "camera" }, { capability: "microphone", label: "microphone" }];
+  it.each([true, false])("remembers a combined answer independently for each device (allow=%s)", async (allow) => {
+    const ask = vi.fn<AskPermission>(async () => ({ allow, remember: true }));
+    const permissions = createPeripheralPermissions({ storage: localStorage, ask });
+    const signal = new AbortController().signal;
+    expect(await permissions.authorize(source, requirements, signal)).toBe(allow);
+    for (const requirement of requirements) {
+      expect(await permissions.authorize(source, [requirement], signal)).toBe(allow);
+    }
+    expect(ask).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(localStorage.getItem(PERMISSION_STORAGE_KEY)!)).toEqual(
+      requirements.map((permission) => ({ ...permission, source, allow })));
+  });
+  it("asks only for missing permissions and leaves the previously allowed device intact", async () => {
+    const ask = vi.fn<AskPermission>().mockResolvedValueOnce({ allow: true, remember: true })
+      .mockResolvedValue({ allow: false, remember: true });
+    const permissions = createPeripheralPermissions({ storage: localStorage, ask });
+    const signal = new AbortController().signal;
+    await permissions.authorize(source, [requirements[0]], signal);
+    expect(await permissions.authorize(source, requirements, signal)).toBe(false);
+    expect(ask.mock.calls[1][1].map(({ capability }) => capability)).toEqual(["microphone"]);
+    expect(await permissions.authorize(source, [requirements[0]], signal)).toBe(true);
+    expect(ask).toHaveBeenCalledTimes(2);
+  });
+  it("honors a remembered denial without prompting for the other device", async () => {
+    const ask = vi.fn<AskPermission>(async () => ({ allow: false, remember: true }));
+    const permissions = createPeripheralPermissions({ storage: localStorage, ask });
+    const signal = new AbortController().signal;
+    await permissions.authorize(source, [requirements[1]], signal);
+    expect(await permissions.authorize(source, requirements, signal)).toBe(false);
+    expect(ask).toHaveBeenCalledTimes(1);
+  });
+  it.each(["camera", "microphone"])("revoking %s stops a combined request", async (capability) => {
+    const permissions = createPeripheralPermissions({ storage: null,
+      ask: async () => ({ allow: true, remember: false }) });
+    const controller = new AbortController();
+    const revoked = vi.fn(() => controller.abort());
+    await permissions.authorize(source, requirements, controller.signal, revoked);
+    permissions.revoke({ source, capability });
+    expect(revoked).toHaveBeenCalledTimes(1);
+    permissions.revoke({ source, capability });
+    expect(revoked).toHaveBeenCalledTimes(1);
   });
 });

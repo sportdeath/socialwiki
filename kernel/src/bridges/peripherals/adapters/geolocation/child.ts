@@ -19,7 +19,7 @@ export function createGeolocationFacade(service: Pick<PeripheralsService, "start
     const id = nextId++;
     let cancelled = false;
     const cancel = () => { cancelled = true; stop(); watches.delete(id); };
-    const stop = service.start({ source: [], capability: "geolocation",
+    const { stop } = service.start({ source: [], capability: "geolocation",
       method: watch ? "watchPosition" : "getCurrentPosition", args }, (event) => {
       // Preserve native asynchronous callbacks even when a local service fails early.
       setTimeout(() => {

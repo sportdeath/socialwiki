@@ -1,14 +1,14 @@
 import { CallOptions, connect, WindowMessenger } from "penpal";
 import { validateSource, withParentSource } from "../source";
 import { PERIPHERALS_CHANNEL, validateSubscription, type ChildMethods,
-  type PeripheralsService, type ParentMethods, type Subscription } from "./shared";
+  type PeripheralsService, type PeripheralSession, type ParentMethods, type Subscription } from "./shared";
 
 /** Requests and document presence share one connection-owned lifetime. */
 export function installPeripheralsParent(
   iframe: HTMLIFrameElement, host: HTMLElement, service: PeripheralsService,
 ) {
   if (!iframe.contentWindow) throw new Error("Missing peripherals child window");
-  const subscriptions = new Map<number, { value: Subscription; dispose: () => void }>();
+  const subscriptions = new Map<number, { value: Subscription; dispose: () => void; send?: PeripheralSession["send"] }>();
   let destroyed = false;
   function close(id: number) {
     const entry = subscriptions.get(id);
@@ -17,15 +17,15 @@ export function installPeripheralsParent(
   }
   function open(id: number, value: Subscription) {
     const source = withParentSource(host, value.source);
-    const dispose = value.kind === "document"
-      ? service.registerDocument(source)
+    const session = value.kind === "document"
+      ? { stop: service.registerDocument(source) }
       : service.start({ ...value, source }, (update) => {
-        if (subscriptions.get(id)?.dispose !== dispose) return;
+        if (subscriptions.get(id)?.dispose !== session.stop) return;
         if (update.type !== "data") close(id);
         void connection.promise.then((remote) => remote.update(id, update,
           new CallOptions({ timeout: 10000 }))).catch(() => close(id));
       });
-    subscriptions.set(id, { value, dispose });
+    subscriptions.set(id, { value, dispose: session.stop, send: session.send });
   }
   const methods: ParentMethods = {
     open(id, value) {
@@ -35,6 +35,11 @@ export function installPeripheralsParent(
       open(id, validateSubscription(value));
     },
     close(id) { if (id > 0) close(id); },
+    async send(id, message) {
+      const entry = subscriptions.get(id);
+      if (destroyed || !entry?.send) throw new Error("Peripheral request is unavailable.");
+      return entry.send(message);
+    },
     showPermissions(source) {
       if (destroyed) throw new Error("Peripherals bridge was destroyed");
       return service.showPermissions(withParentSource(host, validateSource(source)));

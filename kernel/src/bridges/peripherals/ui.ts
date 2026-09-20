@@ -27,7 +27,7 @@ export function createPermissionUI(entries: () => PermissionEntry[], revoke: (sc
   const remember = find<HTMLInputElement>("input");
   let pending: { resolve: (answer: PermissionAnswer) => void; signal: AbortSignal } | undefined;
   const mount = () => { if (!container.isConnected) document.body.append(container); };
-  const label = (scope: PermissionScope) =>
+  const label = (scope: Pick<PermissionScope, "source">) =>
     [location.host, ...scope.source.map(({ name }) => name || "Unnamed")].join(" › ");
 
   function finish(answer: PermissionAnswer = { allow: false, remember: false }) {
@@ -70,14 +70,15 @@ export function createPermissionUI(entries: () => PermissionEntry[], revoke: (sc
       return row;
     }));
   }
-  const ask: AskPermission = (scope, description, signal) => {
+  const ask: AskPermission = (source, permissions, signal) => {
     if (signal.aborted) return Promise.resolve({ allow: false, remember: false });
     mount();
     panel.classList.remove("manager");
     request.hidden = false;
     manager.hidden = true;
-    find("h2").textContent = `Allow this site to access your ${description.label}?`;
-    find("#source").textContent = label(scope);
+    const names = new Intl.ListFormat("en", { type: "conjunction" }).format(permissions.map(({ label }) => label));
+    find("h2").textContent = `Allow this site to access your ${names}?`;
+    find("#source").textContent = label({ source });
     remember.checked = false;
     return new Promise((resolve) => {
       pending = { resolve, signal };

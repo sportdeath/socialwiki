@@ -7,7 +7,7 @@ const scope = { capability: "geolocation", source: [{ id: "page", name: "Map" }]
 function prompt() {
   const ui = createPermissionUI(() => [], () => {});
   const controller = new AbortController();
-  const answer = ui.ask(scope, { label: "location" }, controller.signal);
+  const answer = ui.ask(scope.source, [{ capability: "geolocation", label: "location" }], controller.signal);
   const shadow = document.body.lastElementChild!.shadowRoot!;
   const panel = shadow.querySelector("dialog")!;
   vi.spyOn(panel, "getBoundingClientRect").mockReturnValue({ left: 100, right: 300, top: 100, bottom: 300 } as DOMRect);
@@ -17,6 +17,25 @@ function prompt() {
 afterEach(() => document.body.replaceChildren());
 
 describe("peripheral permission dismissal", () => {
+  it("asks once for camera and microphone, then manages their decisions separately", async () => {
+    const storage = new DOMStorage();
+    const permissions = createPeripheralPermissions({ storage });
+    const controller = new AbortController();
+    const answer = permissions.authorize(scope.source,
+      [{ capability: "camera", label: "camera" }, { capability: "microphone", label: "microphone" }], controller.signal);
+    await Promise.resolve();
+    const panel = document.body.lastElementChild!.shadowRoot!.querySelector("dialog")!;
+    expect(panel.querySelector("h2")!.textContent).toBe("Allow this site to access your camera and microphone?");
+    panel.querySelector("input")!.checked = true;
+    panel.querySelector<HTMLButtonElement>("#allow")!.click();
+    expect(await answer).toBe(true);
+    permissions.registerDocument(scope.source);
+    permissions.show(scope.source);
+    expect(panel.querySelectorAll("tbody tr")).toHaveLength(2);
+    expect([...panel.querySelectorAll("tbody span")].map((label) => label.textContent)).toEqual(["Camera", "Microphone"]);
+    panel.querySelector<HTMLButtonElement>("tbody button")!.click();
+    expect(JSON.parse(storage.getItem(PERMISSION_STORAGE_KEY)!).map((entry: { capability: string }) => entry.capability)).toEqual(["microphone"]);
+  });
   it("only offers management for the requesting document's subtree", () => {
     const storage = new DOMStorage();
     storage.setItem(PERMISSION_STORAGE_KEY, JSON.stringify([

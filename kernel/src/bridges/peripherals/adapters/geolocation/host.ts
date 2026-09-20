@@ -3,13 +3,12 @@ import { normalizeOptions, serializePosition, type LocationUpdate } from "./shar
 
 export function createGeolocationAdapter(native: Geolocation | undefined = navigator.geolocation): HostAdapter {
   return {
-    permission: { label: "location" },
     prepare(method, args) {
       if (!["getCurrentPosition", "watchPosition"].includes(method) || args.length !== 1) {
         throw new TypeError("Unknown geolocation operation");
       }
       const options = normalizeOptions(args[0] as PositionOptions);
-      return (update) => {
+      return { permissions: [{ capability: "geolocation", label: "location" }], start(update) {
         if (!native) throw new Error("Geolocation is unavailable");
         let stopped = false;
         const stop = () => {
@@ -29,8 +28,8 @@ export function createGeolocationAdapter(native: Geolocation | undefined = navig
           ({ code, message }) => deliver({ error: { code: code === 1 || code === 3 ? code : 2, message } }),
           options,
         );
-        return stop;
-      };
+        return { stop };
+      } };
     },
   };
 }

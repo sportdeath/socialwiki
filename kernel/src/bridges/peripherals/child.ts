@@ -1,4 +1,4 @@
-import { connect, WindowMessenger } from "penpal";
+import { CallOptions, connect, WindowMessenger } from "penpal";
 import { installPeripheralAdapters } from "./adapters";
 import { PERIPHERALS_CHANNEL, type ChildMethods, type PeripheralsService,
   type PeripheralSink, type ParentMethods, type Subscription } from "./shared";
@@ -40,10 +40,14 @@ export function installPeripheralsChild(): PeripheralsService {
       close();
       update({ type: "error", name: "NotReadableError", message: "The peripherals bridge is unavailable." });
     });
-    return close;
+    return { stop: close, async send(message: unknown) {
+      const remote = await connection.promise;
+      if (!subscriptions.has(id)) throw new Error("Peripheral request is unavailable.");
+      return remote.send(id, message, new CallOptions({ timeout: 15000 }));
+    } };
   }
   const service: PeripheralsService = {
-    registerDocument: (source) => open({ kind: "document", source }),
+    registerDocument: (source) => open({ kind: "document", source }).stop,
     start: (request, update) => open({ ...request, kind: "request" }, update),
     async showPermissions(source) { await (await connection.promise).showPermissions(source); },
   };
