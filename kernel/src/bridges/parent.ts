@@ -43,12 +43,13 @@ export function createParentBridgeEndpointInstaller(
       setQuery: navigationBridge.setQuery,
     };
   };
-  install.prepareFrame = (iframe: HTMLIFrameElement) => preparePeripheralsFrame(iframe, peripherals.features);
+  install.prepareFrame = (iframe: HTMLIFrameElement, host: HTMLElement) => preparePeripheralsFrame(iframe, host, peripherals);
   return install;
 }
 
 type InstalledBridgeEndpoints = ReturnType<typeof createParentBridgeEndpointInstaller>;
 export type ParentBridgeEndpointInstaller = {
   (...args: Parameters<InstalledBridgeEndpoints>): ReturnType<InstalledBridgeEndpoints>;
-  prepareFrame?(iframe: HTMLIFrameElement): void;
+  /** Finish bridge bootstrap before child scripts run. Does not install endpoints. */
+  prepareFrame?(iframe: HTMLIFrameElement, host: HTMLElement): void | Promise<void>;
 };

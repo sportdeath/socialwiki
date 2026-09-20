@@ -1,6 +1,6 @@
 import type { PeripheralsService } from "../../shared";
 
-const names = new Set(["geolocation", "camera", "microphone"]);
+const names = new Set(["geolocation", "camera", "microphone", "notifications"]);
 export function installPermissionsAdapter(service: PeripheralsService) {
   const permissions = navigator.permissions ?? {};
   const nativeQuery = permissions.query?.bind(permissions);

@@ -8,7 +8,9 @@ import { createPeripheralPermissions } from "../src/bridges/peripherals/permissi
 it("makes feature metadata available synchronously, and consumes the bootstrap name", () => {
   const frame = document.createElement("iframe");
   const features = { filePickers: ["showOpenFilePicker"], media: { width: true } };
-  preparePeripheralsFrame(frame, features);
+  const service = createPeripheralsHost(new Map(), createPeripheralPermissions({ storage: null }));
+  service.features = features;
+  expect(preparePeripheralsFrame(frame, document.createElement("div"), service)).toBeUndefined();
   window.name = frame.name;
   expect(readPeripheralFeatures()).toEqual(features);
   expect(window.name).toBe("");

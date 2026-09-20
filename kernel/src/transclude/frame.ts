@@ -1,7 +1,7 @@
 import type { ParentBridgeEndpointInstaller } from "../bridges/parent";
 import type { NavigableTransclude } from "../bridges/navigation/shared";
 import type { ResolvedDocument } from "../bridges/resolution/shared";
-import { LoadingPage } from "../status-pages";
+import { LoadingPage, ErrorPage } from "../status-pages";
 
 /** The state and resources tied to the current physical iframe. */
 type DisplayedFrame = {
@@ -29,6 +29,7 @@ export class TranscludeFrame {
   readonly #loadingIframe = document.createElement("iframe");
   #displayedFrame: DisplayedFrame | null = null;
   #route: string | undefined;
+  #generation = 0;
 
   constructor(
     host: NavigableTransclude,
@@ -67,7 +68,9 @@ export class TranscludeFrame {
 
   /** Stops the current document and shows the loading page. */
   showLoading() {
+    this.#generation++;
     this.#disposeFrame();
+    if (this.#loadingIframe.srcdoc !== LoadingPage) this.#loadingIframe.srcdoc = LoadingPage;
     this.#loadingIframe.style.removeProperty("visibility");
   }
 
@@ -79,7 +82,7 @@ export class TranscludeFrame {
       return;
     }
 
-    this.#replaceFrame(next);
+    void this.#replaceFrame(next);
   }
 
   setRoute(route?: string) {
@@ -91,11 +94,20 @@ export class TranscludeFrame {
     this.#displayedFrame?.bridges.send(eventName, payload);
   }
 
-  #replaceFrame(next: ResolvedDocument) {
+  async #replaceFrame(next: ResolvedDocument) {
     this.showLoading();
 
     const iframe = createIframe();
-    this.#installParentBridgeEndpoints.prepareFrame?.(iframe);
+    const generation = this.#generation;
+    try {
+      const preparation = this.#installParentBridgeEndpoints.prepareFrame?.(iframe, this.#host);
+      // Bridges may need bootstrap data before the child's scripts execute.
+      if (preparation) await preparation;
+    } catch (error) {
+      if (generation === this.#generation) this.#loadingIframe.srcdoc = ErrorPage(String(error));
+      return;
+    }
+    if (generation !== this.#generation) return;
 
     // Chrome behaves better with blob URLs for top-level sandboxed content.
     // Nested frames use srcdoc because Firefox can block parent-created

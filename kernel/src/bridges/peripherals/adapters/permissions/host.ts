@@ -1,6 +1,7 @@
 import type { HostAdapter } from "../../shared";
+import { observeNotificationPermission } from "../notifications/state";
 
-export const permissionNames = ["geolocation", "camera", "microphone"];
+export const permissionNames = ["geolocation", "camera", "microphone", "notifications"];
 
 /** A document is permitted only when both the site guard and browser permit it. */
 export function createPermissionsAdapter(native: Permissions | undefined = navigator.permissions): HostAdapter {
@@ -10,6 +11,10 @@ export function createPermissionsAdapter(native: Permissions | undefined = navig
       throw new TypeError("Unsupported permission query.");
     }
     return { permissions: [], start(update) {
+      if (descriptor.name === "notifications" && globalThis.Notification) {
+        return { stop: observeNotificationPermission(context, Notification, (permission) =>
+          update({ type: "data", value: permission === "default" ? "prompt" : permission })) };
+      }
       let stopped = false;
       let status: PermissionStatus | undefined;
       let last: PermissionState | undefined;

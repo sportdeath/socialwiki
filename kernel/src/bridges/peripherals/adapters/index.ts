@@ -10,6 +10,8 @@ import { installFileSystemAdapter } from "./filesystem/child";
 
 import { createPermissionsAdapter } from "./permissions/host";
 import { installPermissionsAdapter } from "./permissions/child";
+import { createNotificationsAdapter } from "./notifications/host";
+import { installNotificationsAdapter } from "./notifications/child";
 
 /** Register capabilities here; transport, scopes and lifecycle stay shared. */
 export function createHostAdapters(): ReadonlyMap<string, HostAdapter> {
@@ -18,6 +20,7 @@ export function createHostAdapters(): ReadonlyMap<string, HostAdapter> {
     ["permissions", createPermissionsAdapter()],
     ["media", createMediaAdapter()],
     ["file-system", createFileSystemAdapter()],
+    ["notifications", createNotificationsAdapter()],
   ]);
 }
 
@@ -26,4 +29,5 @@ export function installPeripheralAdapters(service: PeripheralsService) {
   if (service.features.geolocation) installGeolocationAdapter(service);
   installMediaAdapter(service);
   installFileSystemAdapter(service);
+  installNotificationsAdapter(service);
 }

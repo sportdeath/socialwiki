@@ -23,6 +23,8 @@ export type PeripheralFeatures = {
   media?: MediaTrackSupportedConstraints;
   enumerateDevices?: boolean;
   filePickers?: string[];
+  notifications?: { properties: string[]; maxActions?: number };
+  notificationPermission?: NotificationPermission;
 };
 export type AdapterContext = { source: SourceSegment[]; permissions: PeripheralPermissions };
 export type PeripheralsService = {

@@ -77,7 +77,8 @@ export function createPermissionUI(entries: () => PermissionEntry[], revoke: (sc
     request.hidden = false;
     manager.hidden = true;
     const names = new Intl.ListFormat("en", { type: "conjunction" }).format(permissions.map(({ label }) => label));
-    find("h2").textContent = `Allow this site to access your ${names}?`;
+    find("h2").textContent = permissions.length === 1 && permissions[0].capability === "notifications"
+      ? "Allow this site to send you notifications?" : `Allow this site to access your ${names}?`;
     find("#source").textContent = label({ source });
     remember.checked = false;
     return new Promise((resolve) => {
