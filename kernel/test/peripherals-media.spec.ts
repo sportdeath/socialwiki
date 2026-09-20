@@ -268,3 +268,41 @@ describe("guarded camera and microphone", () => {
     peer.close();
   });
 });
+
+it("passes an enumerated device ID through ordinary getUserMedia constraints", async () => {
+  const s = setup();
+  const stream = await s.capture({ video: { deviceId: { exact: "camera-2" } } });
+  expect(s.getUserMedia).toHaveBeenCalledWith({ audio: false, video: { deviceId: { exact: "camera-2" } } });
+  stream.getTracks().forEach((track) => track.stop());
+});
+
+it("forwards native source mute/unmute to the receiver and its clones", async () => {
+  const s = setup();
+  const [track] = (await s.capture({ video: true })).getVideoTracks();
+  const clone = track.clone();
+  const mute = vi.fn(); const unmute = vi.fn();
+  clone.addEventListener("mute", mute); clone.addEventListener("unmute", unmute);
+  s.tracks[0].muted = true; s.tracks[0].dispatchEvent(new Event("mute")); await flush();
+  expect(track.muted).toBe(true); expect(clone.muted).toBe(true); expect(mute).toHaveBeenCalledTimes(1);
+  s.tracks[0].muted = false; s.tracks[0].dispatchEvent(new Event("unmute")); await flush();
+  expect(track.muted).toBe(false); expect(clone.muted).toBe(false); expect(unmute).toHaveBeenCalledTimes(1);
+});
+
+it("keeps shared clone settings and clearly rejects constraint changes until other clones stop", async () => {
+  const s = setup();
+  const [track] = (await s.capture({ video: true })).getVideoTracks();
+  await track.applyConstraints({ width: 640 });
+  const clone = track.clone();
+  expect(clone.getConstraints()).toEqual({ width: 640 });
+  for (const target of [track, clone]) {
+    await expect(target.applyConstraints({ width: 320 })).rejects.toMatchObject({
+      name: "NotSupportedError", message: expect.stringContaining("Apply constraints before cloning"),
+    });
+  }
+  expect(s.tracks[0].constraints).toEqual({ width: 640 });
+  expect(track.getSettings().width).toBe(640);
+  expect(clone.getSettings().width).toBe(640);
+  clone.stop();
+  await track.applyConstraints({ width: 320 });
+  expect(s.tracks[0].constraints).toEqual({ width: 320 });
+});

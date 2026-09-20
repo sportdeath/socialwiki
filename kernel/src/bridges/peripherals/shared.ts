@@ -1,3 +1,4 @@
+import type { PeripheralPermissions } from "./permissions";
 import { validateSource, type SourceSegment } from "../source";
 
 export const PERIPHERALS_CHANNEL = "socialwiki-peripherals-v1";
@@ -17,7 +18,15 @@ export type PeripheralSession = {
   /** Messages stay within this request and its existing permission scope. */
   send?(message: unknown): Promise<unknown>;
 };
+export type PeripheralFeatures = {
+  geolocation?: boolean;
+  media?: MediaTrackSupportedConstraints;
+  enumerateDevices?: boolean;
+  filePickers?: string[];
+};
+export type AdapterContext = { source: SourceSegment[]; permissions: PeripheralPermissions };
 export type PeripheralsService = {
+  features: PeripheralFeatures;
   // Returns a session immediately, even before permission is decided.
   // Updates are asynchronous, like the underlying browser APIs.
   start(request: PeripheralRequest, update: PeripheralSink): PeripheralSession;
@@ -37,9 +46,10 @@ export type ChildMethods = { update(id: number, value: PeripheralUpdate): void }
 export type PermissionDescription = { label: string };
 export type PermissionRequirement = PermissionDescription & { capability: string };
 export type HostAdapter = {
+  features?: PeripheralFeatures;
   // Validate before prompting. The returned operation may touch native APIs
   // only when the host guard has authorized this request.
-  prepare(method: string, args: unknown[]): {
+  prepare(method: string, args: unknown[], context?: AdapterContext): {
     permissions: PermissionRequirement[];
     start(update: PeripheralSink): PeripheralSession;
   };

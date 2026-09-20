@@ -57,6 +57,16 @@ handle. Reconnecting should recover. This tests the save strategy used by some
 editors and agentic tools, rather than assuming every save edits the same file
 in place. Do not rename or remove files you want to keep to run this test.
 
+## Standard API compatibility page
+
+Open <http://127.0.0.1:52180/?app=compatibility> for the same nested kernel with
+`examples/peripheral-compatibility.html`. Check location permission before/after
+requesting a fix, list/select cameras and microphones, and unplug/reconnect a
+device to test `devicechange`. In Chromium, read a file, browse a folder, and save
+a new scratch file using `startIn`, `queryPermission`, and stream piping.
+Firefox/Safari should show local pickers as unavailable using ordinary feature
+detection. No browser automation is used.
+
 ## What this establishes
 
 - Native pickers after the trusted prompt, including a delayed click on Allow.

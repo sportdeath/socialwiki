@@ -1,11 +1,18 @@
 import type { HostAdapter } from "../../shared";
+import { watchMediaDevices } from "./devices";
 import { createMediaPeer } from "./peer";
 import { normalizeConstraints, serializeMediaError, trackInfo,
   type MediaCommand, type MediaEvent } from "./shared";
 
 export function createMediaAdapter(native: MediaDevices | undefined = navigator.mediaDevices): HostAdapter {
   return {
-    prepare(method, args) {
+    features: { ...(typeof native?.getUserMedia === "function" ? { media: native.getSupportedConstraints?.() ?? {} } : {}),
+      enumerateDevices: !!native?.enumerateDevices },
+    prepare(method, args, context) {
+      if (method === "enumerateDevices" || method === "watchDevices") {
+        if (args.length || !context || !native?.enumerateDevices) throw new TypeError("Device enumeration unavailable.");
+        return { permissions: [], start: (update) => watchMediaDevices(native, context, method === "watchDevices", update) };
+      }
       if (method !== "getUserMedia" || args.length !== 1) throw new TypeError("Unknown media operation.");
       const constraints = normalizeConstraints(args[0] as MediaStreamConstraints);
       return {
@@ -47,6 +54,9 @@ export function createMediaAdapter(native: MediaDevices | undefined = navigator.
             for (const track of stream.getTracks()) {
               peer.pc.addTransceiver(track, { direction: "sendonly", streams: [stream] });
               track.addEventListener("ended", () => ended(track), { once: true });
+              const state = () => emit({ type: "trackState", track: trackInfo(track) });
+              track.addEventListener("mute", state);
+              track.addEventListener("unmute", state);
             }
             await peer.pc.setLocalDescription(await peer.pc.createOffer());
             if (stopped) return;

@@ -95,6 +95,7 @@ export class TranscludeFrame {
     this.showLoading();
 
     const iframe = createIframe();
+    this.#installParentBridgeEndpoints.prepareFrame?.(iframe);
 
     // Chrome behaves better with blob URLs for top-level sandboxed content.
     // Nested frames use srcdoc because Firefox can block parent-created

@@ -223,3 +223,97 @@ it("installs the regular picker API and releases its files on pagehide", async (
     await expect(writer.write("after navigation")).rejects.toThrow();
   } finally { delete host.showSaveFilePicker; delete host.showOpenFilePicker; }
 });
+
+it("runs the usual verifyPermission helper before writing", async () => {
+  const s = setup();
+  const native = s.handle as FileSystemFileHandle & { queryPermission: ReturnType<typeof vi.fn>; requestPermission: ReturnType<typeof vi.fn> };
+  native.queryPermission = vi.fn(async () => "prompt");
+  native.requestPermission = vi.fn(async () => "granted");
+  const handle = await s.client.showSaveFilePicker();
+  const options = { mode: "readwrite" as const };
+  if (await handle.queryPermission(options) !== "granted") {
+    expect(await handle.requestPermission(options)).toBe("granted");
+  }
+  const writer = await handle.createWritable(); await writer.write("verified"); await writer.close();
+  expect(native.queryPermission).toHaveBeenCalledWith(options);
+  expect(native.requestPermission).toHaveBeenCalledWith(options);
+  s.permissions.revoke({ source: [], capability: "file-system" });
+  expect(await handle.queryPermission(options)).toBe("denied");
+  expect(await handle.requestPermission(options)).toBe("denied");
+});
+
+function directoryHandle() {
+  const file = fileHandle();
+  const closed = vi.fn();
+  const children = new Map<string, FileSystemHandle>([[file.handle.name, file.handle]]);
+  const directory = {
+    name: "project", kind: "directory",
+    getFileHandle: vi.fn(async (name: string, options?: FileSystemGetFileOptions) => {
+      if (!children.has(name) && options?.create) children.set(name, { ...fileHandle().handle, name });
+      const handle = children.get(name);
+      if (!handle) throw new DOMException("Missing file.", "NotFoundError");
+      return handle;
+    }),
+    getDirectoryHandle: vi.fn(async () => directory),
+    removeEntry: vi.fn(async (name: string) => { children.delete(name); }),
+    resolve: vi.fn(async (handle: FileSystemHandle) => children.get(handle.name) === handle ? [handle.name] : null),
+    async *entries() { try { yield* children.entries(); } finally { closed(); } },
+    isSameEntry: vi.fn(async (handle: unknown) => handle === directory),
+  };
+  Object.assign(file.handle, { isSameEntry: vi.fn(async (other) => other === file.handle) });
+  return { directory: directory as unknown as FileSystemDirectoryHandle, native: directory, file, closed };
+}
+
+it("supports a folder editor's traversal, lookup, creation, resolution and deletion", async () => {
+  const folder = directoryHandle();
+  const service = createPeripheralsHost(new Map([["file-system", createFileSystemAdapter({ showDirectoryPicker: async () => folder.directory })]]),
+    createPeripheralPermissions({ storage: null, ask: async () => ({ allow: true, remember: false }) }));
+  const client = createFileSystemClient(service);
+  const root = await client.showDirectoryPicker({ mode: "readwrite" });
+  const names: string[] = [];
+  for await (const [name, handle] of root) {
+    names.push(name);
+    if (handle.kind === "file") expect(await (await handle.getFile()).text()).toBe("initial");
+  }
+  expect(names).toEqual(["test.html"]);
+  const file = await root.getFileHandle("test.html");
+  expect(await root.resolve(file)).toEqual(["test.html"]);
+  expect(await file.isSameEntry(await root.getFileHandle("test.html"))).toBe(true);
+  expect(await root.isSameEntry(await client.showDirectoryPicker())).toBe(true);
+  expect((await root.getDirectoryHandle("child", { create: true })).kind).toBe("directory");
+  expect(folder.native.getDirectoryHandle).toHaveBeenCalledWith("child", { create: true });
+  await root.getFileHandle("new.html", { create: true });
+  await root.removeEntry("new.html", { recursive: true });
+  expect(folder.native.removeEntry).toHaveBeenCalledWith("new.html", { recursive: true });
+  await expect(root.getFileHandle("new.html")).rejects.toMatchObject({ name: "NotFoundError" });
+  for await (const name of root.keys()) { expect(name).toBe("test.html"); break; }
+  expect(folder.closed).toHaveBeenCalledTimes(2);
+  for await (const handle of root.values()) { expect(handle.name).toBe("test.html"); break; }
+});
+
+it("accepts another selected handle as startIn without exposing native handles", async () => {
+  const folder = directoryHandle(); const save = vi.fn(async () => folder.file.handle);
+  const service = createPeripheralsHost(new Map([["file-system", createFileSystemAdapter({
+    showDirectoryPicker: async () => folder.directory, showSaveFilePicker: save,
+  })]]), createPeripheralPermissions({ storage: null, ask: async () => ({ allow: true, remember: false }) }));
+  const client = createFileSystemClient(service); const root = await client.showDirectoryPicker();
+  await client.showSaveFilePicker({ startIn: root, suggestedName: "index.html" });
+  expect(save).toHaveBeenCalledWith({ startIn: folder.directory, suggestedName: "index.html" });
+});
+
+it("rejects references from another permission scope even when the token is known", async () => {
+  const folder = directoryHandle();
+  const adapter = createFileSystemAdapter({ showDirectoryPicker: async () => folder.directory });
+  const permissions = createPeripheralPermissions({ storage: null, ask: async () => ({ allow: true, remember: false }) });
+  const first = vi.fn(); const second = vi.fn();
+  const a = adapter.prepare("showDirectoryPicker", [{}], { source: [{ id: "a", name: "A" }], permissions }).start(first);
+  const b = adapter.prepare("showDirectoryPicker", [{}], { source: [{ id: "b", name: "B" }], permissions }).start(second);
+  await flush(); const token = first.mock.calls[0][0].value.files[0].token;
+  await b.send!({ id: 1, method: "isSameEntry", target: 0, args: [token] }); await flush();
+  expect(second.mock.lastCall?.[0].value.error.name).toBe("TypeError");
+  expect(folder.native.isSameEntry).not.toHaveBeenCalled();
+  expect(() => adapter.prepare("showDirectoryPicker", [{ startIn: { token } }], {
+    source: [{ id: "b", name: "B" }], permissions,
+  })).toThrow("Unknown file handle");
+  a.stop(); b.stop();
+});

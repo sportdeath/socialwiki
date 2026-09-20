@@ -12,6 +12,8 @@ export type AskPermission = (source: SourceSegment[], permissions: PermissionReq
 export type PeripheralPermissions = {
   authorize(source: SourceSegment[], permissions: PermissionRequirement[], signal: AbortSignal,
     onRevoke?: () => void): Promise<boolean>;
+  state(scope: PermissionScope): PermissionState;
+  subscribe(listener: () => void): () => void;
   revoke(scope: PermissionScope): void;
   show(source: SourceSegment[]): void;
   registerDocument(source: SourceSegment[]): () => void;
@@ -26,6 +28,9 @@ export function createPeripheralPermissions(options: { storage?: Storage | null;
   let storage: Storage | undefined;
   try { storage = options.storage === undefined ? window.localStorage : options.storage ?? undefined; } catch { /* Session only. */ }
   let decisions = new Map<string, Decision>();
+  const listeners = new Set<() => void>();
+  const granted = new Set<() => void>();
+  const notify = () => { for (const listener of listeners) listener(); };
   const active = new Map<() => void, Decision[]>();
   const documents = new Set<SourceSegment[]>();
   const sourceKey = (source: SourceSegment[]) => JSON.stringify(source.map(({ id }) => id));
@@ -51,6 +56,13 @@ export function createPeripheralPermissions(options: { storage?: Storage | null;
           !decisions.get(permissionKey(decision))?.allow)) stop();
     }
   }
+  function state(scope: PermissionScope): PermissionState {
+    const key = permissionKey(scope);
+    const saved = decisions.get(key);
+    if (saved) return saved.allow ? "granted" : "denied";
+    return [...active].some(([callback, permissions]) => granted.has(callback) &&
+      permissions.some((permission) => permissionKey(permission) === key)) ? "granted" : "prompt";
+  }
   function save() {
     try { storage?.setItem(PERMISSION_STORAGE_KEY, JSON.stringify([...decisions.values()])); }
     catch { storage = undefined; } // Keep the same decisions in memory this session.
@@ -74,7 +86,7 @@ export function createPeripheralPermissions(options: { storage?: Storage | null;
     decisions.delete(key);
     save();
     for (const [stop, requested] of [...active]) if (requested.some((decision) => permissionKey(decision) === key)) stop();
-    ui?.refresh();
+    notify(); ui?.refresh();
   }
   const ui = options.ask ? undefined : createPermissionUI(entries, revoke);
   const ask = options.ask ?? ui!.ask;
@@ -82,9 +94,11 @@ export function createPeripheralPermissions(options: { storage?: Storage | null;
   window.addEventListener("storage", (event) => {
     if (event.key !== null && event.key !== PERMISSION_STORAGE_KEY) return;
     load();
-    ui?.refresh();
+    notify(); ui?.refresh();
   });
   return {
+    state,
+    subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     registerDocument(source) {
       // Each iframe owns a distinct registration, even when its scope is inherited.
       const document = [...source];
@@ -95,10 +109,11 @@ export function createPeripheralPermissions(options: { storage?: Storage | null;
     show(source) { visibleSource = source; ui?.showManager(); },
     authorize(source, permissions, signal, onRevoke) {
       if (signal.aborted) return Promise.resolve(false);
+      if (!permissions.length) return Promise.resolve(true);
       const requested = permissions.map((permission) => ({ ...permission, source, allow: true }));
       if (onRevoke) {
         active.set(onRevoke, requested);
-        signal.addEventListener("abort", () => { active.delete(onRevoke); ui?.refresh(); }, { once: true });
+        signal.addEventListener("abort", () => { active.delete(onRevoke); granted.delete(onRevoke); notify(); ui?.refresh(); }, { once: true });
       }
       const result = queue.then(async () => {
         if (signal.aborted) return false;
@@ -117,8 +132,13 @@ export function createPeripheralPermissions(options: { storage?: Storage | null;
         ui?.refresh();
         return answer.allow;
       });
-      queue = result.catch(() => {});
-      return result;
+      const authorized = result.then((allowed) => {
+        if (allowed && !signal.aborted && onRevoke) granted.add(onRevoke);
+        notify();
+        return allowed;
+      });
+      queue = authorized.catch(() => {});
+      return authorized;
     },
     revoke,
   };

@@ -3,6 +3,7 @@ import { normalizeOptions, serializePosition, type LocationUpdate } from "./shar
 
 export function createGeolocationAdapter(native: Geolocation | undefined = navigator.geolocation): HostAdapter {
   return {
+    features: { geolocation: !!native },
     prepare(method, args) {
       if (!["getCurrentPosition", "watchPosition"].includes(method) || args.length !== 1) {
         throw new TypeError("Unknown geolocation operation");

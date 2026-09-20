@@ -19,7 +19,7 @@ function endpoint(id: string, service: Pick<PeripheralsService, "start"> & Parti
   if (inherit) host.setAttribute("permission-scope", "inherit");
   const iframe = document.createElement("iframe"); document.body.append(iframe);
   return { bridge: installPeripheralsParent(iframe, host, {
-    showPermissions() {}, registerDocument: () => () => {}, ...service,
+    features: {}, showPermissions() {}, registerDocument: () => () => {}, ...service,
   }), host, iframe, rpc: connections.at(-1)! };
 }
 afterEach(() => { document.body.replaceChildren(); connections.length = 0; });

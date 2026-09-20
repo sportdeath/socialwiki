@@ -53,10 +53,21 @@ export function createTrackGroup(info: TrackInfo, send: (command: MediaCommand) 
     info,
     add(track: MediaStreamTrack) {
       groups.set(track, group);
+      const nativeMuted = Object.getOwnPropertyDescriptor(MediaStreamTrack.prototype, "muted")?.get;
+      const initialMuted = track.muted;
+      Object.defineProperty(track, "muted", { configurable: true,
+        get: () => !!group.info.muted || (nativeMuted ? nativeMuted.call(track) : initialMuted) });
       Object.defineProperty(track, "label", { configurable: true, get: () => group.info.label });
       if (track.readyState === "ended") return;
       tracks.add(track);
       track.addEventListener("ended", () => group.release(track), { once: true });
+    },
+    update(next: TrackInfo) {
+      const previous = new Map([...tracks].map((track) => [track, track.muted]));
+      group.info = next;
+      for (const [track, muted] of previous) {
+        if (track.muted !== muted) track.dispatchEvent(new Event(track.muted ? "mute" : "unmute"));
+      }
     },
     release(track: MediaStreamTrack) {
       if (tracks.delete(track) && !tracks.size) {
@@ -64,10 +75,19 @@ export function createTrackGroup(info: TrackInfo, send: (command: MediaCommand) 
       }
     },
     async apply(constraints: MediaTrackConstraints) {
+      // TODO: independently adapt cloned tracks if a concrete use case needs it.
+      // For now clones share capture settings; do not silently reconfigure siblings.
+      if (tracks.size > 1) {
+        throw new DOMException(
+          "Changing constraints while cloned tracks are live is not supported. " +
+          "Apply constraints before cloning, stop the other tracks, or request a separate capture.",
+          "NotSupportedError",
+        );
+      }
       const result = await send({ type: "applyConstraints", kind: info.kind, constraints: structuredClone(constraints) }) as
         { track: TrackInfo } | { error: MediaError };
       if ("error" in result) throw mediaException(result.error);
-      group.info = result.track;
+      group.update(result.track);
     },
     end() {
       const remaining = [...tracks];

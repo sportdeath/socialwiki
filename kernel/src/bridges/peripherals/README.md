@@ -1,10 +1,13 @@
 # Peripherals bridge
 
+> **TODO — SLOP WARNING:** The peripheral code has not been seriously evaluated
+> by a human. Proceed with caution; it needs a thorough human review.
+
 One Penpal connection per iframe carries peripheral requests, results, and
 cancellation. A request-scoped `send` call carries adapter controls back to the
 host through the same ancestor chain; sibling frames cannot address one another's
 requests. Requests and open-document registrations use the same open/close
-subscription lifecycle. API-specific adapters live in `adapters/`: geolocation
+subscription lifecycle. API-specific adapters live in `adapters/`: geolocation,
 media (camera/microphone), and local files. Add future adapters to the registry in `adapters/index.ts` without
 duplicating transport, scope composition, permission UI, or lifecycle cleanup.
 
@@ -48,6 +51,23 @@ documents receive the required service through the child bridge and pass it
 to their descendants. Transclusion needs no peripheral-specific behavior.
 The browser lens contains only the shield presentation and its action.
 
+Feature detection is synchronous. Each adapter reports its native host features;
+`features.ts` carries that snapshot through the iframe's initial browsing-context
+name, consumed and cleared by the child kernel before subsequent app scripts run.
+The generic bridge `prepareFrame` hook runs before iframe navigation; transclude
+knows nothing about individual capabilities. This metadata grants no authority.
+Missing native file pickers stay absent, so ordinary `'showOpenFilePicker' in
+window` checks work in Firefox/Safari. `getSupportedConstraints()` uses the host
+snapshot and returns a fresh dictionary.
+
+`navigator.permissions.query({ name })` supports geolocation, camera, and
+microphone, with a PermissionStatus-shaped EventTarget, `state`, `onchange`, and
+`change` listeners. Queries do not prompt. They combine the calling document's
+site grant with the native browser grant; a pending site request is not a grant.
+On engines that cannot query a particular native permission, only the site state
+is available; the native operation still enforces browser/OS permissions.
+Other permission names continue to use the browser's implementation.
+
 ## Geolocation adapter
 
 Documents use the usual `getCurrentPosition(success, error, options)`,
@@ -63,11 +83,8 @@ Watches survive nonterminal native errors such as timeouts. A browser denial,
 host revocation, frame replacement/removal, self-navigation, or pagehide stops
 the relevant native work. Cancellation also dismisses pending authorization.
 
-This adapter does not patch `navigator.permissions.query()`; the native
-Permissions API in an opaque iframe does not represent the bridge's grant.
-Applications should request location normally and handle its success/error
-callbacks. The browser's location availability, OS permission, and acquisition
-timeout still apply. See the [Geolocation specification](https://www.w3.org/TR/geolocation/).
+The browser's location availability, OS permission, and acquisition timeout still
+apply. See the [Geolocation specification](https://www.w3.org/TR/geolocation/).
 
 ## Camera and microphone adapter
 
@@ -98,21 +115,30 @@ tracks, including `track.clone()` and `new MediaStream([track]).clone()`. Other
 tracks retain native behavior. `applyConstraints()` is forwarded to the capture
 track, with native error names and `OverconstrainedError.constraint` preserved.
 `getSettings()`, `getCapabilities()`, and `getConstraints()` return cached host
-capture metadata; constraint application refreshes it.
+capture metadata; constraint application and source mute/unmute refresh it.
+Source mute/unmute is forwarded to receiving tracks and their clones.
+
+`enumerateDevices()` returns device descriptions with `toJSON()` and input
+`getCapabilities()`. `devicechange` works with listeners and `ondevicechange`.
+Enumeration never opens a permission dialog. Until this scope has access it
+exposes only anonymous defaults; labels, IDs, and capabilities learned by the
+trusted host through a different document are not disclosed. After capture is
+allowed, returned device IDs can be used directly in getUserMedia constraints.
+Changing permissions also refreshes the device list.
 
 Limits of API transparency:
 
 - WebRTC encodes media: it can add latency, compression, and receiver adaptation.
   Host capture settings do not guarantee identical received dimensions/quality.
-- Clones share one host capture track per kind. Applying constraints through a
-  clone affects that shared track; independent per-clone capture constraints are
-  not implemented. Metadata changes outside applyConstraints are not pushed.
-- `enabled` and native mute/unmute behavior operate on receiving tracks. Disabling
-  them silences/hides their output but does not release the host device. Use stop.
-- Device enumeration/selection UI, devicechange forwarding, screen capture, and
-  `navigator.permissions.query()` are not bridged. Initial device constraints can
-  still be passed to getUserMedia. A document without native MediaDevices receives
-  an EventTarget exposing getUserMedia, not a branded MediaDevices instance.
+- Clones share the existing capture settings. While multiple tracks in a clone
+  group are live, `applyConstraints()` rejects with `NotSupportedError` rather
+  than silently changing every clone. Apply constraints before cloning, stop the
+  other tracks, or request a separate capture. TODO: support independent clone
+  constraints if a concrete use case warrants the additional complexity.
+- `enabled` operates on receiving tracks. Disabling them silences/hides their
+  output but does not release the host device. Use stop.
+- Screen capture and audio-output selection are not bridged. The mediaDevices
+  facade is an EventTarget, not a branded native MediaDevices instance.
 
 The [media capture specification](https://www.w3.org/TR/mediacapture-streams/)
 and [WebRTC specification](https://www.w3.org/TR/webrtc/) define the native APIs.
@@ -147,8 +173,15 @@ check lifecycle and signaling; they do not establish real-browser media quality.
 ## File System adapter
 
 Documents use `window.showOpenFilePicker(options)` (including `multiple`) and
-`window.showSaveFilePicker(options)`. Returned file handles expose `kind`, `name`,
-`getFile()` and `createWritable(options)`. Native picker options and writable
+`window.showSaveFilePicker(options)` and `window.showDirectoryPicker(options)`.
+Returned file handles expose `kind`, `name`, `getFile()` and `createWritable(options)`.
+All handles support `queryPermission`, `requestPermission`, and `isSameEntry`.
+Directory handles support `getFileHandle`, `getDirectoryHandle`, `removeEntry`,
+`resolve`, `entries`, `keys`, `values`, and `for await...of`. Iteration is pulled
+one entry at a time; breaking the loop closes its native iterator. Handles from
+other picker calls can be compared, resolved, or supplied as `startIn` within the
+same permission scope. Opaque reference tokens use the existing source-ID scope
+logic; possession of a token does not authorize a different scope. Native picker options and writable
 options such as `keepExistingData` pass through to the browser. `getFile()`
 returns a native `File` snapshot over Penpal's structured cloning; call it again
 to observe a local editor's saves.
@@ -162,7 +195,7 @@ native writer. Writes commit on close; abort discards uncommitted changes.
 One shared “local files” permission gates each picker request. The browser then
 asks the user which files to select and separately controls native read/write
 permission. Native handles and writers never leave the trusted host. IDs are
-local to each request, so another document cannot reuse them. Revocation,
+local to each request; cross-request reference tokens are checked against the full permission scope. Revocation,
 navigation, or frame teardown rejects pending operations and aborts open writers;
 late picker results are discarded and late writer creation is aborted. A commit
 already started cannot be undone. Previously returned File snapshots remain
@@ -175,23 +208,21 @@ There is no standard handle-close method: dropping a reference stops application
 use, while host permission revocation or document teardown ends access. Handles
 are retained at the host until that request ends.
 
-This is the file-editing subset, not the entire File System API. It does not
-bridge directory pickers, `isSameEntry`, `queryPermission`/`requestPermission`,
-OPFS, workers, or FileSystemObserver. Handle facades cannot be structured-cloned
-or stored in IndexedDB and are not native-branded FileSystemFileHandle objects.
-Likewise, writers are WritableStreams with file methods, not branded
-FileSystemWritableFileStream objects. Picker `startIn` supports native well-known
-directory strings, not a bridged handle. Reloading requires selecting files again;
-remembering a site permission does not persist its handles. These limits keep
-native file authority inside the guard rather than transferring usable handles
-out of it.
+OPFS, workers, FileSystemObserver, and native handle storage/structured cloning
+are not bridged. Handle facades cannot be stored as working handles in IndexedDB
+and are not native-branded FileSystemHandle objects. Writers are WritableStreams
+with file methods, not branded FileSystemWritableFileStream objects. Reloading
+requires selecting files again; remembering a site permission does not persist
+its handles. These are functional limitations for apps using persistent handles
+or worker-based file access, not simply differences detectable by introspection.
 
-Native picker support is required at the trusted host (HTTPS or localhost).
-The bridged methods exist in sandboxed documents even when the host lacks the
-feature; in that case they reject with `NotSupportedError` without a site prompt.
-The bridge does not add local pickers to browsers that lack them or bypass native
-user-activation requirements. Call pickers and operations that may prompt for
-write permission from a user action.
+Native file permissions are queried/requested through the handle methods. Site
+revocation invalidates that request's handles: they report denied and must be
+selected again to resume use. File operations still require native read/write
+permission. Native picker support is required at the trusted host (HTTPS or
+localhost); missing pickers remain absent in the document. The bridge cannot add
+pickers to engines that lack them or bypass user activation. Call pickers and
+operations that may prompt for write permission from a user action.
 
 The [example](../../../../examples/filesystem.html) polls fresh snapshots to
 follow external saves and writes only on explicit actions. Sync/conflict handling
@@ -199,3 +230,15 @@ belongs to the application, not the adapter; native file handles can become stal
 if an editor replaces or moves a file. The Edit lens is not yet integrated.
 See [Chrome's File System Access guide](https://developer.chrome.com/docs/capabilities/web-apis/file-system-access)
 and [writable stream options](https://developer.mozilla.org/en-US/docs/Web/API/FileSystemFileHandle/createWritable).
+
+
+## Compatibility workflow checks
+
+[examples/peripheral-compatibility.html](../../../../examples/peripheral-compatibility.html)
+uses ordinary browser calls for permission state changes, device selection,
+file permission checks, directory iteration/resolution, handle comparison, and
+stream piping. Paste it into the editor, or run the file test server and open
+`http://127.0.0.1:52180/?app=compatibility` for three real nested transclusions.
+Browser testing is manual. Tests cover host/child behavior with fake devices and
+files; passing them is not a claim that codecs, picker activation, or every
+third-party library have been validated in real browsers.

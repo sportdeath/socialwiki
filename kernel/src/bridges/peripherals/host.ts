@@ -8,12 +8,13 @@ export function createPeripheralsHost(
   permissions: PeripheralPermissions = createPeripheralPermissions(),
 ): PeripheralsService {
   return {
+    features: Object.assign({}, ...[...adapters.values()].map((adapter) => adapter.features)),
     showPermissions(source) { permissions.show(source); },
     registerDocument(source) { return permissions.registerDocument(source); },
     start(request, update) {
       const adapter = adapters.get(request.capability);
       if (!adapter) throw new TypeError("Unknown peripheral capability");
-      const prepared = adapter.prepare(request.method, request.args);
+      const prepared = adapter.prepare(request.method, request.args, { source: request.source, permissions });
       const controller = new AbortController();
       let session: PeripheralSession | undefined;
       const stop = () => controller.abort();

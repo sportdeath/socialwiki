@@ -1,11 +1,32 @@
 import type { PeripheralSession, PeripheralsService } from "../../shared";
+import { createDeviceListing } from "./devices";
 import { createMediaPeer } from "./peer";
 import { createTrackGroup } from "./tracks";
 import { mediaException, mediaKinds, normalizeConstraints, type MediaEvent, type MediaKind } from "./shared";
 
 export function installMediaAdapter(service: PeripheralsService) {
-  // Opaque/insecure documents may not have a native MediaDevices object at all.
-  const devices = navigator.mediaDevices ?? new EventTarget();
+  if (!service.features.media) return;
+  // Do not retain native methods that would operate on the opaque iframe.
+  const devices = new EventTarget();
+  Object.defineProperty(devices, "getSupportedConstraints", { configurable: true,
+    value: () => structuredClone(service.features.media!) });
+  if (service.features.enumerateDevices) {
+    const listing = createDeviceListing(service, devices);
+    Object.defineProperty(devices, "enumerateDevices", { value: listing.enumerateDevices });
+    const add = devices.addEventListener.bind(devices);
+    devices.addEventListener = (type, callback, options) => {
+      if (type === "devicechange") listing.watch();
+      add(type, callback, options);
+    };
+    let onchange: EventListener | null = null;
+    Object.defineProperty(devices, "ondevicechange", { configurable: true,
+      get: () => onchange,
+      set(value: EventListener | null) {
+        if (onchange) devices.removeEventListener("devicechange", onchange);
+        onchange = typeof value === "function" ? value : null;
+        if (onchange) devices.addEventListener("devicechange", onchange);
+      } });
+  }
   Object.defineProperty(devices, "getUserMedia", { configurable: true, writable: true,
     value: createGetUserMedia(service) });
   Object.defineProperty(navigator, "mediaDevices", { configurable: true, enumerable: true, value: devices });
@@ -58,6 +79,7 @@ export function createGetUserMedia(service: Pick<PeripheralsService, "start">): 
           queue = queue.then(async () => {
             if (closed) return;
             const signal = event.value as MediaEvent;
+            if (signal.type === "trackState") { groups.get(signal.track.kind)?.update(signal.track); return; }
             if (signal.type === "trackEnded") { groups.get(signal.kind)?.end(); return; }
             // A candidate can precede the offer, so create the receiver on the first signal.
             if (!peer) {

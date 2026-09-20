@@ -1,4 +1,5 @@
 import { CallOptions, connect, WindowMessenger } from "penpal";
+import { readPeripheralFeatures } from "./features";
 import { installPeripheralAdapters } from "./adapters";
 import { PERIPHERALS_CHANNEL, type ChildMethods, type PeripheralsService,
   type PeripheralSink, type ParentMethods, type Subscription } from "./shared";
@@ -47,6 +48,7 @@ export function installPeripheralsChild(): PeripheralsService {
     } };
   }
   const service: PeripheralsService = {
+    features: readPeripheralFeatures(),
     registerDocument: (source) => open({ kind: "document", source }).stop,
     start: (request, update) => open({ ...request, kind: "request" }, update),
     async showPermissions(source) { await (await connection.promise).showPermissions(source); },

@@ -3,6 +3,7 @@ export const mediaKinds: MediaKind[] = ["audio", "video"];
 export type MediaError = { name: string; message: string; constraint?: string };
 export type TrackInfo = {
   kind: MediaKind;
+  muted?: boolean;
   label: string;
   settings: MediaTrackSettings;
   constraints: MediaTrackConstraints;
@@ -14,7 +15,8 @@ export type MediaSignal =
 export type MediaCommand = MediaSignal
   | { type: "stopTrack"; kind: MediaKind }
   | { type: "applyConstraints"; kind: MediaKind; constraints: MediaTrackConstraints };
-export type MediaEvent = MediaSignal | { type: "trackEnded"; kind: MediaKind };
+export type MediaEvent = MediaSignal | { type: "trackEnded"; kind: MediaKind }
+  | { type: "trackState"; track: TrackInfo };
 
 /** Only audio/video select devices. Native capture validates constraint dictionaries. */
 export function normalizeConstraints(value: MediaStreamConstraints = {}): MediaStreamConstraints {
@@ -38,6 +40,6 @@ export function mediaException(error: MediaError): Error {
   return result;
 }
 export function trackInfo(track: MediaStreamTrack): TrackInfo {
-  return { kind: track.kind as MediaKind, label: track.label, settings: track.getSettings(),
+  return { kind: track.kind as MediaKind, muted: track.muted, label: track.label, settings: track.getSettings(),
     constraints: track.getConstraints(), capabilities: track.getCapabilities?.() ?? {} };
 }
