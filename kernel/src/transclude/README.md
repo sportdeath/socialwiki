@@ -49,6 +49,37 @@ The element supports:
 - `id` and `name`: these identify a document within the Graffiti guard. A document's ID hierarchy is used to identify that document for permissions purposes. The name should be human-readable.
 - `permission-scope="inherit"`: omits this boundary from Graffiti's source hierarchy, giving the child the containing document's permission scope. Because this delegates the parent's authority to the child, it must only be set by a parent that trusts the transcluded document. Unknown values retain the normal isolated scope.
 
+## Sizing and scrolling
+
+A transclusion is a separate document with its own scrolling, like an iframe.
+By default, it is a block with `width: 100%`, `height: 100%`, and
+`min-height: 150px`. Percentage height needs a parent with a definite height;
+otherwise the frame can end up only 150px tall. It does not automatically grow
+to fit its contents.
+
+For content embedded in a longer page, use `autosize="height"` so the containing
+page handles scrolling:
+
+```html
+<sw-transclude src="my-page" autosize="height"></sw-transclude>
+```
+
+For a full-page app, give the frame a definite height and remove the wrapping
+page's default body margin. Each intermediate wrapper should use this layout,
+leaving the innermost app to scroll:
+
+```html
+<style>
+  html, body { height: 100%; margin: 0; overflow: hidden; }
+  sw-transclude { height: 100%; }
+</style>
+<sw-transclude src="my-app"></sw-transclude>
+```
+
+Do not combine viewport-height frames with wrapper margins or padding: the
+wrapper will overflow too, producing nested scrollbars. Autosizing only controls
+the selected axes; other explicit dimensions are preserved.
+
 ## Across the boundary
 
 Capabilities such as Graffiti, navigation, and document resolution are restored

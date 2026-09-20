@@ -12,6 +12,7 @@ export function installAutosizeParent(
   events: EventsParent,
 ) {
   let mode: AutosizeMode = "off";
+  const savedStyles = new Map<string, { value: string; priority: string }>();
   let lastSize: { width: number; height: number } | null = null;
 
   const applySize = (payload: unknown) => {
@@ -49,14 +50,32 @@ export function installAutosizeParent(
     applySize(event.detail);
   });
 
+  const restoreStyle = (axis: string) => {
+    const saved = savedStyles.get(axis);
+    if (!saved) return;
+    if (saved.value) element.style.setProperty(axis, saved.value, saved.priority);
+    else element.style.removeProperty(axis);
+    savedStyles.delete(axis);
+  };
+
   const setAutosizeMode = () => {
     const value = element.getAttribute("autosize");
     // A bare `autosize` attribute (`autosize=""`) follows HTML boolean-style
     // usage and enables both axes.
     mode = value === "" ? "both" : parseAutosizeMode(value);
 
-    if (!autosizesWidth(mode)) element.style.removeProperty("width");
-    if (!autosizesHeight(mode)) element.style.removeProperty("height");
+    // Own only the axes being autosized; leave the author's other sizing alone.
+    for (const axis of ["width", "height"] as const) {
+      const enabled = axis === "width" ? autosizesWidth(mode) : autosizesHeight(mode);
+      if (enabled && !savedStyles.has(axis)) {
+        savedStyles.set(axis, {
+          value: element.style.getPropertyValue(axis),
+          priority: element.style.getPropertyPriority(axis),
+        });
+      } else if (!enabled) {
+        restoreStyle(axis);
+      }
+    }
     applyLastSize();
   };
 
@@ -71,6 +90,7 @@ export function installAutosizeParent(
     destroy() {
       stopListening();
       observer.disconnect();
+      for (const axis of savedStyles.keys()) restoreStyle(axis);
     },
   };
 }

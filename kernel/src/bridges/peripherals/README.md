@@ -5,7 +5,7 @@ cancellation. A request-scoped `send` call carries adapter controls back to the
 host through the same ancestor chain; sibling frames cannot address one another's
 requests. Requests and open-document registrations use the same open/close
 subscription lifecycle. API-specific adapters live in `adapters/`: geolocation
-and media (camera/microphone). Add future adapters to the registry in `adapters/index.ts` without
+media (camera/microphone), and local files. Add future adapters to the registry in `adapters/index.ts` without
 duplicating transport, scope composition, permission UI, or lifecycle cleanup.
 
 - `parent.ts` assigns the containing transclusion's scope with the same
@@ -142,3 +142,60 @@ Check that the browser's capture indicator clears after Stop/revocation (assumin
 no other app is using that device). Also try recording, changing video width,
 concurrent pages, and a nested transclusion. Unit tests use fake devices/peers to
 check lifecycle and signaling; they do not establish real-browser media quality.
+
+
+## File System adapter
+
+Documents use `window.showOpenFilePicker(options)` (including `multiple`) and
+`window.showSaveFilePicker(options)`. Returned file handles expose `kind`, `name`,
+`getFile()` and `createWritable(options)`. Native picker options and writable
+options such as `keepExistingData` pass through to the browser. `getFile()`
+returns a native `File` snapshot over Penpal's structured cloning; call it again
+to observe a local editor's saves.
+
+Writers are local native `WritableStream` instances backed by a host-side file
+writer. They support `write`, `seek`, `truncate`, `close`, `abort`, `getWriter`,
+and `ReadableStream.pipeTo`, with native stream locking and backpressure.
+Strings, buffers, Blobs and structured write/seek/truncate commands reach the
+native writer. Writes commit on close; abort discards uncommitted changes.
+
+One shared “local files” permission gates each picker request. The browser then
+asks the user which files to select and separately controls native read/write
+permission. Native handles and writers never leave the trusted host. IDs are
+local to each request, so another document cannot reuse them. Revocation,
+navigation, or frame teardown rejects pending operations and aborts open writers;
+late picker results are discarded and late writer creation is aborted. A commit
+already started cannot be undone. Previously returned File snapshots remain
+readable, just as previously disclosed data cannot be revoked.
+
+Commands are acknowledged immediately and their results arrive as updates on the
+same Penpal subscription. Native permission prompts and disk operations therefore
+have no 15-second RPC deadline. This requires no changes to the shared transport.
+There is no standard handle-close method: dropping a reference stops application
+use, while host permission revocation or document teardown ends access. Handles
+are retained at the host until that request ends.
+
+This is the file-editing subset, not the entire File System API. It does not
+bridge directory pickers, `isSameEntry`, `queryPermission`/`requestPermission`,
+OPFS, workers, or FileSystemObserver. Handle facades cannot be structured-cloned
+or stored in IndexedDB and are not native-branded FileSystemFileHandle objects.
+Likewise, writers are WritableStreams with file methods, not branded
+FileSystemWritableFileStream objects. Picker `startIn` supports native well-known
+directory strings, not a bridged handle. Reloading requires selecting files again;
+remembering a site permission does not persist its handles. These limits keep
+native file authority inside the guard rather than transferring usable handles
+out of it.
+
+Native picker support is required at the trusted host (HTTPS or localhost).
+The bridged methods exist in sandboxed documents even when the host lacks the
+feature; in that case they reject with `NotSupportedError` without a site prompt.
+The bridge does not add local pickers to browsers that lack them or bypass native
+user-activation requirements. Call pickers and operations that may prompt for
+write permission from a user action.
+
+The [example](../../../../examples/filesystem.html) polls fresh snapshots to
+follow external saves and writes only on explicit actions. Sync/conflict handling
+belongs to the application, not the adapter; native file handles can become stale
+if an editor replaces or moves a file. The Edit lens is not yet integrated.
+See [Chrome's File System Access guide](https://developer.chrome.com/docs/capabilities/web-apis/file-system-access)
+and [writable stream options](https://developer.mozilla.org/en-US/docs/Web/API/FileSystemFileHandle/createWritable).

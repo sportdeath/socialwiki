@@ -29,12 +29,12 @@ const server = createServer((request, response) => {
     ? url.searchParams.get("variant") : "baseline";
   const depth = url.searchParams.get("depth") === "1" ? 1 : 3;
   const config = JSON.stringify({ variant, depth, kernelSha256 });
-  const wrap = (body) => `<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width"><title>Media diagnostic</title>
+  const wrap = (body, nested = false) => `<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width"><title>Media diagnostic</title>
     <script>window.mediaDiagnosticConfig=${config}</script><script src="${base}/init.js"></script>
-    <style>body {font:16px system-ui;margin:24px;padding-bottom:180px} button {padding:8px;margin:4px}</style></head><body>${body}</body></html>`;
+    <style>${nested ? "html, body {height:100%;margin:0;overflow:hidden} sw-transclude {height:100%}" : "body {font:16px system-ui;margin:24px;padding-bottom:180px} button {padding:8px;margin:4px}"}</style></head><body>${body}</body></html>`;
   let html = wrap(app);
   // Default: real kernel's blob -> srcdoc -> data nesting, including actual Penpal relays.
-  for (let i = 1; i < depth; i++) html = wrap(`<sw-transclude id="level-${i}" name="Diagnostic ${i}" srcdoc="${escape(html)}" style="height:100vh"></sw-transclude>`);
+  for (let i = 1; i < depth; i++) html = wrap(`<sw-transclude id="level-${i}" name="Diagnostic ${i}" srcdoc="${escape(html)}"></sw-transclude>`, true);
   response.setHeader("Content-Type", "text/html; charset=utf-8"); response.end(html);
 });
 await new Promise((resolve, reject) => {
