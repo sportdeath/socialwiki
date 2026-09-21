@@ -11,7 +11,7 @@
                 <section class="protection-panel" v-else>
                     <h3>
                         {{
-                            isProtected ? "Protected Page" : "Unprotected Page"
+                            isProtected ? "Protected Site" : "Unprotected Site"
                         }}
                     </h3>
 
@@ -33,10 +33,10 @@
                         </p>
                     </template>
                     <p v-else>
-                        This page has <strong>not</strong> been marked as
+                        This site has <strong>not</strong> been marked as
                         protected by you or an
                         <a :href="trustedEditorsRoute">editor you trust</a>.
-                        Anyone's changes to this page will be visible to you.
+                        Anyone's changes to this site will be visible to you.
                     </p>
 
                     <p v-if="$graffitiSession.value">
@@ -47,7 +47,7 @@
                             "
                             :class="{ warning: isProtected }"
                             @click="
-                                handleUpdatePageProtection(
+                                handleUpdateSiteProtection(
                                     $graffitiSession.value,
                                 )
                             "
@@ -73,7 +73,7 @@
                             >
                                 <p>
                                     {{
-                                        annotation.value.activity === "Protect"
+                                        annotation.value.action === "Protect site"
                                             ? "Protected"
                                             : "Protection removed"
                                     }}
@@ -97,12 +97,12 @@
                                 <time
                                     :datetime="
                                         timestamp(
-                                            annotation.value.published,
+                                            annotation.value.time,
                                             true,
                                         )
                                     "
                                 >
-                                    {{ timestamp(annotation.value.published) }}
+                                    {{ timestamp(annotation.value.time) }}
                                 </time>
                                 <p
                                     v-if="
@@ -135,7 +135,7 @@
 
                 <ol class="history-list">
                     <li
-                        v-for="(version, index) in pageVersions"
+                        v-for="(version, index) in siteVersions"
                         :key="version.url"
                     >
                         <article
@@ -159,7 +159,7 @@
                                         "
                                     >
                                         {{
-                                            formatSummary(version.value.summary)
+                                            formatSummary(version.value.changes)
                                         }}
                                     </a>
                                 </h3>
@@ -285,10 +285,10 @@
                                 </p>
                                 <time
                                     :datetime="
-                                        timestamp(version.value.published, true)
+                                        timestamp(version.value.time, true)
                                     "
                                 >
-                                    {{ timestamp(version.value.published) }}
+                                    {{ timestamp(version.value.time) }}
                                 </time>
                             </div>
 
@@ -303,7 +303,7 @@
                                         <button
                                             :disabled="hasPendingMutation"
                                             @click.stop="
-                                                republishPageVersion(
+                                                republishSiteVersion(
                                                     'Restore',
                                                     version,
                                                     $graffitiSession.value,
@@ -328,7 +328,7 @@
                                         <button
                                             :disabled="hasPendingMutation"
                                             @click.stop="
-                                                republishPageVersion(
+                                                republishSiteVersion(
                                                     'Endorse',
                                                     version,
                                                     $graffitiSession.value,
@@ -358,7 +358,7 @@
                                             class="warning"
                                             :disabled="hasPendingMutation"
                                             @click.stop="
-                                                deleteSelectedPageVersion(
+                                                deleteSelectedSiteVersion(
                                                     version,
                                                     $graffitiSession.value,
                                                 )
@@ -404,13 +404,14 @@ import ProtectionNotice from "../utils/ProtectionNotice.vue";
 import TwoPaneLayout from "../utils/TwoPaneLayout.vue";
 import type { GraffitiSession } from "@graffiti-garden/api";
 import {
-    createPageVersion,
-    deletePageVersion,
-    pageStateSchema,
+    createSiteVersion,
+    deleteSiteVersion,
+    siteStateSchema,
+    normalizeSiteVersions,
     pickVersion,
-    type PageVersionObject,
-    sortPageVersions,
-} from "../utils/page-versions";
+    type SiteVersionObject,
+    sortSiteVersions,
+} from "../utils/site-versions";
 import {
     useGraffiti,
     GraffitiActorToHandle,
@@ -424,7 +425,7 @@ import {
     ref,
     watch,
 } from "vue";
-import { annotationSchema, type AnnotationObject } from "../utils/schemas";
+import { trustSchema, isProtectionObject, type ProtectionObject } from "../utils/schemas";
 import {
     computeTrustAnnotationsByActor,
     trustedActors,
@@ -433,7 +434,7 @@ import {
 import { defaultTrustedEditors } from "../utils/default-trusted-editors";
 import {
     sortProtectionHistory,
-    updatePageProtection,
+    updateSiteProtection,
 } from "../utils/protection";
 import { LoadingPage } from "../utils/status-pages";
 
@@ -443,21 +444,21 @@ function emitLensOutput(status: string, srcdoc?: string) {
     window.emit("sw-lens-output", { status, srcdoc });
 }
 
-const pageName = ref("");
-const pageQuery = ref("");
+const siteName = ref("");
+const siteQuery = ref("");
 const historyParams = ref(new URLSearchParams());
 const requestedVersionUrl = ref<string | null>(null);
 let pendingVersionScroll: string | null = null;
 let hasReceivedQuery = false;
 
 function onQueryChange() {
-    const { name: nextPageName, query: nextPageQuery } = parseAddress(
+    const { name: nextSiteName, query: nextSiteQuery } = parseAddress(
         window.address,
     );
     const nextVersionUrl = window.params.get("version");
 
-    pageName.value = nextPageName;
-    pageQuery.value = nextPageQuery;
+    siteName.value = nextSiteName;
+    siteQuery.value = nextSiteQuery;
     historyParams.value = new URLSearchParams(window.params);
     if (requestedVersionUrl.value !== nextVersionUrl) {
         pendingVersionScroll = hasReceivedQuery ? null : nextVersionUrl;
@@ -488,34 +489,31 @@ onBeforeUnmount(() => {
     window.removeEventListener("querychange", onQueryChange);
 });
 
-const { objects: pageVersionsAndAnnotations, isFirstPoll } =
+const { objects: siteVersionsAndAnnotations, isFirstPoll } =
     useGraffitiDiscover(
-        () => [pageName.value],
-        () => pageStateSchema(pageName.value),
+        () => [siteName.value],
+        () => siteStateSchema(siteName.value),
     );
-const pageVersions = computed(() => {
-    const pageVersionsRaw =
-        pageVersionsAndAnnotations.value.filter<PageVersionObject>(
-            (o): o is PageVersionObject => o.value.activity === "Update",
-        );
-    return sortPageVersions(pageVersionsRaw);
+const siteVersions = computed(() => {
+    const siteVersionsRaw =
+        normalizeSiteVersions(siteVersionsAndAnnotations.value, siteName.value);
+    return sortSiteVersions(siteVersionsRaw);
 });
 const protectionHistory = computed(() => {
     if (trustedEditors.value === undefined) return undefined;
     const annotationsRaw =
-        pageVersionsAndAnnotations.value.filter<AnnotationObject>(
-            (o): o is AnnotationObject =>
-                o.value.activity === "Protect" || o.value.activity === "Remove",
+        siteVersionsAndAnnotations.value.filter(isProtectionObject).filter(
+            (object) => object.value["site name"] === siteName.value,
         );
     return sortProtectionHistory(annotationsRaw, trustedEditors.value);
 });
 const isProtected = computed(() => {
     if (protectionHistory.value === undefined) return undefined;
-    return protectionHistory.value.at(0)?.value.activity === "Protect";
+    return protectionHistory.value.at(0)?.value.action === "Protect site";
 });
 const activeProtection = computed(() => {
     const latest = protectionHistory.value?.at(0);
-    if (!latest || latest.value.activity !== "Protect") return null;
+    if (!latest || latest.value.action !== "Protect site") return null;
     return latest;
 });
 const trustedEditorsRoute = "#/v?/trusted-editors";
@@ -538,35 +536,35 @@ const protectionActionLabel = computed(() => {
     if (isUpdatingProtection.value) {
         return isProtected.value
             ? "Removing protection..."
-            : "Protecting page...";
+            : "Protecting site...";
     }
     if (isProtected.value === undefined) return "Loading...";
-    return isProtected.value ? "Remove protection" : "Protect this page";
+    return isProtected.value ? "Remove protection" : "Protect this site";
 });
 
-async function handleUpdatePageProtection(session: GraffitiSession) {
+async function handleUpdateSiteProtection(session: GraffitiSession) {
     if (hasPendingMutation.value || isProtected.value === undefined) return;
     isUpdatingProtection.value = true;
     try {
-        await updatePageProtection(
+        await updateSiteProtection(
             graffiti,
-            pageName.value,
+            siteName.value,
             isProtected.value,
             activeProtection.value,
             session,
         );
     } catch (error) {
-        reportError("Updating page protection", error);
+        reportError("Updating site protection", error);
     } finally {
         isUpdatingProtection.value = false;
     }
 }
 
-const isUndoingProtection = (annotation: AnnotationObject) =>
+const isUndoingProtection = (annotation: ProtectionObject) =>
     undoingProtectionUrl.value === annotation.url;
 
 async function undoProtectionHistory(
-    annotation: AnnotationObject,
+    annotation: ProtectionObject,
     session: GraffitiSession,
 ) {
     if (hasPendingMutation.value) return;
@@ -582,31 +580,31 @@ async function undoProtectionHistory(
     }
 }
 
-async function republishPageVersion(
+async function republishSiteVersion(
     action: "Restore" | "Endorse",
-    version: PageVersionObject,
+    version: SiteVersionObject,
     session: GraffitiSession,
 ) {
     if (hasPendingMutation.value) return;
     const pending =
         action === "Restore" ? restoringVersionUrl : endorsingVersionUrl;
     pending.value = version.url;
-    const predecessors = pageVersions.value.map((v) => v.url);
+    const predecessors = siteVersions.value.map((v) => v.url);
     try {
         // The preview may still show the previous selection. Publish the chosen
         // version's media, never whatever HTML happens to be rendered right now.
-        const media = await graffiti.getMedia(version.value.result.media, {
+        const media = await graffiti.getMedia(version.value.document, {
             types: ["text/html"],
         });
-        const created = await createPageVersion(
+        const created = await createSiteVersion(
             graffiti,
-            version.value.object,
+            version.value["site name"],
             await media.data.text(),
             predecessors,
-            `${action}: ${version.value.summary}`,
+            `${action}: ${version.value.changes}`,
             session,
         );
-        if (pageName.value === version.value.object) {
+        if (siteName.value === version.value["site name"]) {
             window.navigate(versionRoute(created));
         }
     } catch (error) {
@@ -616,14 +614,14 @@ async function republishPageVersion(
     }
 }
 
-async function deleteSelectedPageVersion(
-    version: PageVersionObject,
+async function deleteSelectedSiteVersion(
+    version: SiteVersionObject,
     session: GraffitiSession,
 ) {
     if (hasPendingMutation.value) return;
     deletingVersionUrl.value = version.url;
     try {
-        await deletePageVersion(graffiti, version, session);
+        await deleteSiteVersion(graffiti, version, session);
     } catch (error) {
         reportError("Deleting version", error);
     } finally {
@@ -633,11 +631,11 @@ async function deleteSelectedPageVersion(
     }
 }
 
-const effectiveSelectedPageVersion = computed(() => {
+const effectiveSelectedSiteVersion = computed(() => {
     if (isProtected.value === undefined) return null;
 
     const selected = requestedVersionUrl.value
-        ? pageVersions.value.find(
+        ? siteVersions.value.find(
               (version) => version.url === requestedVersionUrl.value,
           )
         : undefined;
@@ -646,7 +644,7 @@ const effectiveSelectedPageVersion = computed(() => {
     if (selected) return selected;
 
     return pickVersion(
-        pageVersions.value,
+        siteVersions.value,
         trustedEditors.value ?? [],
         isProtected.value,
     );
@@ -654,7 +652,7 @@ const effectiveSelectedPageVersion = computed(() => {
 
 const previewAddress = computed(() => {
     // Choose the version before starting View; otherwise it first loads the
-    // latest page itself, then reloads when History supplies an explicit version.
+    // latest site itself, then reloads when History supplies an explicit version.
     if (
         session.value === undefined ||
         isFirstPoll.value ||
@@ -663,23 +661,23 @@ const previewAddress = computed(() => {
         return undefined;
     }
     const lensParams = new URLSearchParams();
-    if (effectiveSelectedPageVersion.value) {
+    if (effectiveSelectedSiteVersion.value) {
         lensParams.set(
             "version",
-            effectiveSelectedPageVersion.value.value.result.media,
+            effectiveSelectedSiteVersion.value.value.document,
         );
     }
 
     return composeQuery(
         lensParams,
-        composeAddress(pageName.value, pageQuery.value),
+        composeAddress(siteName.value, siteQuery.value),
     );
 });
 // View resolves the private media ID above, while links expose History's
 // public version-object URL. The route lets the navigation default translate
 // between those two representations without a History-specific handler.
 const previewRoute = computed(() =>
-    composeQuery(historyParams.value, pageName.value),
+    composeQuery(historyParams.value, siteName.value),
 );
 const previewHref = computed(() =>
     previewAddress.value
@@ -692,7 +690,7 @@ const viewAddress = computed(
             "v",
             composeQuery(
                 undefined,
-                composeAddress(pageName.value, pageQuery.value),
+                composeAddress(siteName.value, siteQuery.value),
             ),
         )}`,
 );
@@ -704,29 +702,29 @@ const editAddress = computed(
                 new URLSearchParams({
                     draft: previewHtml.value,
                 }),
-                composeAddress(pageName.value, pageQuery.value),
+                composeAddress(siteName.value, siteQuery.value),
             ),
         )}`,
 );
 
-function versionRoute(version: PageVersionObject) {
+function versionRoute(version: SiteVersionObject) {
     const params = new URLSearchParams(window.params);
     params.set("version", version.url);
     return composeQuery(
         params,
-        composeAddress(pageName.value, pageQuery.value),
+        composeAddress(siteName.value, siteQuery.value),
     );
 }
 
-const isSelected = (version: PageVersionObject) =>
-    effectiveSelectedPageVersion.value?.url === version.url;
-const isRestoringVersion = (version: PageVersionObject) =>
+const isSelected = (version: SiteVersionObject) =>
+    effectiveSelectedSiteVersion.value?.url === version.url;
+const isRestoringVersion = (version: SiteVersionObject) =>
     restoringVersionUrl.value === version.url;
-const isEndorsingVersion = (version: PageVersionObject) =>
+const isEndorsingVersion = (version: SiteVersionObject) =>
     endorsingVersionUrl.value === version.url;
-const isDeletingVersion = (version: PageVersionObject) =>
+const isDeletingVersion = (version: SiteVersionObject) =>
     deletingVersionUrl.value === version.url;
-const isVersionUntrusted = (version: PageVersionObject) =>
+const isVersionUntrusted = (version: SiteVersionObject) =>
     isProtected.value === true &&
     trustedEditors.value !== undefined &&
     !trustedEditors.value.includes(version.actor);
@@ -749,7 +747,7 @@ function timestamp(value: number, exact = false) {
 }
 
 watch(
-    [requestedVersionUrl, pageVersions],
+    [requestedVersionUrl, siteVersions],
     async ([versionUrl, versions]) => {
         if (
             !versionUrl ||
@@ -769,7 +767,7 @@ watch(
     { immediate: true },
 );
 
-watch([pageVersions, isFirstPoll], ([versions, firstPoll]) => {
+watch([siteVersions, isFirstPoll], ([versions, firstPoll]) => {
     if (firstPoll) return;
     if (!versions.length) {
         emitLensOutput("not-found");
@@ -780,10 +778,7 @@ const session = useGraffitiSession();
 const { objects: trustAnnotations, isFirstPoll: isTrustAnnotationLoading } =
     useGraffitiDiscover(
         () => (session.value ? [session.value.actor] : []),
-        () =>
-            annotationSchema(["Trust", "Untrust"], {
-                actor: session.value?.actor,
-            }),
+        () => trustSchema(session.value?.actor),
     );
 const trustAnnotationsByActor = computed(() => {
     if (isTrustAnnotationLoading.value) return undefined;
@@ -803,7 +798,7 @@ const getActorTrustStatus = (actor: string) => {
     const byActor = trustAnnotationsByActor.value;
     if (!byActor) return "loading";
     const trustValue = byActor.get(actor);
-    return trustValue === true || trustValue?.value.activity === "Trust"
+    return trustValue === true || trustValue?.value.action === "Trust editor"
         ? "trusted"
         : "untrusted";
 };
@@ -824,8 +819,8 @@ const activeProtectionTrustSource = computed(() => {
 // the source once when a watcher is created, even when it is not immediate.
 watch(
     [
-        pageName,
-        () => effectiveSelectedPageVersion.value?.value.result.media,
+        siteName,
+        () => effectiveSelectedSiteVersion.value?.value.document,
     ],
     () => {
         // The previous version is no longer the document shown by History,

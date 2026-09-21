@@ -11,7 +11,7 @@
             ref="address-input"
             type="text"
             v-model="addressInput"
-            placeholder="Enter page name"
+            placeholder="Enter site name"
             @mousedown="selectAddress"
             @focus="selectAddressOnFocus"
             @keydown="onAddressInputKeydown"
@@ -24,17 +24,17 @@
             class="dropdown"
             v-if="
                 isDropdownOpen &&
-                (addressInput !== pageAddress ||
+                (addressInput !== siteAddress ||
                     historySuggestions.length ||
                     historyEnabled === false)
             "
             @keydown="onDropdownKeydown"
         >
-            <li v-if="addressInput !== pageAddress">
+            <li v-if="addressInput !== siteAddress">
                 <a
-                    :href="routeForInputAddress(pageAddress || 'Social.Wiki')"
+                    :href="routeForInputAddress(siteAddress || 'Social.Wiki')"
                 >
-                    Current page: {{ pageAddress }}
+                    Current site: {{ siteAddress }}
                 </a>
             </li>
             <li
@@ -71,12 +71,12 @@ const emit = defineEmits<{
     focus: [];
 }>();
 const isDropdownOpen = defineModel<boolean>({ required: true });
-const pageAddress = computed(() => props.address);
+const siteAddress = computed(() => props.address);
 // Partially couple the input address to the route address
 // When the route changes, the input changes
-const addressInput = ref(pageAddress.value);
+const addressInput = ref(siteAddress.value);
 watch(
-    pageAddress,
+    siteAddress,
     (newVal) => {
         addressInput.value = newVal;
         isDropdownOpen.value = false;
@@ -87,7 +87,7 @@ const {
     enabled: historyEnabled,
     suggestions: historySuggestions,
     enable: enableBrowserHistory,
-} = useBrowserHistory(pageAddress, addressInput);
+} = useBrowserHistory(siteAddress, addressInput);
 
 function navigateToInputAddress() {
     emit("navigate", addressInput.value || "Social.Wiki");

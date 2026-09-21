@@ -1,6 +1,6 @@
 @import "../theme.css";
 
-/* Status pages are complete documents rendered inside their own iframe. */
+/* Status screens are complete documents rendered inside their own iframe. */
 * {
     box-sizing: border-box;
     margin: 0;

@@ -1,4 +1,5 @@
 import type {
+  GraffitiObjectBase,
   GraffitiLoginEvent,
   GraffitiLogoutEvent,
   GraffitiSession,
@@ -9,17 +10,17 @@ import { sha256 } from "@noble/hashes/sha2.js";
 import type { TranscludeElement } from "../../../kernel/src/transclude/element";
 import { lensesUrl } from "../utils/locator";
 import {
-  pageStateSchema,
+  siteStateSchema,
+  normalizeSiteVersions,
   pickVersion,
-  sortPageVersions,
-  type PageVersionObject,
-} from "../utils/page-versions";
+  sortSiteVersions,
+} from "../utils/site-versions";
 import { sortProtectionHistory } from "../utils/protection";
-import type { AnnotationObject } from "../utils/schemas";
+import { isProtectionObject } from "../utils/schemas";
 import {
   ErrorPage,
   LoadingPage,
-  PageNotFound,
+  SiteNotFound,
 } from "../utils/status-pages";
 import { getTrustContext } from "../utils/trust";
 
@@ -63,7 +64,7 @@ function setTranscludeSrcDoc(html: string, status: string) {
   transclude.setAttribute(
     "id",
     // The ID of the transcluded document is a hash of its content.
-    // This makes it so that when a page's content changes, its ID
+    // This makes it so that when a site's content changes, its ID
     // changes, resetting permissions in the Graffiti data guard.
     status === "ok" ? bytesToHex(sha256(utf8ToBytes(html))) : status,
   );
@@ -91,7 +92,7 @@ graffiti.sessionEvents.addEventListener("login", (event) => {
   }
   const actorChanged = graffitiSession?.actor !== detail.session.actor;
   graffitiSession = detail.session;
-  // Connecting the rendered page replays login for its new RPC host. Refresh
+  // Connecting the rendered site replays login for its new RPC host. Refresh
   // only when the actor changes, or rendering would restart itself forever.
   if (actorChanged) renderForSessionChange();
 });
@@ -114,35 +115,27 @@ graffiti.sessionEvents.addEventListener("initialized", (event) => {
   renderForSessionChange();
 });
 
-async function getPageVersionsAndProtection(pageName: string) {
-  const objects = new Map<string, PageVersionObject | AnnotationObject>();
+async function getSiteVersionsAndProtection(siteName: string) {
+  const objects = new Map<string, GraffitiObjectBase>();
   for await (const result of graffiti.discover(
-    [pageName],
-    pageStateSchema(pageName),
+    [siteName],
+    siteStateSchema(siteName),
   )) {
     if (result.error) {
       console.error(result.error);
       continue;
     }
 
-    const object = result.object as PageVersionObject | AnnotationObject;
-    if (result.tombstone) objects.delete(object.url);
-    else objects.set(object.url, object);
+    if (result.tombstone) objects.delete(result.object.url);
+    else objects.set(result.object.url, result.object);
   }
 
   const values = [...objects.values()];
   return {
-    pageVersions: sortPageVersions(
-      values.filter(
-        (object): object is PageVersionObject =>
-          object.value.activity === "Update",
-      ),
+    siteVersions: sortSiteVersions(
+      normalizeSiteVersions(values, siteName),
     ),
-    protectionAnnotations: values.filter(
-      (object): object is AnnotationObject =>
-        object.value.activity === "Protect" ||
-        object.value.activity === "Remove",
-    ),
+    protectionAnnotations: values.filter(isProtectionObject).filter((object) => object.value["site name"] === siteName),
   };
 }
 
@@ -152,12 +145,12 @@ async function renderLens(force = false) {
   if (!address?.length) return;
 
   const lensParams = requestedLensParams;
-  const { name: pageName, query: pageQuery } = parseAddress(address);
+  const { name: siteName, query: siteQuery } = parseAddress(address);
   const requestedVersion = lensParams?.get("version") ?? "";
-  // The page or explicit version identifies the document; its query is only
+  // The site or explicit version identifies the document; its query is only
   // replaceable state within that document and should not reload it.
-  const contentKey = requestedVersion || pageName;
-  transclude.setAttribute("name", pageName);
+  const contentKey = requestedVersion || siteName;
+  transclude.setAttribute("name", siteName);
 
   if (
     !force &&
@@ -169,7 +162,7 @@ async function renderLens(force = false) {
 
   if (!force && contentKey === currentContentKey) {
     renderedAddress = address;
-    transclude.setAttribute("query", pageQuery);
+    transclude.setAttribute("query", siteQuery);
     return;
   }
 
@@ -184,21 +177,21 @@ async function renderLens(force = false) {
     let mediaAddress = requestedVersion;
 
     if (!mediaAddress) {
-      const [{ trustedEditors }, pageData] = await Promise.all([
+      const [{ trustedEditors }, siteData] = await Promise.all([
         getTrustContext(graffiti, graffitiSession),
-        getPageVersionsAndProtection(pageName),
+        getSiteVersionsAndProtection(siteName),
       ]);
       // A newer route may finish first; never let this older request replace it.
       if (renderVersion !== activeRenderVersion) return;
 
       const protectionHistory = sortProtectionHistory(
-        pageData.protectionAnnotations,
+        siteData.protectionAnnotations,
         trustedEditors,
       );
       const isProtected =
-        protectionHistory.at(0)?.value.activity === "Protect";
+        protectionHistory.at(0)?.value.action === "Protect site";
       const selectedVersion = pickVersion(
-        pageData.pageVersions,
+        siteData.siteVersions,
         trustedEditors,
         isProtected,
       );
@@ -207,13 +200,13 @@ async function renderLens(force = false) {
         emitLensOutput("not-found");
         const initUrl = new URL("init.js", lensesUrl).href;
         setTranscludeSrcDoc(
-          PageNotFound(address, initUrl),
+          SiteNotFound(address, initUrl),
           "not-found",
         );
         return;
       }
 
-      mediaAddress = selectedVersion.value.result.media;
+      mediaAddress = selectedVersion.value.document;
     }
 
     const media = await graffiti.getMedia(mediaAddress, {

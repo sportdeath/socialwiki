@@ -43,7 +43,7 @@
                         :id="previewTranscludeId"
                         name="Preview"
                         :route="previewRoute"
-                        :query="pageQuery"
+                        :query="siteQuery"
                         :key="refreshKey"
                         :srcdoc="previewHtml"
                     ></sw-transclude>
@@ -53,7 +53,7 @@
 
         <PublishDialog
             v-model="showPublishDialog"
-            :page-name="pageName"
+            :site-name="siteName"
             :publishing="publishing"
             @publish="submitPublishDialog"
         />
@@ -86,9 +86,9 @@ import SourceEditor from "./SourceEditor.vue";
 import PublishDialog from "./PublishDialog.vue";
 import ProtectedDialog from "./ProtectedDialog.vue";
 import { useGraffiti, useGraffitiSession } from "@graffiti-garden/wrapper-vue";
-import { createPageVersion, getPageVersions } from "../utils/page-versions";
+import { createSiteVersion, getSiteVersions } from "../utils/site-versions";
 import { randomBytes, bytesToHex } from "@noble/hashes/utils.js";
-import { annotationSchema, type AnnotationObject } from "../utils/schemas";
+import { protectionSchema, type ProtectionObject } from "../utils/schemas";
 import { getTrustContext } from "../utils/trust";
 import { sortProtectionHistory } from "../utils/protection";
 import { starterHtml } from "./starter";
@@ -141,24 +141,24 @@ watch(hasUnsavedChanges, (isDirty, wasDirty) => {
     }, 320);
 });
 
-const pageName = ref("");
-const pageQuery = ref("");
+const siteName = ref("");
+const siteQuery = ref("");
 const editParams = ref(new URLSearchParams());
-const pageAddress = computed(() =>
-    composeAddress(pageName.value, pageQuery.value),
+const siteAddress = computed(() =>
+    composeAddress(siteName.value, siteQuery.value),
 );
 const previewRoute = computed(() =>
-    composeQuery(editParams.value, pageName.value),
+    composeQuery(editParams.value, siteName.value),
 );
 const historyRoute = computed(
     () =>
-        `#/${composeAddress("h", composeQuery(undefined, pageAddress.value))}`,
+        `#/${composeAddress("h", composeQuery(undefined, siteAddress.value))}`,
 );
 const viewRoute = computed(
     () =>
-        `#/${composeAddress("v", composeQuery(undefined, pageAddress.value))}`,
+        `#/${composeAddress("v", composeQuery(undefined, siteAddress.value))}`,
 );
-const activeProtection = ref<AnnotationObject | null>(null);
+const activeProtection = ref<ProtectionObject | null>(null);
 const activeProtectionTrustSource = ref<"default" | "trusted" | null>(null);
 const showProtectedDialog = ref(false);
 let activeProtectionRequest = 0;
@@ -196,11 +196,11 @@ async function waitForSessionStatusKnown() {
     });
 }
 
-async function getProtectionAnnotations(page: string) {
-    const protectionByUrl = new Map<string, AnnotationObject>();
+async function getProtectionAnnotations(site: string) {
+    const protectionByUrl = new Map<string, ProtectionObject>();
     for await (const result of graffiti.discover(
-        [page],
-        annotationSchema(["Protect", "Remove"]),
+        [site],
+        protectionSchema(site),
     )) {
         if (result.error) {
             console.error(result.error);
@@ -211,7 +211,7 @@ async function getProtectionAnnotations(page: string) {
         } else {
             protectionByUrl.set(
                 result.object.url,
-                result.object as AnnotationObject,
+                result.object as ProtectionObject,
             );
         }
     }
@@ -219,7 +219,7 @@ async function getProtectionAnnotations(page: string) {
     return [...protectionByUrl.values()];
 }
 
-async function refreshPageProtection(page: string, requestId: number) {
+async function refreshSiteProtection(site: string, requestId: number) {
     activeProtection.value = null;
     activeProtectionTrustSource.value = null;
     showProtectedDialog.value = false;
@@ -230,7 +230,7 @@ async function refreshPageProtection(page: string, requestId: number) {
         const [trustedEditorsContext, protectionAnnotations] =
             await Promise.all([
                 getTrustContext(graffiti, session.value),
-                getProtectionAnnotations(page),
+                getProtectionAnnotations(site),
             ]);
         if (requestId !== activeProtectionRequest) return;
 
@@ -239,7 +239,7 @@ async function refreshPageProtection(page: string, requestId: number) {
             trustedEditorsContext.trustedEditors,
         );
         const latestProtection = protectionHistory.at(0);
-        const isProtected = latestProtection?.value.activity === "Protect";
+        const isProtected = latestProtection?.value.action === "Protect site";
         if (isProtected && latestProtection) {
             activeProtection.value = latestProtection;
             if (latestProtection.actor !== session.value?.actor) {
@@ -253,7 +253,7 @@ async function refreshPageProtection(page: string, requestId: number) {
         }
         showProtectedDialog.value = isProtected;
     } catch (error) {
-        console.error(`Error checking page protection: ${String(error)}`);
+        console.error(`Error checking site protection: ${String(error)}`);
         if (requestId !== activeProtectionRequest) return;
         activeProtection.value = null;
         activeProtectionTrustSource.value = null;
@@ -265,18 +265,18 @@ function onQueryChange() {
     if (window.address === undefined) return;
 
     const lensParams = window.params;
-    const { name: nextPageName, query: nextPageQuery } = parseAddress(
+    const { name: nextSiteName, query: nextSiteQuery } = parseAddress(
         window.address,
     );
-    const didChangePage = pageName.value !== nextPageName;
+    const didChangeSite = siteName.value !== nextSiteName;
 
-    pageName.value = nextPageName;
-    pageQuery.value = nextPageQuery;
+    siteName.value = nextSiteName;
+    siteQuery.value = nextSiteQuery;
     editParams.value = lensParams;
 
-    if (didChangePage) {
+    if (didChangeSite) {
         const requestId = ++activeProtectionRequest;
-        void refreshPageProtection(nextPageName, requestId);
+        void refreshSiteProtection(nextSiteName, requestId);
     }
 
     const searchDraft = lensParams.get("draft");
@@ -284,15 +284,15 @@ function onQueryChange() {
     // Draft updates travel through the browser's route and come back here.
     // An older echo must not overwrite edits typed while it was in flight.
     const isLocalDraftEcho =
-        !didChangePage &&
+        !didChangeSite &&
         Number.isFinite(incomingDraftSeq) &&
         incomingDraftSeq > 0 &&
         incomingDraftSeq <= localDraftSeq;
-    if (didChangePage || baselineHtml.value === null) {
+    if (didChangeSite || baselineHtml.value === null) {
         cancelDraftUpdate();
         localDraftSeq = 0;
         // An empty incoming draft is intentional; only a missing draft uses the starter.
-        const html = searchDraft ?? starterHtml(pageName.value);
+        const html = searchDraft ?? starterHtml(siteName.value);
         loadDraft(html);
         baselineHtml.value = html;
         resetPublishReminderState();
@@ -308,7 +308,7 @@ function download() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${encodeURIComponent(pageName.value)}.html`;
+    a.download = `${encodeURIComponent(siteName.value)}.html`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -357,7 +357,7 @@ const scheduleDraftUpdate = (newHtml: string) => {
                     draft: newHtml,
                     draftSeq: String(draftSeq),
                 }),
-                composeAddress(pageName.value, pageQuery.value),
+                composeAddress(siteName.value, siteQuery.value),
             ),
         );
 
@@ -456,8 +456,8 @@ async function submitPublishDialog(publishName: string, summary: string) {
         if (!publishSession) return;
 
         const nextPublishedHtml = editorHtml.value;
-        const existingVersions = await getPageVersions(graffiti, publishName);
-        await createPageVersion(
+        const existingVersions = await getSiteVersions(graffiti, publishName);
+        await createSiteVersion(
             graffiti,
             publishName,
             nextPublishedHtml,
@@ -473,7 +473,7 @@ async function submitPublishDialog(publishName: string, summary: string) {
                 "v",
                 composeQuery(
                     undefined,
-                    composeAddress(publishName, pageQuery.value),
+                    composeAddress(publishName, siteQuery.value),
                 ),
             )}`,
         );

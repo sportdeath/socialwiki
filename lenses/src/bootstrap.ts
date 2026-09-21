@@ -6,7 +6,7 @@ import type {
 } from "@graffiti-garden/api";
 import { loadDocument } from "../../kernel/src/bridges/resolution/document";
 import { lensesUrl } from "./utils/locator";
-import { getPageVersions } from "./utils/page-versions";
+import { getSiteVersions } from "./utils/site-versions";
 import { ErrorPage } from "./utils/status-pages";
 
 function getBrowserElement() {
@@ -38,16 +38,16 @@ export function startBrowserLoader() {
   }
 
   async function publishedBrowser(currentSession: GraffitiSession) {
-    // getPageVersions returns reverse chronological/topological order, so
+    // getSiteVersions returns reverse chronological/topological order, so
     // find() selects this actor's latest publication.
-    const versions = await getPageVersions(graffiti, "browser");
+    const versions = await getSiteVersions(graffiti, "browser");
     const version = versions.find(
       (candidate) => candidate.actor === currentSession.actor,
     );
     if (!version) return null;
 
     const media = await graffiti.getMedia(
-      version.value.result.media,
+      version.value.document,
       { types: ["text/html"] },
       currentSession,
     );

@@ -1,9 +1,9 @@
 import { defaultTrustedEditors } from "./default-trusted-editors";
 import type { Graffiti, GraffitiSession } from "@graffiti-garden/api";
 import {
-  annotationSchema,
-  type AnnotationObject,
-  type AnnotationSchema,
+  trustSchema,
+  type TrustObject,
+  type TrustSchema,
 } from "./schemas";
 
 export async function trustActor(
@@ -14,14 +14,14 @@ export async function trustActor(
     untrust?: boolean;
   },
 ) {
-  const activity = options?.untrust ? "Untrust" : "Trust";
-  return await graffiti.post<AnnotationSchema>(
+  const action = options?.untrust ? "Stop trusting editor" : "Trust editor";
+  return await graffiti.post<TrustSchema>(
     {
       channels: [session.actor],
       value: {
-        activity,
-        object: actor,
-        published: Date.now(),
+        action,
+        editor: actor,
+        time: Date.now(),
       },
     },
     session,
@@ -32,10 +32,10 @@ async function discoverTrustContext(
   graffiti: Graffiti,
   actor: string,
 ) {
-  const results = new Map<string, AnnotationObject>();
-  for await (const result of graffiti.discover<AnnotationSchema>(
+  const results = new Map<string, TrustObject>();
+  for await (const result of graffiti.discover<TrustSchema>(
     [actor],
-    annotationSchema(["Trust", "Untrust"], { actor }),
+    trustSchema(actor),
   )) {
     if (result.error) {
       console.error(result.error);
@@ -58,7 +58,7 @@ const trustContextCache = new WeakMap<
 
 /**
  * Read an actor's trust decisions once per Graffiti connection. Trust is
- * independent of the page, so navigation within one lens can reuse it.
+ * independent of the site, so navigation within one lens can reuse it.
  */
 export function getTrustContext(
   graffiti: Graffiti,
@@ -77,7 +77,7 @@ export function getTrustContext(
 
   const pending = discoverTrustContext(graffiti, session.actor);
   byActor.set(session.actor, pending);
-  // A temporary failure should not poison future page loads.
+  // A temporary failure should not poison future site loads.
   void pending.catch(() => {
     if (byActor.get(session.actor) === pending) byActor.delete(session.actor);
   });
@@ -85,7 +85,7 @@ export function getTrustContext(
 }
 
 function createTrustContext(
-  annotations: AnnotationObject[],
+  annotations: TrustObject[],
   actor?: string,
 ) {
   const trustByActor = computeTrustAnnotationsByActor(
@@ -99,27 +99,27 @@ function createTrustContext(
 }
 
 export function computeTrustAnnotationsByActor(
-  trustAnnotations: AnnotationObject[],
+  trustAnnotations: TrustObject[],
   defaultActors: string[],
 ) {
   // Keep only the latest trust/untrust decision per actor.
-  const latestByActor = new Map<string, AnnotationObject | true>(
+  const latestByActor = new Map<string, TrustObject | true>(
     defaultActors.map((actor) => [actor, true]),
   );
   for (const object of trustAnnotations) {
-    const actor = object.value.object;
+    const actor = object.value.editor;
     const existing = latestByActor.get(actor);
 
     // A simultaneous Untrust wins; URLs break ties between matching actions.
     if (
       !existing ||
       existing === true ||
-      object.value.published > existing.value.published ||
-      (object.value.published === existing.value.published &&
-        (object.value.activity === "Untrust" &&
-          existing.value.activity !== "Untrust")) ||
-      (object.value.published === existing.value.published &&
-        object.value.activity === existing.value.activity &&
+      object.value.time > existing.value.time ||
+      (object.value.time === existing.value.time &&
+        (object.value.action === "Stop trusting editor" &&
+          existing.value.action !== "Stop trusting editor")) ||
+      (object.value.time === existing.value.time &&
+        object.value.action === existing.value.action &&
         object.url > existing.url)
     ) {
       latestByActor.set(actor, object);
@@ -132,13 +132,13 @@ export function computeTrustAnnotationsByActor(
 
 /** Shared trust policy; callers choose one-shot or reactive discovery. */
 export function trustedActors(
-  annotations: Map<string, AnnotationObject | true>,
+  annotations: Map<string, TrustObject | true>,
   actor?: string,
 ) {
   const trusted = new Set(
     [...annotations]
       .filter(
-        ([, value]) => value === true || value.value.activity === "Trust",
+        ([, value]) => value === true || value.value.action === "Trust editor",
       )
       .map(([actor]) => actor),
   );

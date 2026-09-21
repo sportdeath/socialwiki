@@ -10,14 +10,14 @@
             @submit.prevent="submitPublishDialog"
         >
             <label class="publish-field">
-                <span>Page name</span>
+                <span>Site name</span>
                 <input
-                    v-model="publishDialogPageName"
+                    v-model="publishDialogSiteName"
                     type="text"
                     required
                     autocomplete="off"
-                    @focus="selectAllPublishPageName"
-                    @click="selectAllPublishPageName"
+                    @focus="selectAllPublishSiteName"
+                    @click="selectAllPublishSiteName"
                     :disabled="publishing"
                 />
             </label>
@@ -47,10 +47,10 @@
                     class="publish-audience-label"
                 >
                     I understand this change will be seen by anyone who visits
-                    the page "<a
-                        class="publish-page-name-link"
-                        :href="publishPageHref"
-                        >{{ normalizedPublishPageName || "this page" }}</a
+                    the site "<a
+                        class="publish-site-name-link"
+                        :href="publishSiteHref"
+                        >{{ normalizedPublishSiteName || "this site" }}</a
                     >".
                 </label>
             </div>
@@ -90,38 +90,38 @@
 import { ref, computed, watch, nextTick, useTemplateRef } from "vue";
 import DialogFrame from "../utils/DialogFrame.vue";
 const open = defineModel<boolean>({ required: true });
-const props = defineProps<{ pageName: string; publishing: boolean }>();
-const emit = defineEmits<{ publish: [pageName: string, summary: string] }>();
+const props = defineProps<{ siteName: string; publishing: boolean }>();
+const emit = defineEmits<{ publish: [siteName: string, summary: string] }>();
 const publishSummaryInput = useTemplateRef<HTMLInputElement>(
     "publishSummaryInput",
 );
-const publishDialogPageName = ref("");
+const publishDialogSiteName = ref("");
 const publishDialogSummary = ref("");
 const publishAudienceConfirmed = ref(false);
-const normalizedPublishPageName = computed(() =>
-    publishDialogPageName.value.trim(),
+const normalizedPublishSiteName = computed(() =>
+    publishDialogSiteName.value.trim(),
 );
 const normalizedPublishSummary = computed(() =>
     publishDialogSummary.value.trim(),
 );
-const publishPageHref = computed(
-    () => `#/v?/${normalizedPublishPageName.value}`,
+const publishSiteHref = computed(
+    () => `#/v?/${normalizedPublishSiteName.value}`,
 );
 const isPublishDialogValid = computed(
     () =>
-        normalizedPublishPageName.value.length > 0 &&
+        normalizedPublishSiteName.value.length > 0 &&
         normalizedPublishSummary.value.length > 0 &&
         publishAudienceConfirmed.value,
 );
-watch(publishDialogPageName, (nextPageName, previousPageName) => {
-    if (nextPageName !== previousPageName && publishAudienceConfirmed.value) {
+watch(publishDialogSiteName, (nextSiteName, previousSiteName) => {
+    if (nextSiteName !== previousSiteName && publishAudienceConfirmed.value) {
         publishAudienceConfirmed.value = false;
     }
 });
 
 watch(open, async (visible) => {
     if (!visible) return;
-    publishDialogPageName.value = props.pageName;
+    publishDialogSiteName.value = props.siteName;
     publishDialogSummary.value = "";
     publishAudienceConfirmed.value = false;
     await nextTick();
@@ -130,7 +130,7 @@ watch(open, async (visible) => {
 function cancelPublishDialog() {
     if (!props.publishing) open.value = false;
 }
-function selectAllPublishPageName(event: FocusEvent | MouseEvent) {
+function selectAllPublishSiteName(event: FocusEvent | MouseEvent) {
     const target = event.currentTarget;
     if (!(target instanceof HTMLInputElement)) return;
     target.select();
@@ -141,7 +141,7 @@ function submitPublishDialog() {
     if (props.publishing || !isPublishDialogValid.value) return;
     emit(
         "publish",
-        normalizedPublishPageName.value,
+        normalizedPublishSiteName.value,
         normalizedPublishSummary.value,
     );
 }
@@ -202,7 +202,7 @@ function submitPublishDialog() {
     cursor: pointer;
 }
 
-.publish-page-name-link {
+.publish-site-name-link {
     color: var(--link-color);
     font-weight: 700;
     text-decoration: underline 2px;

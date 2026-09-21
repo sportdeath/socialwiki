@@ -14,13 +14,13 @@ import {
     type MaybeRefOrGetter,
 } from "vue";
 
-interface VisitedPage {
+interface VisitedSite {
     address: string;
     visits: number;
     lastVisitedAt: number;
 }
 
-function browserHistorySchema(publishedAfter: number) {
+export function browserHistorySchema(visitedAfter: number) {
     return {
         properties: {
             allowed: {
@@ -29,14 +29,14 @@ function browserHistorySchema(publishedAfter: number) {
             },
             value: {
                 properties: {
-                    activity: { const: "View" },
-                    site: { type: "string" },
-                    published: {
+                    action: { const: "Visit site" },
+                    "site address": { type: "string" },
+                    time: {
                         type: "number",
-                        minimum: publishedAfter,
+                        minimum: visitedAfter,
                     },
                 },
-                required: ["activity", "site", "published"],
+                required: ["action", "site address", "time"],
             },
         },
         required: ["allowed", "value"],
@@ -52,38 +52,38 @@ function normalizeAddress(address: string) {
 }
 
 function aggregateVisits(entries: BrowserHistoryEntry[]) {
-    const pagesByAddress = new Map<string, VisitedPage>();
+    const sitesByAddress = new Map<string, VisitedSite>();
     for (const entry of entries) {
-        const address = normalizeAddress(entry.value.site);
+        const address = normalizeAddress(entry.value["site address"]);
         if (!address) continue;
 
-        const existing = pagesByAddress.get(address);
-        pagesByAddress.set(address, {
+        const existing = sitesByAddress.get(address);
+        sitesByAddress.set(address, {
             address,
             visits: (existing?.visits ?? 0) + 1,
             lastVisitedAt: Math.max(
                 existing?.lastVisitedAt ?? 0,
-                entry.value.published,
+                entry.value.time,
             ),
         });
     }
 
-    return [...pagesByAddress.values()];
+    return [...sitesByAddress.values()];
 }
 
-function listVisitedPages(
+function listVisitedSites(
     entries: BrowserHistoryEntry[],
     query = "",
     limit = 8,
 ) {
     const normalizedQuery = query.trim().toLowerCase();
-    const pages = aggregateVisits(entries).filter(
-        (page) =>
+    const sites = aggregateVisits(entries).filter(
+        (site) =>
             normalizedQuery.length === 0 ||
-            page.address.toLowerCase().includes(normalizedQuery),
+            site.address.toLowerCase().includes(normalizedQuery),
     );
 
-    pages.sort((left, right) => {
+    sites.sort((left, right) => {
         if (normalizedQuery.length > 0) {
             const leftStarts = left.address
                 .toLowerCase()
@@ -100,11 +100,11 @@ function listVisitedPages(
         return left.address.localeCompare(right.address);
     });
 
-    return pages.slice(0, limit);
+    return sites.slice(0, limit);
 }
 
 export function useBrowserHistory(
-    pageAddress: MaybeRefOrGetter<string | undefined>,
+    siteAddress: MaybeRefOrGetter<string | undefined>,
     query: MaybeRefOrGetter<string | undefined>,
 ) {
     const graffiti = useGraffiti();
@@ -112,10 +112,10 @@ export function useBrowserHistory(
 
     const historyCutoff = new Date();
     historyCutoff.setDate(historyCutoff.getDate() - 30);
-    const publishedAfter = historyCutoff.setHours(0, 0, 0, 0);
+    const visitedAfter = historyCutoff.setHours(0, 0, 0, 0);
     const { objects, isFirstPoll } = useGraffitiDiscover(
         () => (session.value ? [session.value.actor] : []),
-        () => browserHistorySchema(publishedAfter),
+        () => browserHistorySchema(visitedAfter),
         () => session.value,
     );
     const enabled = computed(() =>
@@ -124,13 +124,13 @@ export function useBrowserHistory(
             : objects.value.length > 0,
     );
     const suggestions = computed(() =>
-        listVisitedPages(objects.value, toValue(query) ?? ""),
+        listVisitedSites(objects.value, toValue(query) ?? ""),
     );
 
     let lastRecordedVisit = "";
     async function record(force = false) {
         const currentSession = session.value;
-        const site = normalizeAddress(toValue(pageAddress) ?? "");
+        const site = normalizeAddress(toValue(siteAddress) ?? "");
         if (!currentSession || !site || (!force && !enabled.value)) return;
 
         const visit = `${currentSession.actor}:${site}`;
@@ -142,9 +142,9 @@ export function useBrowserHistory(
                     allowed: [],
                     channels: [currentSession.actor],
                     value: {
-                        activity: "View",
-                        site,
-                        published: Date.now(),
+                        action: "Visit site",
+                        "site address": site,
+                        time: Date.now(),
                     },
                 },
                 currentSession,
@@ -156,7 +156,7 @@ export function useBrowserHistory(
     }
 
     watch(
-        [() => toValue(pageAddress), enabled],
+        [() => toValue(siteAddress), enabled],
         () => void record(),
         { immediate: true },
     );

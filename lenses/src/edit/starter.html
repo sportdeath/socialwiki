@@ -1,5 +1,5 @@
 <!--
-THIS IS STARTER CODE FOR A NEW PAGE
+THIS IS STARTER CODE FOR A NEW SITE
 Feel free to select all of this code,
 delete it, and replace it with your own code.
 -->
@@ -8,7 +8,7 @@ delete it, and replace it with your own code.
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
 
-  <!-- Connect the page to Social.Wiki -->
+  <!-- Connect the site to Social.Wiki -->
   <script src="__INIT_URL__"></script>
 
   <!-- Better default styling -->
@@ -41,17 +41,26 @@ delete it, and replace it with your own code.
   <div id="app"><h1>Loading…</h1></div>
 
   <template id="template">
-    <h1>Your page here!</h1>
+    <h1>Your site here!</h1>
 
-    <!-- "Discover" any waves from this page -->
+    <!-- "Discover" any waves from this site -->
     <graffiti-discover
       v-slot="{ objects: waves, isFirstPoll }"
-      :channels="[ __PAGE_NAME__ ]"
+      :channels="[ __SITE_NAME__ ]"
       :schema="{ properties: { value: {
-        required: ['activity'],
-        properties: {
-          activity: { const: 'Wave' }
-        }
+        anyOf: [
+          {
+            required: ['action', 'site name'],
+            properties: {
+              action: { const: 'Wave' },
+              'site name': { const: __SITE_NAME__ }
+            }
+          },
+          {
+            required: ['activity'],
+            properties: { activity: { const: 'Wave' } }
+          }
+        ]
       }}}"
     >
       <button
@@ -75,8 +84,8 @@ delete it, and replace it with your own code.
             processingWave = true;
             $graffiti.post(
               {
-                value: { activity: 'Wave' },
-                channels: [ __PAGE_NAME__ ],
+                value: { action: 'Wave', 'site name': __SITE_NAME__ },
+                channels: [ __SITE_NAME__ ],
               },
               $graffitiSession.value
             ).finally(() => {
@@ -111,7 +120,7 @@ delete it, and replace it with your own code.
       </template>
 
       <p>
-        {{ new Set(waves.map(w => w.actor)).size }} people have waved from this page.
+        {{ new Set(waves.map(w => w.actor)).size }} people have waved from this site.
       </p>
     </graffiti-discover>
   </template>

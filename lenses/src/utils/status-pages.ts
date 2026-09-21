@@ -10,12 +10,12 @@ export const LoadingPage = `
       ${style}
     </head>
     <body>
-        <h1 class="status dots">Page loading</h1>
+        <h1 class="status dots">Site loading</h1>
     </body>
 </html>
 `;
 
-export const PageNotFound = (pageName: string, initUrl: string) => `
+export const SiteNotFound = (siteName: string, initUrl: string) => `
 <!doctype html>
 <html>
     <head>
@@ -25,8 +25,8 @@ export const PageNotFound = (pageName: string, initUrl: string) => `
     </head>
     <body>
         <h1 class="status">Nothing here…yet.</h1>
-        <a class="status-button" href="${escapeHtml(`#/${window.route.composeAddress("e", window.route.composeQuery(undefined, pageName))}`)}">
-            Edit page
+        <a class="status-button" href="${escapeHtml(`#/${window.route.composeAddress("e", window.route.composeQuery(undefined, siteName))}`)}">
+            Edit site
         </a>
     </body>
 </html>
@@ -40,7 +40,7 @@ export const ErrorPage = (e: string) => `
       ${style}
     </head>
     <body>
-        <h1 class="status">Error loading page.</h1>
+        <h1 class="status">Error loading site.</h1>
         <p>${escapeHtml(e)}</p>
     </body>
 </html>

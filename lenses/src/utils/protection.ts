@@ -1,43 +1,43 @@
 import type { Graffiti, GraffitiSession } from "@graffiti-garden/api";
-import type { AnnotationObject, AnnotationSchema } from "./schemas";
+import type { ProtectionObject, ProtectionSchema } from "./schemas";
 
 export function sortProtectionHistory(
-  annotations: AnnotationObject[],
+  annotations: ProtectionObject[],
   trustedActors: string[],
 ) {
   const trustedActorSet = new Set(trustedActors);
   const relevantAnnotations = annotations.filter(
     (a) =>
       trustedActorSet.has(a.actor) &&
-      (a.value.activity === "Protect" || a.value.activity === "Remove"),
+      (a.value.action === "Protect site" || a.value.action === "Remove site protection"),
   );
   const protectUrls = new Set(
     relevantAnnotations
-      .filter((a) => a.value.activity === "Protect")
+      .filter((a) => a.value.action === "Protect site")
       .map((a) => a.url),
   );
 
   return relevantAnnotations
     .filter(
       (a) =>
-        a.value.activity === "Protect" || protectUrls.has(a.value.object),
+        a.value.action === "Protect site" || protectUrls.has(a.value["protection removed"]),
     )
     .sort((a, b) => {
       const aRemovesBProtection =
-        a.value.activity === "Remove" &&
-        b.value.activity === "Protect" &&
-        a.value.object === b.url &&
-        a.value.published >= b.value.published;
+        a.value.action === "Remove site protection" &&
+        b.value.action === "Protect site" &&
+        a.value["protection removed"] === b.url &&
+        a.value.time >= b.value.time;
       if (aRemovesBProtection) return 1;
 
       const bRemovesAProtection =
-        b.value.activity === "Remove" &&
-        a.value.activity === "Protect" &&
-        b.value.object === a.url &&
-        b.value.published >= a.value.published;
+        b.value.action === "Remove site protection" &&
+        a.value.action === "Protect site" &&
+        b.value["protection removed"] === a.url &&
+        b.value.time >= a.value.time;
       if (bRemovesAProtection) return -1;
 
-      const timeDifference = a.value.published - b.value.published;
+      const timeDifference = a.value.time - b.value.time;
       if (timeDifference !== 0) return timeDifference;
 
       return a.url < b.url ? -1 : 1;
@@ -45,35 +45,36 @@ export function sortProtectionHistory(
     .reverse();
 }
 
-export async function updatePageProtection(
+export async function updateSiteProtection(
   graffiti: Graffiti,
-  pageName: string,
+  siteName: string,
   isProtected: boolean,
-  activeProtection: AnnotationObject | null | undefined,
+  activeProtection: ProtectionObject | null | undefined,
   session: GraffitiSession,
 ) {
   if (isProtected) {
     if (!activeProtection) return;
-    return await graffiti.post<AnnotationSchema>(
+    return await graffiti.post<ProtectionSchema>(
       {
-        channels: [pageName],
+        channels: [siteName],
         value: {
-          activity: "Remove",
-          object: activeProtection.url,
-          published: Date.now(),
+          action: "Remove site protection",
+          "site name": siteName,
+          "protection removed": activeProtection.url,
+          time: Date.now(),
         },
       },
       session,
     );
   }
 
-  return await graffiti.post<AnnotationSchema>(
+  return await graffiti.post<ProtectionSchema>(
     {
-      channels: [pageName],
+      channels: [siteName],
       value: {
-        activity: "Protect",
-        object: pageName,
-        published: Date.now(),
+        action: "Protect site",
+        "site name": siteName,
+        time: Date.now(),
       },
     },
     session,

@@ -168,12 +168,12 @@ async function modifyLens(lens: Lens) {
         const draft = await props.lensSources.getSource(lens);
         const currentBrowserAddress = window.address ?? "";
         const { query } = parseAddress(currentBrowserAddress);
-        const { address: pageAddress } = parseQuery(query);
-        const editablePageAddress = composeAddress(
+        const { address: siteAddress } = parseQuery(query);
+        const editableSiteAddress = composeAddress(
             lens,
             composeQuery(
                 undefined,
-                lens === "browser" ? currentBrowserAddress : pageAddress,
+                lens === "browser" ? currentBrowserAddress : siteAddress,
             ),
         );
         open.value = false;
@@ -184,7 +184,7 @@ async function modifyLens(lens: Lens) {
               "e",
               composeQuery(
                 new URLSearchParams({ draft }),
-                editablePageAddress,
+                editableSiteAddress,
               ),
             ),
           )

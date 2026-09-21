@@ -1,6 +1,6 @@
 <template>
     <p>
-        This page has been marked as
+        This site has been marked as
         <strong>protected</strong> by
         <template v-if="isProtectionBySessionActor">
             <strong>you</strong>.
@@ -24,10 +24,10 @@
     </p>
 </template>
 <script setup lang="ts">
-import type { AnnotationObject } from "./schemas";
+import type { ProtectionObject } from "./schemas";
 import { GraffitiActorToHandle } from "@graffiti-garden/wrapper-vue";
 defineProps<{
-    activeProtection: AnnotationObject | null;
+    activeProtection: ProtectionObject | null;
     isProtectionBySessionActor: boolean;
     activeProtectionTrustSource: "default" | "trusted" | null;
 }>();

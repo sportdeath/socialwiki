@@ -1,5 +1,6 @@
 import type {
   Graffiti,
+  GraffitiObjectBase,
   GraffitiSession,
   JSONSchema,
 } from "@graffiti-garden/api";
@@ -8,11 +9,11 @@ import { lensesUrl } from "../utils/locator";
 import { useGraffitiDiscover } from "@graffiti-garden/wrapper-vue";
 import { nextTick, ref, watch } from "vue";
 import {
-  deletePageVersion,
-  pageVersionSchema,
-  sortPageVersions,
-  type PageVersionObject,
-} from "../utils/page-versions";
+  deleteSiteVersion,
+  siteVersionsSchema,
+  normalizeSiteVersions,
+  sortSiteVersions,
+} from "../utils/site-versions";
 import {
   lensDirectories,
   lenses,
@@ -21,7 +22,7 @@ import {
 
 function lensSchema(actor: string) {
   return {
-    anyOf: lenses.map(pageVersionSchema),
+    anyOf: lenses.map(siteVersionsSchema),
     properties: {
       actor: { const: actor },
     },
@@ -38,15 +39,12 @@ async function loadDefaultLens(lens: Lens, signal?: AbortSignal) {
 }
 
 function lensVersions(
-  objects: Iterable<PageVersionObject>,
+  objects: Iterable<GraffitiObjectBase>,
   lens: Lens,
   actor: string,
 ) {
-  return sortPageVersions(
-    [...objects].filter(
-      (object) =>
-        object.actor === actor && object.value.object === lens,
-    ),
+  return sortSiteVersions(
+    normalizeSiteVersions(objects, lens).filter((object) => object.actor === actor),
   );
 }
 
@@ -96,14 +94,14 @@ export function useLensSources(
     const actor = session()?.actor;
     const version = actor
       ? lensVersions(
-          objects.value as PageVersionObject[],
+          objects.value,
           lens,
           actor,
         ).at(0)
       : undefined;
     if (!version) return loadDefaultLens(lens, signal);
 
-    const mediaAddress = version.value.result.media;
+    const mediaAddress = version.value.document;
     let source = mediaCache.get(mediaAddress);
     if (!source) {
       source = graffiti
@@ -141,7 +139,7 @@ export function useLensSources(
       const actor = session()?.actor;
       return actor
         ? lensVersions(
-            objects.value as PageVersionObject[],
+            objects.value,
             lens,
             actor,
           ).length > 0
@@ -152,15 +150,15 @@ export function useLensSources(
     async reset(lens: Lens, currentSession: GraffitiSession) {
       await waitUntilLoaded();
       const versions = lensVersions(
-        objects.value as PageVersionObject[],
+        objects.value,
         lens,
         currentSession.actor,
       );
 
       await Promise.all(
         versions.map(async (version) => {
-          await deletePageVersion(graffiti, version, currentSession);
-          mediaCache.delete(version.value.result.media);
+          await deleteSiteVersion(graffiti, version, currentSession);
+          mediaCache.delete(version.value.document);
         }),
       );
       await refresh();

@@ -8,7 +8,7 @@
         </a>
 
         <AddressBar
-            :address="pageAddress"
+            :address="siteAddress"
             :route-for-input-address="routeForInputAddress"
             v-model="isDropdownOpen"
             @navigate="navigateToInputAddress"
@@ -38,7 +38,7 @@
                             :href="viewRoute"
                             :class="{ active: lens === 'v' }"
                             :aria-current="lens === 'v' ? 'page' : undefined"
-                            title="The current version of this page"
+                            title="The current version of this site"
                         >
                             View
                         </a>
@@ -48,7 +48,7 @@
                             :href="editRoute"
                             :class="{ active: lens === 'e' }"
                             :aria-current="lens === 'e' ? 'page' : undefined"
-                            title="Edit the source code of this page"
+                            title="Edit the source code of this site"
                         >
                             Edit
                         </a>
@@ -58,7 +58,7 @@
                             :href="historyRoute"
                             :class="{ active: lens === 'h' }"
                             :aria-current="lens === 'h' ? 'page' : undefined"
-                            title="Past revisions of this page"
+                            title="Past revisions of this site"
                         >
                             History
                         </a>
@@ -114,7 +114,7 @@
             :query="lens === 'v' ? undefined : lensQuery"
             @sw-lens-output="onLensOutput"
         ></sw-transclude>
-        <h1 v-else class="status dots">Page loading</h1>
+        <h1 v-else class="status dots">Site loading</h1>
     </main>
 </template>
 
@@ -148,7 +148,7 @@ window.handleDocumentResolution(lensSources.resolveDocument);
 
 const lens = ref("");
 const lensParams = ref<URLSearchParams | undefined>(undefined);
-const pageAddress = ref<string | undefined>(undefined);
+const siteAddress = ref<string | undefined>(undefined);
 const routeReady = ref(false);
 // The latest document produced by View or History. Any route change
 // invalidates it until the active lens reports its new output.
@@ -158,25 +158,25 @@ const navOpen = ref(true);
 const isSmall = ref(false);
 const mq = window.matchMedia("(min-width: 700px)");
 const lensQuery = computed(() =>
-    composeQuery(lensParams.value, pageAddress.value),
+    composeQuery(lensParams.value, siteAddress.value),
 );
 // A lens's query says what it displays; its route identifies the public
 // document from which descendant links resolve. Edit and History are that
 // document themselves, so their routes are `?/e` and `?/h`. View is
-// transparent to the page it renders, so its route must identify that page.
+// transparent to the site it renders, so its route must identify that site.
 // For example, displaying Social.Wiki?/guide gives View the route
-// ?/v?/Social.Wiki: /guide remains query state inside the rendered page.
+// ?/v?/Social.Wiki: /guide remains query state inside the rendered site.
 const lensRoute = computed(() => {
     if (lens.value !== "v") return composeQuery(undefined, lens.value);
 
     // Lens parameters select the rendered version and therefore remain part
-    // of its public identity; only the query delegated to the page is omitted.
-    const { name: pageName } = parseAddress(pageAddress.value);
+    // of its public identity; only the query delegated to the site is omitted.
+    const { name: siteName } = parseAddress(siteAddress.value);
     return composeQuery(
         undefined,
         composeAddress(
             lens.value,
-            composeQuery(lensParams.value, pageName),
+            composeQuery(lensParams.value, siteName),
         ),
     );
 });
@@ -239,7 +239,7 @@ function applyAddress(address: string) {
     const { name, query } = parseAddress(address);
     const { params, address: nestedAddress } = parseQuery(query);
 
-    // A bare address is a page without a lens.
+    // A bare address is a site without a lens.
     if (!query.length) {
         window.navigate(
             composeQuery(
@@ -253,7 +253,7 @@ function applyAddress(address: string) {
         return;
     }
 
-    // An existing lens with no page displays the home page.
+    // An existing lens with no site displays the home site.
     if (!nestedAddress?.length) {
         window.navigate(
             composeQuery(
@@ -267,22 +267,22 @@ function applyAddress(address: string) {
         return;
     }
 
-    const { name: nextPageName } = parseAddress(nestedAddress);
-    const { name: currentPageName } = parseAddress(pageAddress.value);
+    const { name: nextSiteName } = parseAddress(nestedAddress);
+    const { name: currentSiteName } = parseAddress(siteAddress.value);
     if (
         name !== lens.value ||
-        nextPageName !== currentPageName ||
+        nextSiteName !== currentSiteName ||
         (params?.toString() ?? "") !== (lensParams.value?.toString() ?? "")
     ) {
-        // A new lens, lens configuration, or page invalidates the retained
-        // output. The page's own query does not: View updates that state
+        // A new lens, lens configuration, or site invalidates the retained
+        // output. The site's own query does not: View updates that state
         // without reloading or re-emitting the same source document.
         srcdoc.value = null;
     }
 
     lens.value = name;
     lensParams.value = params;
-    pageAddress.value = nestedAddress;
+    siteAddress.value = nestedAddress;
     routeReady.value = true;
 }
 
@@ -324,7 +324,7 @@ onBeforeUnmount(() => {
 const homeRoute = "?/v?/Social.Wiki";
 const viewRoute = computed(() =>
     composeQuery(undefined,
-      composeAddress("v", composeQuery(undefined, pageAddress.value)),
+      composeAddress("v", composeQuery(undefined, siteAddress.value)),
     )
 );
 const editRoute = computed(() => {
@@ -337,27 +337,27 @@ const editRoute = computed(() => {
                   srcdoc.value ? { draft: srcdoc.value } : undefined,
               );
     return composeQuery(undefined,
-      composeAddress("e", composeQuery(editParams, pageAddress.value))
+      composeAddress("e", composeQuery(editParams, siteAddress.value))
     );
 });
 const historyRoute = computed(() =>
     composeQuery(
       undefined,
-      composeAddress("h", composeQuery(undefined, pageAddress.value)),
+      composeAddress("h", composeQuery(undefined, siteAddress.value)),
     )
 );
 
 const isDropdownOpen = ref(false);
 
 // When input is submitted, the route changes
-// Preserve the current lens when only the page's own query changes.
+// Preserve the current lens when only the site's own query changes.
 function routeForInputAddress(inputAddress: string) {
-    // Extract the page name from the input
-    const { name: inputPageName } = parseAddress(inputAddress);
-    const { name: currentPageName } = parseAddress(pageAddress.value);
-    if (inputPageName === currentPageName) {
+    // Extract the site name from the input
+    const { name: inputSiteName } = parseAddress(inputAddress);
+    const { name: currentSiteName } = parseAddress(siteAddress.value);
+    if (inputSiteName === currentSiteName) {
         // If the user only changed the query, keep the current lens/params
-        // and just update the page address
+        // and just update the site address
         return composeQuery(
             undefined,
             composeAddress(

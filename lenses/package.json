@@ -5,7 +5,8 @@
     "build": "tsx build.mts",
     "check": "node check.cjs --noEmit",
     "dev": "tsx build.mts --watch",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --import tsx --test test/*.test.mjs"
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.3",
