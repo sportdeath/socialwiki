@@ -99,7 +99,7 @@ test("one-shot discovery handles repeats and URL-only tombstones before normaliz
 
 test("publishing uses only readable fields and can reference legacy revisions", async () => {
   const { graffiti, posts } = publisher();
-  await createSiteVersion(graffiti, "mypage", "<h1>Hello</h1>", [legacy.url], "Added feature", session);
+  await createSiteVersion(graffiti, "mypage", "<h1>Hello</h1>", normalizeSiteVersions([legacy]), "Added feature", session);
   assert.deepEqual(posts[0], {
     channels: ["mypage"],
     value: {

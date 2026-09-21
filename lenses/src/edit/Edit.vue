@@ -461,7 +461,7 @@ async function submitPublishDialog(publishName: string, summary: string) {
             graffiti,
             publishName,
             nextPublishedHtml,
-            existingVersions.map((version) => version.url),
+            existingVersions,
             summary,
             publishSession,
         );

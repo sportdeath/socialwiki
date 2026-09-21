@@ -140,16 +140,43 @@ export function normalizeSiteVersions(
   return versions;
 }
 
+/**
+ * Tips preserve causal history without listing every ancestor. Direct links to
+ * versions with equal or later timestamps keep them before this publication
+ * even if intermediate version metadata disappears.
+ */
+export function selectPreviousVersions(
+  knownVersions: readonly SiteVersionObject[],
+  time: number,
+): string[] {
+  const referenced = new Set<string>();
+  for (const version of knownVersions) {
+    for (const previous of version.value["previous versions"] ?? []) {
+      referenced.add(previous);
+    }
+  }
+  const selected = new Set<string>();
+  for (const version of knownVersions) {
+    if (!referenced.has(version.url) || version.value.time >= time) {
+      selected.add(version.url);
+    }
+  }
+  return [...selected];
+}
+
 export async function createSiteVersion(
   graffiti: Graffiti,
   siteName: string,
   content: string,
-  previousVersions: string[],
+  knownVersions: readonly SiteVersionObject[],
   changes: string,
   session: GraffitiSession,
 ): Promise<SiteVersionObject> {
   const data = new Blob([content], { type: "text/html" });
   const document = await graffiti.postMedia({ data }, session);
+  // Selection and the published record must use exactly the same timestamp.
+  const time = Date.now();
+  const previousVersions = selectPreviousVersions(knownVersions, time);
   return await graffiti.post<SiteVersionSchema>(
     {
       channels: [siteName],
@@ -159,7 +186,7 @@ export async function createSiteVersion(
         changes,
         document,
         ...(previousVersions.length ? { "previous versions": previousVersions } : {}),
-        time: Date.now(),
+        time,
       },
     },
     session,

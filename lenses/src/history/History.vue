@@ -589,7 +589,7 @@ async function republishSiteVersion(
     const pending =
         action === "Restore" ? restoringVersionUrl : endorsingVersionUrl;
     pending.value = version.url;
-    const predecessors = siteVersions.value.map((v) => v.url);
+    const knownVersions = [...siteVersions.value];
     try {
         // The preview may still show the previous selection. Publish the chosen
         // version's media, never whatever HTML happens to be rendered right now.
@@ -600,7 +600,7 @@ async function republishSiteVersion(
             graffiti,
             version.value["site name"],
             await media.data.text(),
-            predecessors,
+            knownVersions,
             `${action}: ${version.value.changes}`,
             session,
         );

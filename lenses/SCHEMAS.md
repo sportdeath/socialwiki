@@ -27,6 +27,20 @@ list. Later publications include it when they reference earlier versions.
 Restore and Endorse publish this same format with an explanation in `changes`.
 Custom browser and lens documents also use this format (`browser`, `v`, `e`, `h`).
 
+For publication, restore, and endorsement, the writer chooses one timestamp `T`
+and references the deduplicated union of:
+
+- All known history tips: versions not referenced by another known version.
+- All known versions whose `time` is greater than or equal to `T`.
+
+The same `T` is stored in the publication. An ordinary sequential history usually
+needs only one reference. Equal or future timestamps receive direct references
+even when they are not tips, so deleting intermediate metadata cannot make those
+observed versions sort ahead of the new publication. This guarantee covers the
+surviving versions the writer observed, not versions discovered afterward.
+There is no reference-count cap: many future-dated versions or concurrent tips
+can still produce a large list.
+
 ## Protection
 
 ```json
