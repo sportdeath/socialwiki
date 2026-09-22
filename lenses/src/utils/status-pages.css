@@ -1,0 +1,68 @@
+@import "../theme.css";
+
+/* Status screens are complete documents rendered inside their own iframe. */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    align-items: center;
+    background: var(--background-color);
+    color: var(--text-color);
+    display: flex;
+    flex-direction: column;
+    font-family: system-ui, sans-serif;
+    gap: 1rem;
+    height: 100dvh;
+    justify-content: center;
+    width: 100dvw;
+}
+
+a {
+    color: var(--link-color);
+    text-decoration: none;
+}
+
+a:hover {
+    color: var(--link-hover-color);
+    text-decoration: underline 2px;
+}
+
+.dots::after {
+    animation: dots 0.7s linear infinite;
+    content: "";
+    display: inline-block;
+    width: 3ch;
+}
+
+@keyframes dots {
+    0% {
+        content: "";
+    }
+    25% {
+        content: ".";
+    }
+    50% {
+        content: "..";
+    }
+    75% {
+        content: "...";
+    }
+}
+
+.status-button {
+    background: var(--background-color-interactive);
+    border: 2px solid var(--border-color);
+    border-radius: 0.5rem;
+    color: var(--link-color);
+    font-size: 2rem;
+    font-weight: bold;
+    padding: 1rem;
+}
+
+.status-button:hover {
+    background: var(--background-color-interactive-hover);
+    color: var(--link-hover-color);
+}

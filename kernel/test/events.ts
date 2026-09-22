@@ -1,0 +1,48 @@
+import { assertBridgedEventName } from "../src/bridges/events/shared";
+
+type ChildListener = (event: CustomEvent<unknown>) => void;
+type ParentListener = (event: CustomEvent<unknown>) => void;
+
+/** An in-memory connection with the same public shape as the event bridge. */
+export function createEventBridge() {
+  const childListeners = new Map<string, Set<ChildListener>>();
+  const parentListeners = new Set<ParentListener>();
+
+  const child = {
+    emit(eventName: string, payload?: unknown) {
+      assertBridgedEventName(eventName);
+      const event = new CustomEvent(eventName, { detail: payload, cancelable: true });
+      for (const listener of parentListeners) listener(event);
+    },
+    listen(eventName: string, listener: ChildListener) {
+      assertBridgedEventName(eventName);
+      const listeners = childListeners.get(eventName) ?? new Set();
+      listeners.add(listener);
+      childListeners.set(eventName, listeners);
+      return () => listeners.delete(listener);
+    },
+  };
+
+  const parent = {
+    destroy() {
+      childListeners.clear();
+      parentListeners.clear();
+    },
+    listen(listener: ParentListener) {
+      parentListeners.add(listener);
+      return () => parentListeners.delete(listener);
+    },
+    send(eventName: string, payload?: unknown) {
+      assertBridgedEventName(eventName);
+      const event = new CustomEvent(eventName, {
+        detail: payload,
+        cancelable: true,
+      });
+      for (const listener of childListeners.get(eventName) ?? []) {
+        listener(event);
+      }
+    },
+  };
+
+  return { child, parent };
+}

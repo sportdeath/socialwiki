@@ -1,0 +1,311 @@
+<template>
+    <DialogFrame
+        v-model="open"
+        class="settings-dialog"
+        label="Settings"
+        @cancel="open = false"
+    >
+        <h2>Settings</h2>
+        <div class="settings-actions">
+            <button
+                v-if="session"
+                type="button"
+                class="warning"
+                :disabled="busy"
+                @click="logout"
+            >
+                {{ loggingOut ? "Logging out..." : "Log Out" }}
+            </button>
+        </div>
+
+        <section class="lens-settings">
+            <h3>Modify Social.Wiki</h3>
+            <p class="lens-warning">
+                Advanced: changing these will change how you interact with all Social.Wiki sites.
+            </p>
+
+            <div class="lens-row">
+                <div class="lens-name">
+                    <strong>View</strong>
+                    <span v-if="lensSources.isModified('v')" class="modified">
+                        Modified
+                    </span>
+                </div>
+                <button type="button" :disabled="busy" @click="modifyLens('v')">
+                    {{ modifying === "v" ? "Opening..." : "Modify" }}
+                </button>
+                <button
+                    v-if="session"
+                    type="button"
+                    class="warning"
+                    :disabled="busy || !lensSources.isModified('v')"
+                    @click="resetLens('v')"
+                >
+                    {{ resetting === "v" ? "Resetting..." : "Reset" }}
+                </button>
+            </div>
+            <div class="lens-row">
+                <div class="lens-name">
+                    <strong>Edit</strong>
+                    <span v-if="lensSources.isModified('e')" class="modified">
+                        Modified
+                    </span>
+                </div>
+                <button type="button" :disabled="busy" @click="modifyLens('e')">
+                    {{ modifying === "e" ? "Opening..." : "Modify" }}
+                </button>
+                <button
+                    v-if="session"
+                    type="button"
+                    class="warning"
+                    :disabled="busy || !lensSources.isModified('e')"
+                    @click="resetLens('e')"
+                >
+                    {{ resetting === "e" ? "Resetting..." : "Reset" }}
+                </button>
+            </div>
+            <div class="lens-row">
+                <div class="lens-name">
+                    <strong>History</strong>
+                    <span v-if="lensSources.isModified('h')" class="modified">
+                        Modified
+                    </span>
+                </div>
+                <button type="button" :disabled="busy" @click="modifyLens('h')">
+                    {{ modifying === "h" ? "Opening..." : "Modify" }}
+                </button>
+                <button
+                    v-if="session"
+                    type="button"
+                    class="warning"
+                    :disabled="busy || !lensSources.isModified('h')"
+                    @click="resetLens('h')"
+                >
+                    {{ resetting === "h" ? "Resetting..." : "Reset" }}
+                </button>
+            </div>
+            <div class="lens-row">
+                <div class="lens-name">
+                    <strong>Browser</strong>
+                    <span
+                        v-if="lensSources.isModified('browser')"
+                        class="modified"
+                    >
+                        Modified
+                    </span>
+                </div>
+                <button
+                    type="button"
+                    :disabled="busy"
+                    @click="modifyLens('browser')"
+                >
+                    {{ modifying === "browser" ? "Opening..." : "Modify" }}
+                </button>
+                <button
+                    v-if="session"
+                    type="button"
+                    class="warning"
+                    :disabled="busy || !lensSources.isModified('browser')"
+                    @click="resetLens('browser')"
+                >
+                    {{
+                        resetting === "browser" ? "Resetting..." : "Reset"
+                    }}
+                </button>
+            </div>
+        </section>
+        <footer>
+            <button type="button" class="secondary" @click="open = false">
+                Close
+            </button>
+        </footer>
+    </DialogFrame>
+</template>
+<script setup lang="ts">
+import { computed, ref } from "vue";
+import {
+    useGraffiti,
+    useGraffitiSession,
+} from "@graffiti-garden/wrapper-vue";
+import DialogFrame from "../utils/DialogFrame.vue";
+import type { Lens } from "../utils/lenses";
+import type { LensSources } from "./lens-resolver";
+
+const { composeAddress, composeQuery, parseAddress, parseQuery } = window.route;
+const open = defineModel<boolean>({ required: true });
+const props = defineProps<{
+    lensSources: LensSources;
+}>();
+const graffiti = useGraffiti();
+const session = useGraffitiSession();
+const loggingOut = ref(false);
+const resetting = ref<Lens | null>(null);
+const modifying = ref<Lens | null>(null);
+const busy = computed(
+    () =>
+        loggingOut.value || resetting.value !== null || modifying.value !== null,
+);
+
+async function logout() {
+    const currentSession = session.value;
+    if (!currentSession || busy.value) return;
+
+    loggingOut.value = true;
+    open.value = false;
+    try {
+        await graffiti.logout(currentSession);
+    } catch (error) {
+        reportSettingsError("Logging out", error);
+    } finally {
+        loggingOut.value = false;
+    }
+}
+
+async function modifyLens(lens: Lens) {
+    if (busy.value) return;
+    modifying.value = lens;
+    try {
+        const draft = await props.lensSources.getSource(lens);
+        const currentBrowserAddress = window.address ?? "";
+        const { query } = parseAddress(currentBrowserAddress);
+        const { address: siteAddress } = parseQuery(query);
+        const editableSiteAddress = composeAddress(
+            lens,
+            composeQuery(
+                undefined,
+                lens === "browser" ? currentBrowserAddress : siteAddress,
+            ),
+        );
+        open.value = false;
+        window.navigate(
+          composeQuery(
+            undefined,
+            composeAddress(
+              "e",
+              composeQuery(
+                new URLSearchParams({ draft }),
+                editableSiteAddress,
+              ),
+            ),
+          )
+        );
+    } catch (error) {
+        reportSettingsError("Opening lens editor", error);
+    } finally {
+        modifying.value = null;
+    }
+}
+
+async function resetLens(lens: Lens) {
+    const currentSession = session.value;
+    if (!currentSession || busy.value) return;
+
+    resetting.value = lens;
+    try {
+        await props.lensSources.reset(lens, currentSession);
+    } catch (error) {
+        reportSettingsError(`Resetting ${lens}`, error);
+    } finally {
+        resetting.value = null;
+    }
+}
+
+function reportSettingsError(action: string, error: unknown) {
+    console.error(action, error);
+    alert(
+        `${action} failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+}
+</script>
+<style scoped>
+.settings-dialog :deep(.dialog-panel) {
+    width: min(30rem, calc(100vw - 2rem));
+    font-size: 1.2rem;
+}
+.settings-dialog h2 {
+    font-size: 1.6rem;
+}
+.settings-dialog footer {
+    justify-content: flex-end;
+}
+.settings-actions {
+    display: grid;
+    gap: 0.5rem;
+}
+
+.settings-actions > button,
+.lens-row button {
+    width: 100%;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    background: var(--background-color-interactive);
+    color: var(--text-color);
+    padding: 0.45rem 0.65rem;
+    text-decoration: none;
+}
+
+.settings-actions > button {
+    text-align: left;
+}
+
+.settings-actions > button:not(:disabled):hover,
+.lens-row button:not(:disabled):hover {
+    background: var(--background-color-interactive-hover);
+    border-color: var(--border-color-hover);
+    color: var(--text-color);
+    text-decoration: none;
+}
+
+.settings-actions > button:disabled,
+.lens-row button:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+
+.lens-settings {
+    margin-top: 1.5rem;
+}
+
+.lens-settings h3 {
+    margin-bottom: 0.25rem;
+}
+
+.lens-warning {
+    margin-top: 0;
+    color: var(--warning-color);
+    font-size: 0.9rem;
+}
+
+.lens-row {
+    display: grid;
+    grid-template-columns: minmax(5rem, 1fr) auto auto;
+    align-items: center;
+    gap: 0.5rem;
+    padding-block: 0.3rem;
+}
+
+.lens-name {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4rem;
+}
+
+.modified {
+    color: var(--warning-color);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.settings-actions > button.warning,
+.lens-row button.warning {
+    color: var(--warning-color);
+    border-color: var(--warning-color);
+}
+
+.settings-actions > button.warning:not(:disabled):hover,
+.lens-row button.warning:not(:disabled):hover {
+    color: var(--warning-hover-color);
+    border-color: var(--warning-hover-color);
+}
+</style>

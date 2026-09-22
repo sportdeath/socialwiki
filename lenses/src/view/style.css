@@ -1,0 +1,16 @@
+/* The rendered site supplies its own styles; the View lens only fills its frame. */
+html,
+body,
+sw-transclude {
+    height: 100%;
+    width: 100%;
+}
+
+body {
+    margin: 0;
+    overflow: hidden;
+}
+
+sw-transclude {
+    display: block;
+}

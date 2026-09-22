@@ -1,0 +1,56 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  color-scheme: light dark;
+  --background: #fff;
+  --text: #202122;
+  --title: #101418;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #101418;
+    --text: #eaecf0;
+    --title: #f8f9fa;
+  }
+}
+
+body {
+  align-items: center;
+  background: var(--background);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  font-family: system-ui, sans-serif;
+  gap: 1rem;
+  height: 100dvh;
+  justify-content: center;
+  width: 100dvw;
+}
+
+h1 {
+  color: var(--title);
+}
+
+.dots::after {
+  animation: dots 0.7s linear infinite;
+  content: "";
+  display: inline-block;
+  width: 3ch;
+}
+
+@keyframes dots {
+  25% {
+    content: ".";
+  }
+  50% {
+    content: "..";
+  }
+  75% {
+    content: "...";
+  }
+}

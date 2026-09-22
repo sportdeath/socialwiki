@@ -1,28 +1,42 @@
 {
-  "name": "social-wiki",
-  "description": "Collaborative social spaces",
+  "name": "socialwiki",
+  "version": "0.1.0",
+  "description": "A web held in common.",
+  "files": [
+    "theme.css",
+    "kernel/src",
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "workspaces": [
+    "kernel",
+    "lenses"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "build": "npm run build --workspace @socialwiki/kernel && npm run build --workspace @socialwiki/lenses && tsx build.mts",
+    "check": "npm run check --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "predev": "npm run build --workspace @socialwiki/kernel && npm run build --workspace @socialwiki/lenses && tsx build.mts --link",
+    "dev": "concurrently --kill-others --names kernel,lenses,server \"npm run dev --workspace @socialwiki/kernel\" \"npm run dev --workspace @socialwiki/lenses\" \"npm run preview\"",
+    "preview": "vite preview . --config lenses/vite.config.mts --outDir dist --port 5173 --strictPort",
+    "prepublishOnly": "npm test && npm run check && npm run build"
   },
-  "dependencies": {
-    "@graffiti-garden/api": "^1.2.0",
-    "@graffiti-garden/implementation-decentralized": "^0.0.9",
-    "@graffiti-garden/wrapper-vue": "^1.2.2",
-    "@noble/hashes": "^2.0.1",
-    "idb": "^8.0.3",
-    "monaco-editor": "^0.55.1",
-    "monaco-editor-vue3": "^1.0.5",
-    "monaco-vim": "^0.4.4",
-    "penpal": "^7.0.6",
-    "vue": "^3.5.29",
-    "vue-router": "^5.0.3"
+  "author": "Theia Henderson",
+  "license": "GPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sportdeath/socialwiki.git"
   },
+  "bugs": {
+    "url": "https://github.com/sportdeath/socialwiki/issues"
+  },
+  "homepage": "https://github.com/sportdeath/socialwiki#readme",
   "devDependencies": {
-    "@types/node": "^25.3.0",
-    "@vitejs/plugin-vue": "^6.0.4",
-    "@vue/typescript-plugin": "^3.2.5",
-    "vite": "^7.3.1"
+    "concurrently": "^9.2.1",
+    "tsx": "^4.23.13"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
   }
 }
