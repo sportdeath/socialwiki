@@ -6,6 +6,7 @@ export const PERMISSION_STORAGE_KEY = "socialwiki.peripherals.permissions.v1";
 export type PermissionScope = Pick<PeripheralRequest, "source" | "capability">;
 type Decision = PermissionScope & { label: string; allow: boolean };
 export type PermissionEntry = Decision & { remembered: boolean; active: boolean };
+export type DataPermissionEntry = { source: SourceSegment[]; href: string };
 export type PermissionAnswer = { allow: boolean; remember: boolean };
 export type AskPermission = (source: SourceSegment[], permissions: PermissionRequirement[],
   signal: AbortSignal) => Promise<PermissionAnswer>;
@@ -24,7 +25,11 @@ export function permissionKey(scope: PermissionScope) {
   return JSON.stringify([scope.capability, ...scope.source.map(({ id }) => id)]);
 }
 
-export function createPeripheralPermissions(options: { storage?: Storage | null; ask?: AskPermission } = {}): PeripheralPermissions {
+export function createPeripheralPermissions(options: {
+  storage?: Storage | null;
+  ask?: AskPermission;
+  dataPermissionUrl?: (source: SourceSegment[]) => string;
+} = {}): PeripheralPermissions {
   let storage: Storage | undefined;
   try { storage = options.storage === undefined ? window.localStorage : options.storage ?? undefined; } catch { /* Session only. */ }
   let decisions = new Map<string, Decision>();
@@ -80,6 +85,20 @@ export function createPeripheralPermissions(options: { storage?: Storage | null;
       (entry.active || openSources.has(sourceKey(entry.source))))
       .map((entry) => ({ ...entry, source: openSources.get(sourceKey(entry.source)) ?? entry.source }));
   }
+  function dataEntries(): DataPermissionEntry[] {
+    const dataPermissionUrl = options.dataPermissionUrl;
+    if (!dataPermissionUrl) return [];
+    const openSources = new Map<string, SourceSegment[]>();
+    for (const source of documents) {
+      if (visibleSource.every((segment, index) => source[index]?.id === segment.id)) {
+        openSources.set(sourceKey(source), source);
+      }
+    }
+    return [...openSources.values()]
+      .sort((left, right) => left.map(({ name }) => name).join("\n")
+        .localeCompare(right.map(({ name }) => name).join("\n")))
+      .map((source) => ({ source, href: dataPermissionUrl(source) }));
+  }
   function revoke(scope: PermissionScope) {
     const key = permissionKey(scope);
     load();
@@ -88,7 +107,11 @@ export function createPeripheralPermissions(options: { storage?: Storage | null;
     for (const [stop, requested] of [...active]) if (requested.some((decision) => permissionKey(decision) === key)) stop();
     notify(); ui?.refresh();
   }
-  const ui = options.ask ? undefined : createPermissionUI(entries, revoke);
+  const ui = options.ask ? undefined : createPermissionUI(
+    entries,
+    revoke,
+    options.dataPermissionUrl ? dataEntries : undefined,
+  );
   const ask = options.ask ?? ui!.ask;
   load();
   window.addEventListener("storage", (event) => {

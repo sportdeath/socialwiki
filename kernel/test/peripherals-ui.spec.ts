@@ -60,6 +60,32 @@ describe("peripheral permission dismissal", () => {
     expect(JSON.parse(storage.getItem(PERMISSION_STORAGE_KEY)!).map((s: { source: { id: string }[] }) => s.source.at(-1)!.id))
       .toEqual(["child", "sibling", "closed"]);
   });
+  it("links to data permissions for each unique open scope in the subtree", () => {
+    const permissions = createPeripheralPermissions({
+      storage: null,
+      dataPermissionUrl: (source) =>
+        `https://guard.example/audit?source=${encodeURIComponent(JSON.stringify(source))}`,
+    });
+    const closeFirst = permissions.registerDocument(scope.source);
+    const closeSecond = permissions.registerDocument(scope.source);
+    permissions.registerDocument([...scope.source, { id: "child", name: "Child" }]);
+    permissions.registerDocument([{ id: "sibling", name: "Sibling" }]);
+    permissions.show(scope.source);
+
+    const panel = document.body.lastElementChild!.shadowRoot!.querySelector("dialog")!;
+    const links = [...panel.querySelectorAll<HTMLAnchorElement>("#data-links a")];
+    expect(links).toHaveLength(2);
+    expect(links.map((link) => link.getAttribute("aria-label"))).toEqual([
+      expect.stringContaining("Map"),
+      expect.stringContaining("Map › Child"),
+    ]);
+    expect(links.every((link) => link.href.startsWith("https://guard.example/audit?source="))).toBe(true);
+
+    closeFirst();
+    expect(panel.querySelectorAll("#data-links a")).toHaveLength(2);
+    closeSecond();
+    expect(panel.querySelectorAll("#data-links a")).toHaveLength(1);
+  });
   it("retains saved decisions while hiding pages after their last instance closes", () => {
     const storage = new DOMStorage();
     const saved = JSON.stringify([{ ...scope, label: "location", allow: false }]);

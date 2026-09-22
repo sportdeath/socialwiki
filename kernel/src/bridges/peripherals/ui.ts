@@ -1,9 +1,13 @@
 import theme from "../../../../theme.css";
 import style from "./ui.css";
-import type { AskPermission, PermissionAnswer, PermissionEntry, PermissionScope } from "./permissions";
+import type { AskPermission, DataPermissionEntry, PermissionAnswer, PermissionEntry, PermissionScope } from "./permissions";
 
 /** A fixed host-owned surface. Only textContent receives document-supplied labels. */
-export function createPermissionUI(entries: () => PermissionEntry[], revoke: (scope: PermissionScope) => void) {
+export function createPermissionUI(
+  entries: () => PermissionEntry[],
+  revoke: (scope: PermissionScope) => void,
+  dataEntries?: () => DataPermissionEntry[],
+) {
   const container = document.createElement("div");
   const shadow = container.attachShadow({ mode: "open" });
   shadow.innerHTML = `<style>${theme}\n${style}</style>
@@ -15,8 +19,16 @@ export function createPermissionUI(entries: () => PermissionEntry[], revoke: (sc
         <div class="actions"><button id="deny" autofocus>Deny</button><button id="allow" class="allow">Allow</button></div>
       </section>
       <section id="manager" hidden>
-        <p id="empty">No permissions for currently open pages.</p>
-        <table><thead><tr><th scope="col">Site</th><th scope="col">Permission</th><th scope="col">Action</th></tr></thead><tbody></tbody></table>
+        <section id="data-manager" hidden>
+          <h3>Data access</h3>
+          <p id="data-empty">No pages are currently open.</p>
+          <ul id="data-links"></ul>
+        </section>
+        <section class="manager-section">
+          <h3>Device and browser access</h3>
+          <p id="empty">No device permissions for currently open pages.</p>
+          <table><thead><tr><th scope="col">Site</th><th scope="col">Permission</th><th scope="col">Action</th></tr></thead><tbody></tbody></table>
+        </section>
         <div class="actions"><button id="close">Close</button></div>
       </section>
     </dialog>`;
@@ -54,6 +66,20 @@ export function createPermissionUI(entries: () => PermissionEntry[], revoke: (sc
 
   function renderManager() {
     const rows = entries();
+    const dataRows = dataEntries?.() ?? [];
+    find("#data-manager").hidden = dataEntries === undefined;
+    find("#data-empty").hidden = dataRows.length > 0;
+    find("#data-links").replaceChildren(...dataRows.map((entry) => {
+      const item = document.createElement("li");
+      const name = document.createElement("span");
+      name.textContent = label(entry);
+      const link = document.createElement("a");
+      link.href = entry.href;
+      link.textContent = "Review data permissions ↗";
+      link.setAttribute("aria-label", `Review data permissions for ${label(entry)}`);
+      item.append(name, link);
+      return item;
+    }));
     find("#empty").hidden = rows.length > 0;
     find("table").hidden = rows.length === 0;
     find("tbody").replaceChildren(...rows.map((entry) => {

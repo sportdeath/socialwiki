@@ -10,6 +10,7 @@ dialog {
 dialog.manager { width: 640px; max-width: calc(100vw - 4rem); }
 dialog::backdrop { background: var(--backdrop-color); }
 h2 { margin-top: 0; color: var(--title-color); }
+h3 { margin: 0 0 .5rem; color: var(--title-color); font-size: 1rem; }
 p, td, th { overflow-wrap: anywhere; }
 button {
   font: inherit;
@@ -21,7 +22,7 @@ button {
   cursor: pointer;
 }
 button:hover { background: var(--background-color-interactive-hover); }
-button:focus-visible, input:focus-visible { outline: 2px solid var(--link-color); outline-offset: 2px; }
+button:focus-visible, input:focus-visible, a:focus-visible { outline: 2px solid var(--link-color); outline-offset: 2px; }
 .allow { color: var(--accent-button-text); background: var(--accent-button-background); border-color: transparent; }
 .allow:hover { background: var(--accent-button-background-hover); }
 input { accent-color: var(--accent-button-background); }
@@ -29,12 +30,19 @@ input { accent-color: var(--accent-button-background); }
 #request .actions { justify-content: space-between; }
 #source { font-weight: 600; }
 label { display: block; margin-top: 1rem; }
+#data-manager:not([hidden]) + .manager-section { margin-top: 1.25rem; border-top: 1px solid var(--border-color); padding-top: 1.25rem; }
+#data-links { display: grid; gap: .5rem; margin: 0; padding: 0; list-style: none; }
+#data-links li { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+#data-links span { min-width: 0; overflow-wrap: anywhere; }
+#data-links a { flex: none; color: var(--link-color); }
+#data-links a:hover { color: var(--link-hover-color); }
 table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 th, td { text-align: left; vertical-align: top; padding: .75rem .5rem; border-bottom: 1px solid var(--border-color); }
 th:first-child, td:first-child { padding-left: 0; }
 th:last-child, td:last-child { width: 110px; text-align: right; padding-right: 0; }
 small { display: block; margin-top: .25rem; color: var(--secondary-color); }
 @media (max-width: 480px) {
+  #data-links li { align-items: start; flex-direction: column; gap: .15rem; }
   th, td { padding: .6rem .25rem; }
   th:last-child, td:last-child { width: 75px; }
   td button { padding: .4em; }

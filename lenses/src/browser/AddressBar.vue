@@ -245,7 +245,9 @@ function selectAddress(event: MouseEvent) {
     border-bottom-right-radius: 0;
 }
 
-.address-search:hover:not(:has(input[type="text"]:disabled)):not(:has(.dropdown)) {
+.address-search:hover:not(:has(input[type="text"]:disabled)):not(:has(.dropdown)):not(
+        :has(.guard-permissions:hover)
+    ) {
     background: var(--background-color-interactive-hover);
 }
 

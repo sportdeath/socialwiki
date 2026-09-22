@@ -18,8 +18,8 @@
                 <button
                     type="button"
                     class="guard-permissions"
-                    title="Show app permissions"
-                    aria-label="Show app permissions"
+                    title="Show permissions"
+                    aria-label="Show permissions"
                     @click="openPeripheralPermissions"
                 >
                     <span class="permissions-shield-icon" aria-hidden="true"></span>
@@ -456,6 +456,7 @@ header {
 .guard-permissions:hover {
     color: var(--secondary-hover-color);
     background: var(--background-color-interactive-hover);
+    text-decoration: none;
 }
 .permissions-shield-icon {
     display: inline-block;

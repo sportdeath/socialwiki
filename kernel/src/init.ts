@@ -7,6 +7,7 @@ import { serializeRouteUrl } from "./bridges/navigation/route-serialization";
 import { handleNavigation } from "./bridges/navigation/shared";
 import { createParentBridgeEndpointInstaller } from "./bridges/parent";
 import { createPeripheralsHost } from "./bridges/peripherals/host";
+import { createPeripheralPermissions } from "./bridges/peripherals/permissions";
 import { createDefaultResolver } from "./bridges/resolution/default";
 import { serializeDocument } from "./bridges/resolution/document";
 import {
@@ -58,7 +59,12 @@ if (window.top !== window) {
 
     // Install top-level services: Graffiti, peripherals, resolution, and navigation
     const graffiti = new GraffitiGuarded();
-    const peripherals = createPeripheralsHost();
+    const peripherals = createPeripheralsHost(
+      undefined,
+      createPeripheralPermissions({
+        dataPermissionUrl: (source) => graffiti.auditUrl({ source }),
+      }),
+    );
     handleDocumentResolution(createDefaultResolver(kernelUrl.href));
     // Most pages resolve URLs relative to a default route (https://social.wiki),
     // but allow browser-like documents to override this route with their own roots
