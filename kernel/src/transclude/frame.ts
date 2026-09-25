@@ -118,10 +118,11 @@ export class TranscludeFrame {
       : null;
     // Safari before version 27 rejects deeply nested about:srcdoc documents
     // as prohibited self-references (WebKit bug 305276). Once a nested frame
-    // uses a sandboxed data URL, keep its descendants on data URLs as well;
-    // returning to srcdoc at a greater total depth triggers the same failure.
+    // uses a sandboxed data URL, keep its descendants on data URLs as well.
+    // Only WebKit needs this fallback. Chromium treats data: frames as insecure
+    // and hides secure-context APIs such as navigator.clipboard.
     // https://bugs.webkit.org/show_bug.cgi?id=305276
-    const dataUrl = /^(about:srcdoc|data:)/.test(window.location.href)
+    const dataUrl = useDataUrlForNestedFrame(window.location.href, navigator.userAgent)
       ? `data:text/html;charset=utf-8,${encodeURIComponent(next.srcdoc)}`
       : null;
 
@@ -169,6 +170,14 @@ export class TranscludeFrame {
     }
     this.#displayedFrame = null;
   }
+}
+
+export function useDataUrlForNestedFrame(parentUrl: string, userAgent: string): boolean {
+  // Chromium's UA also contains AppleWebKit, so exclude its engine tokens.
+  // CriOS/EdgiOS on iOS use WebKit and retain the workaround.
+  return /^(about:srcdoc|data:)/.test(parentUrl) &&
+    /AppleWebKit\//.test(userAgent) &&
+    !/(?:Chrome|Chromium|Edg|OPR)\//.test(userAgent);
 }
 
 function createIframe() {

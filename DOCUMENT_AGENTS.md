@@ -37,14 +37,15 @@ OUTPUT RULES
 - NO BUILD TOOLING.
 - The document runs in a sandboxed originless iframe. Some browser functionalities are restored by <https://social.wiki/init.js> but others are unavailable.
   - Do NOT use cookies, localStorage, or IndexedDB. Use Graffiti for data persistence.
-  - Do NOT use service workers or push notifications.
-  - Use crypto.getRandomValues for secure randomness. Do NOT use crypto.randomUUID or crypto.subtle.
-  - You may use the following when supported by the browser and permitted by the user:
+  - You may use the following when available; some require user permission or interaction:
     - Camera and microphone via navigator.mediaDevices.getUserMedia()
     - Device location via navigator.geolocation
+    - Clipboard via navigator.clipboard
     - Notifications via Notification
+    - crypto.randomUUID(), crypto.getRandomValues() and crypto.subtle
     - Local files via \<input type="file"> or showOpenFilePicker(), showSaveFilePicker(), and showDirectoryPicker()
     - Downloads are permitted via \<a href="..." download>
+  - Do NOT use service workers or push notifications.
   - Do NOT use screen capture, audio output selection, Web Serial, WebUSB, Web Bluetooth, WebHID, Web MIDI, or Web NFC. Do not assume other device APIs work.
   - External fetch() requests need the server to allow cross-origin requests; the document sends Origin: null.
   - Some external iframe embeds may not work, such as YouTube embeds. Test before relying on them or link instead.
@@ -252,9 +253,9 @@ CHANNEL & PRIVACY STRATEGY (must be explicit)
 MODIFYING OBJECTS AND DELETING
 - Objects cannot be changed, and only an object's creator can delete an object.
 - To enable editing, post a new object describing the change, then discover and interpret in UI as appropriate; it does not replace the original object.
-  - Example: { action: 'Update post', "new content": "My edited content", post: "GRAFFITI_OBJECT_URL" }
+  - Example value: { action: 'Update post', "new content": "My edited content", post: "GRAFFITI_OBJECT_URL" }
 - To enable removal by non-owners, post a new object describing the removal and interpret it in your UI; it does not delete the original object.
-  - Example: { action: 'Remove post', post: "GRAFFITI_OBJECT_URL" }
+  - Example value: { action: 'Remove post', post: "GRAFFITI_OBJECT_URL" }
 - Create additional objects to enable other forms of collaboration and moderation.
 
 IMPLEMENTATION REQUIREMENTS

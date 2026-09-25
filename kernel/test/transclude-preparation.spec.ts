@@ -1,8 +1,23 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { TranscludeFrame } from "../src/transclude/frame";
+import { TranscludeFrame, useDataUrlForNestedFrame } from "../src/transclude/frame";
 import type { NavigableTransclude } from "../src/bridges/navigation/shared";
 
 afterEach(() => { document.body.replaceChildren(); vi.unstubAllGlobals(); });
+
+it("uses data URLs only for nested WebKit frames", () => {
+  const chrome = "Mozilla/5.0 AppleWebKit/537.36 Chrome/153.0.0.0 Safari/537.36";
+  const firefox = "Mozilla/5.0 Gecko/20100101 Firefox/145.0";
+  const safari = "Mozilla/5.0 AppleWebKit/605.1.15 Version/26.0 Safari/605.1.15";
+  const iosChrome = "Mozilla/5.0 AppleWebKit/605.1.15 CriOS/153.0.0.0 Mobile Safari/604.1";
+  expect(useDataUrlForNestedFrame("about:srcdoc", chrome)).toBe(false);
+  expect(useDataUrlForNestedFrame("data:text/html,hello", chrome)).toBe(false);
+  expect(useDataUrlForNestedFrame("about:srcdoc", firefox)).toBe(false);
+  expect(useDataUrlForNestedFrame("about:srcdoc", safari)).toBe(true);
+  expect(useDataUrlForNestedFrame("data:text/html,hello", safari)).toBe(true);
+  expect(useDataUrlForNestedFrame("about:srcdoc", iosChrome)).toBe(true);
+  expect(useDataUrlForNestedFrame("blob:null/123", safari)).toBe(false);
+});
+
 it("waits for bridge metadata before mounting and discards a superseded preparation", async () => {
   vi.stubGlobal("origin", "null");
   const host = document.createElement("div") as unknown as NavigableTransclude;
