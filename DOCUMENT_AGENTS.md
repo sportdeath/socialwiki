@@ -1,6 +1,6 @@
-# Social.Wiki App-Building Context
+# Social.Wiki Document Authoring
 
-Use this as background context when generating Social.Wiki apps with Graffiti + Vue. It describes the runtime, data model, API shapes, and UX constraints that generated apps should follow.
+Use this as background context when creating or editing Social.Wiki documents with Graffiti + Vue. It describes the runtime, data model, API shapes, and UX constraints that generated apps should follow.
 
 OUTPUT RULES
 - Output exactly ONE runnable HTML file in ONE code block.
@@ -35,11 +35,23 @@ OUTPUT RULES
   }).use(GraffitiPlugin, { graffiti: new window.Graffiti() })
     .mount("#app")
 - NO BUILD TOOLING.
-- The app will run in a sandboxed iframe. DO NOT USE localStorage, crypto, etc.
+- The document runs in a sandboxed originless iframe. Some browser functionalities are restored by <https://social.wiki/init.js> but others are unavailable.
+  - Do NOT use cookies, localStorage, or IndexedDB. Use Graffiti for data persistence.
+  - Do NOT use service workers or push notifications.
+  - Use crypto.getRandomValues for secure randomness. Do NOT use crypto.randomUUID or crypto.subtle.
+  - You may use the following when supported by the browser and permitted by the user:
+    - Camera and microphone via navigator.mediaDevices.getUserMedia()
+    - Device location via navigator.geolocation
+    - Notifications via Notification
+    - Local files via \<input type="file"> or showOpenFilePicker(), showSaveFilePicker(), and showDirectoryPicker()
+    - Downloads are permitted via \<a href="..." download>
+  - Do NOT use screen capture, audio output selection, Web Serial, WebUSB, Web Bluetooth, WebHID, Web MIDI, or Web NFC. Do not assume other device APIs work.
+  - External fetch() requests need the server to allow cross-origin requests; the document sends Origin: null.
+  - Some external iframe embeds may not work, such as YouTube embeds. Test before relying on them or link instead.
 
 GRAFFITI OBJECT MODEL (must adhere)
 GraffitiObject contains:
-- value: freeform JSON but prefer Activity Vocabulary properties when appropriate.
+- value: freeform JSON. Use human-readable properties and values because system permission dialogs show them to users.
 - channels: string[] (discoverable ONLY by querying channels)
 - allowed?: string[] | null (omitted/undefined => public; empty [] => creator-only; list => restricted to listed actors)
 - actor: string (creator; only creator can delete)
@@ -87,19 +99,19 @@ You may use these methods; do not invent other APIs:
 - delete(
     url: string | { url: string },
     session: GraffitiSession
-  ) => Promise<GraffitiObjectBase>
+  ) => Promise<GraffitiObject>
   - Only creator may delete.
 
 - postMedia(
     partialMedia: { data: Blob, allowed?: string[] | null },
     session: GraffitiSession
   ) => Promise<string>
-  - Provide everything except actor; it is assigned and returned.
   - Returns media URL; media is NOT discoverable.
 
-- getMedia(mediaUrl: string, accept: { types?: string[] }, session?: GraffitiSession | null)
+- getMedia(mediaUrl: string, accept: { types?: string[], maxBytes?: number }, session?: GraffitiSession | null)
   => Promise<GraffitiMedia>
   - Accept types are mime types (e.g. image/*, text/plain); if no match, call fails.
+  - maxBytes limits the accepted media size in bytes.
   - Accept is REQUIRED even if you want to accept all types: getMedia(url, {})
   - If session omitted, media must be public (allowed undefined/null).
   - Only use session if you explicitly want to include private media.
@@ -119,6 +131,7 @@ You may use these methods; do not invent other APIs:
 - handleToActor(handle: string) => Promise<string>
 
 VUE WRAPPER: GLOBALS + COMPOSITION HELPERS (use only these)
+Here, Ref<T> is a reactive value accessed with .value in JavaScript; MaybeRefOrGetter<T> accepts a value, ref, or getter.
 - In templates / Options API:
   - $graffiti (Graffiti instance)
   - $graffitiSession (Ref<GraffitiSession | null | undefined>)
@@ -135,41 +148,42 @@ VUE COMPOSABLE SHAPES (components are equivalent, but outputs come via v-slot)
      autopoll?: MaybeRefOrGetter<boolean>,
    ) => {
      isFirstPoll: Ref<boolean>;
-     objects: Ref<GraffitiObject<Schema>[]>;
+     objects: Ref<GraffitiObject[]>;
      poll: () => Promise<void>;
    }
    - If session omitted, will only return public objects (allowed undefined/null).
    - Only use session if you explicitly want to include private objects.
-   - Component <graffiti-discover :channels="[...]" :schema="{...}" ...>
-     - Emits the same outputs through v-slot: { objects, isFirstPoll, poll }
+   - Component \<graffiti-discover :channels="[...]" :schema="{...}" v-slot="{ objects, isFirstPoll, poll }">
    - AUTOPOLL IS RESOURCE HEAVY and should be used AT MOST ONCE to enable real-time updates (e.g. messaging).
    - Local changes (post, delete) propagate to discover in real time by default and at no penalty; no autopoll is necessary.
    - YOU MUST PASS AN ARRAY OF CHANNELS EVEN IF YOU ARE ONLY LISTENING TO ONE: :channels="['my-channel']"
 
 2) useGraffitiGet(
-     url: MaybeRefOrGetter<string | GraffitiObjectUrl>,
+     url: MaybeRefOrGetter<string | { url: string }>,
      schema: MaybeRefOrGetter<JSONSchema>,
      session?: MaybeRefOrGetter<GraffitiSession | null | undefined>,
    ) => {
-     object: Ref<GraffitiObject<Schema> | null | undefined>;
+     object: Ref<GraffitiObject | null | undefined>;
+     error: Ref<Error | null>;
      poll: () => Promise<void>;
    }
    - If session omitted, will only return public objects (allowed undefined/null).
    - Only use session if you explicitly want to include private objects.
-   - object is undefined while loading, null if not found.
-   - Component equivalent: <graffiti-get :url="url" :schema="{ ... }"> via v-slot: { object, poll }
+   - object is undefined while loading and null when no object is available. When object is null, error === null means not found; otherwise error contains the failure.
+   - Component equivalent: \<graffiti-get :url="url" :schema="{ ... }" v-slot="{ object, error, poll }">
 
 3) useGraffitiGetMedia(
      url: MaybeRefOrGetter<string>,
-     accept: MaybeRefOrGetter<GraffitiMediaAccept>,
+     accept: MaybeRefOrGetter<{ types?: string[], maxBytes?: number }>,
      session?: MaybeRefOrGetter<GraffitiSession | null | undefined>,
    ) => {
      media: Ref<GraffitiMedia & { dataUrl: string } | null | undefined>;
+     error: Ref<Error | null>;
      poll: () => Promise<void>;
    }
    - Also provides a dataUrl field for convenient media rendering.
-   - media is undefined while loading, null if not found or accept mismatch.
-   - Component equivalent: <graffiti-get-media :url="url" :accept="{ ... }" ...> via v-slot: { media, poll }
+   - media is undefined while loading and null when no media is available. When media is null, error === null means not found; otherwise error contains the failure.
+   - Component equivalent: \<graffiti-get-media :url="url" :accept="{ ... }" v-slot="{ media, error, poll }">
    - Accept is REQUIRED even if you want to accept all types. In that case accept={}
    - By default, the component already displays most media types (images, PDF, audio, video, etc.) with a download button fallback. Unless you want to process the media itself, do not put template code inside the <graffiti-get-media></graffiti-get-media> tag.
    - If session omitted, will only return public media (allowed undefined/null).
@@ -177,35 +191,39 @@ VUE COMPOSABLE SHAPES (components are equivalent, but outputs come via v-slot)
 
 4) useGraffitiActorToHandle(
      actor: MaybeRefOrGetter<string>
-   ) => { handle: Ref<string | null | undefined> }
-   - handle undefined while loading; null if not found.
-   - Component equivalent: <graffiti-actor-to-handle :actor="actor"> via v-slot: { handle }
-   - By default, the component will display the actor, so do not put anything inside the tags unless you want to do something with it.
+   ) => { handle: Ref<string | null | undefined>; error: Ref<Error | null> }
+   - handle is undefined while loading and null when no handle is available. When handle is null, error === null means not found; otherwise error contains the failure.
+   - Component equivalent: \<graffiti-actor-to-handle :actor="actor" v-slot="{ handle, error }">
+   - By default, the component displays the handle, so do not put anything inside the tags unless you want to do something with it.
 
 5) useGraffitiHandleToActor(
      handle: MaybeRefOrGetter<string>
-   ) => { actor: Ref<string | null | undefined> }
-   - actor undefined while loading; null if not found.
-   - Component equivalent: <graffiti-handle-to-actor :handle="handle"> via v-slot: { actor }
-   - By default, the component will display the handle, so do not put anything inside the tags unless you want to do something with it.
+   ) => { actor: Ref<string | null | undefined>; error: Ref<Error | null> }
+   - actor is undefined while loading and null when no actor is available. When actor is null, error === null means not found; otherwise error contains the failure.
+   - Component equivalent: \<graffiti-handle-to-actor :handle="handle" v-slot="{ actor, error }">
+   - By default, the component displays the actor, so do not put anything inside the tags unless you want to do something with it.
 
-DO NOT USE SESSION UNLESS NECESSARY (triggers system security dialog)
-- Only use methods/composables/components with a session in response to a user action to avoid unexpected dialogs, especially during page load.
-- For methods/composables/components with an optional session, leave session undefined unless you NEED to retrieve private objects or media. These are: get, getMedia, useGraffitiDiscover, <graffiti-discover>, useGraffitiGet, <graffiti-get>, useGraffitiGetMedia, <graffiti-get-media>.
+MITIGATING SYSTEM PROMPTS
+Session-backed Graffiti actions may trigger the system to prompt the user for confirmation. Gets/discoveries without a session, or gets/discoveries that return only public data, do not prompt. Users may remember decisions for similar actions, such as posting or deleting objects with the same structure or similar media. Posting a private object/media file also permits later reads of that exact data.
 
+To make your app usable under this model:
+- Keep posted object shapes consistent so remembered decisions apply to similar posts/deletes.
+- Make object properties and values human-readable because they appear in permission prompts. HTTP(S) links, Graffiti URLs and actors, UUIDs, and timestamps are displayed meaningfully.
+- Start session-backed actions from a user interaction unless they continue a feature the user enabled. For example, post read receipts automatically only after the user opts in; record that choice in Graffiti so the app can find it on later visits.
+  
 ROUTE STATE
-- YOU CANNOT USE window.location. To save info in the URL you may get/set:
+- Do NOT use window.location for state or navigation. A document does not have access to its own location but subroute information can be read/saved in the URL by getting/setting:
   - window.address (string | undefined) - main sub-address for a SPA
     - window.addEventListener("addresschange", () => { window.address })
-  - window.params (URLSearchParams | undefined)
+  - window.params (URLSearchParams) - additional parameters for the app
     - window.addEventListener("paramschange", () => { window.params })
-  - address/params are not set until after page load: use event listeners.
+  - Route state may arrive after load; listen for changes.
 
 APP DESIGN REQUIREMENTS (interpret from USER_REQUEST)
 A) Extract and list: core entities, actions, and views.
 B) Define exactly which Graffiti object "types" you will use (e.g., Post, Like, Comment, Follow, etc.).
 C) For each object type, define:
-   - JSON schema (required fields, example, use Activity Vocabulary properties when possible)
+   - JSON schema (required fields, example, make as human readable as possible)
    - allowed policy (public vs private)
    - channels used (and why)
 D) Identify which Graffiti API methods you will use (by name).
@@ -233,8 +251,10 @@ CHANNEL & PRIVACY STRATEGY (must be explicit)
 
 MODIFYING OBJECTS AND DELETING
 - Objects cannot be changed, and only an object's creator can delete an object.
-- To enable editing, post { activity: "Update" } objects, discover them, and interpret them as updates to earlier objects.
-- To enable deletion by non-owners, post { activity: "Remove" } objects, discover them, and interpret them as removals in your UI.
+- To enable editing, post a new object describing the change, then discover and interpret in UI as appropriate; it does not replace the original object.
+  - Example: { action: 'Update post', "new content": "My edited content", post: "GRAFFITI_OBJECT_URL" }
+- To enable removal by non-owners, post a new object describing the removal and interpret it in your UI; it does not delete the original object.
+  - Example: { action: 'Remove post', post: "GRAFFITI_OBJECT_URL" }
 - Create additional objects to enable other forms of collaboration and moderation.
 
 IMPLEMENTATION REQUIREMENTS
