@@ -86,8 +86,12 @@ function setup() {
       : `site:${name}`;
     displayedSiteName.value = name;
     const editors = trustedEditors.value;
+    // A site lookup needs both its first discovery and the trust list.
+    // An explicit version URL can be loaded without either.
     if (!requestedVersion && (isFirstPoll.value || !editors)) {
       if (force || contentKey !== currentContentKey) {
+        // A new site or forced refresh invalidates any pending render and
+        // shows loading until the data needed to select a version arrives.
         activeRenderVersion++;
         currentContentKey = "";
         renderedAddress = "";
@@ -97,8 +101,11 @@ function setup() {
       return;
     }
 
+    // Avoid work when both the site/version key and its route are unchanged.
     if (!force && address === renderedAddress && contentKey === currentContentKey)
       return;
+    // A query-only change belongs to the same document: update its route
+    // without fetching HTML or replacing the transcluded child.
     if (!force && contentKey === currentContentKey) {
       renderedAddress = address;
       siteQuery.value = query;
