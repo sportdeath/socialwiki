@@ -133,14 +133,14 @@ it("lets document navigation handlers replace the transclusion default", () => {
   const navigate = vi.fn((to: string, transclude: NavigableTransclude) => {
     transclude.navigate(to);
   });
-  const stopHandling = handleNavigation(navigate);
+  handleNavigation(navigate);
   try {
     receive(element, "sw-navigate", { to: "?/alice" });
     expect(navigate).toHaveBeenCalledWith("?/alice", element);
     expect(element.getAttribute("query")).toBe("?/alice");
     expect(element.onUnhandledEvent).not.toHaveBeenCalled();
   } finally {
-    stopHandling();
+    handleNavigation(undefined);
   }
 });
 

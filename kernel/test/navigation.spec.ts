@@ -321,13 +321,13 @@ it("uses an installed navigation handler instead of the fallback", () => {
   });
   const onNavigate = vi.fn();
   const fallback = vi.fn();
-  const stopHandling = handleNavigation(onNavigate);
+  handleNavigation(onNavigate);
 
   dispatchNavigation("?/alice", transclude, fallback);
   expect(onNavigate).toHaveBeenCalledWith("?/alice", transclude);
   expect(fallback).not.toHaveBeenCalled();
 
-  stopHandling();
+  handleNavigation(undefined);
   dispatchNavigation("?/bob", transclude, fallback);
   expect(fallback).toHaveBeenCalledOnce();
 });
@@ -343,13 +343,13 @@ it("handles navigation inside the navigation bridge", () => {
     createDocumentRouteState(),
   );
   const onNavigate = vi.fn();
-  const stopHandling = handleNavigation(onNavigate);
+  handleNavigation(onNavigate);
 
   events.child.emit(NAVIGATE_EVENT, { to: "?/handled" });
   expect(onNavigate).toHaveBeenCalledWith("?/handled", host);
   expect(host.hasAttribute("query")).toBe(false);
 
-  stopHandling();
+  handleNavigation(undefined);
   events.child.emit(NAVIGATE_EVENT, { to: "?/default" });
   expect(host.getAttribute("query")).toBe("?/default");
 

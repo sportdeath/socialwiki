@@ -4,7 +4,7 @@ Use this as background context when creating or editing Social.Wiki documents wi
 
 OUTPUT RULES
 - Output exactly ONE runnable HTML file in ONE code block.
-- Include <script src="https://social.wiki/init.js"></script>. This defines window.Graffiti and provides an import map that lets you import from "vue" and related packages directly.
+- Include <script src="https://social.wiki/init.js"></script> in <head> before any other scripts. It sets up the runtime, defines window.Graffiti and other globals, and provides an import map for "vue" and related packages.
 - HTML structure:
   <!-- empty placeholder for mounting -->
   <div id="app">Loading screen</div>
@@ -36,6 +36,7 @@ OUTPUT RULES
     .mount("#app")
 - NO BUILD TOOLING.
 - The document runs in a sandboxed originless iframe. Some browser functionalities are restored by <https://social.wiki/init.js> but others are unavailable.
+  - Do NOT use window.location, window.origin, or window.open
   - Do NOT use cookies, localStorage, or IndexedDB. Use Graffiti for data persistence.
   - You may use the following when available; some require user permission or interaction:
     - Camera and microphone via navigator.mediaDevices.getUserMedia()
@@ -54,7 +55,7 @@ GRAFFITI OBJECT MODEL (must adhere)
 GraffitiObject contains:
 - value: freeform JSON. Use human-readable properties and values because system permission dialogs show them to users.
 - channels: string[] (discoverable ONLY by querying channels)
-- allowed?: string[] | null (omitted/undefined => public; empty [] => creator-only; list => restricted to listed actors)
+- allowed?: string[] | null (omitted/undefined/null => public; [] => creator-only; list => restricted to listed actors)
 - actor: string (creator; only creator can delete)
 - url: string (unique object identifier/locator)
 
@@ -93,7 +94,7 @@ You may use these methods; do not invent other APIs:
     session?: GraffitiSession | null
   ) => Promise<GraffitiObject>
   - Validates against required JSON schema.
-  - If session omitted, object must be public (allowed undefined).
+  - If session omitted, object must be public (allowed omitted/undefined/null).
   - Only use session if you explicitly want to include private objects.
   - If retriever != creator, allowed/channels are masked (BCC-like).
 
@@ -114,7 +115,7 @@ You may use these methods; do not invent other APIs:
   - Accept types are mime types (e.g. image/*, text/plain); if no match, call fails.
   - maxBytes limits the accepted media size in bytes.
   - Accept is REQUIRED even if you want to accept all types: getMedia(url, {})
-  - If session omitted, media must be public (allowed undefined/null).
+  - If session omitted, media must be public (allowed omitted/undefined/null).
   - Only use session if you explicitly want to include private media.
 
 - deleteMedia(mediaUrl: string, session: GraffitiSession) => Promise<void>
@@ -152,7 +153,7 @@ VUE COMPOSABLE SHAPES (components are equivalent, but outputs come via v-slot)
      objects: Ref<GraffitiObject[]>;
      poll: () => Promise<void>;
    }
-   - If session omitted, will only return public objects (allowed undefined/null).
+   - If session omitted, will only return public objects (allowed omitted/undefined/null).
    - Only use session if you explicitly want to include private objects.
    - Component \<graffiti-discover :channels="[...]" :schema="{...}" v-slot="{ objects, isFirstPoll, poll }">
    - AUTOPOLL IS RESOURCE HEAVY and should be used AT MOST ONCE to enable real-time updates (e.g. messaging).
@@ -168,7 +169,7 @@ VUE COMPOSABLE SHAPES (components are equivalent, but outputs come via v-slot)
      error: Ref<Error | null>;
      poll: () => Promise<void>;
    }
-   - If session omitted, will only return public objects (allowed undefined/null).
+   - If session omitted, will only return public objects (allowed omitted/undefined/null).
    - Only use session if you explicitly want to include private objects.
    - object is undefined while loading and null when no object is available. When object is null, error === null means not found; otherwise error contains the failure.
    - Component equivalent: \<graffiti-get :url="url" :schema="{ ... }" v-slot="{ object, error, poll }">
@@ -187,7 +188,7 @@ VUE COMPOSABLE SHAPES (components are equivalent, but outputs come via v-slot)
    - Component equivalent: \<graffiti-get-media :url="url" :accept="{ ... }" v-slot="{ media, error, poll }">
    - Accept is REQUIRED even if you want to accept all types. In that case accept={}
    - By default, the component already displays most media types (images, PDF, audio, video, etc.) with a download button fallback. Unless you want to process the media itself, do not put template code inside the <graffiti-get-media></graffiti-get-media> tag.
-   - If session omitted, will only return public media (allowed undefined/null).
+   - If session omitted, will only return public media (allowed omitted/undefined/null).
    - Only use session if you explicitly want to include private media.
 
 4) useGraffitiActorToHandle(
@@ -207,24 +208,94 @@ VUE COMPOSABLE SHAPES (components are equivalent, but outputs come via v-slot)
 MITIGATING SYSTEM PROMPTS
 Session-backed Graffiti actions may trigger the system to prompt the user for confirmation. Gets/discoveries without a session, or gets/discoveries that return only public data, do not prompt. Users may remember decisions for similar actions, such as posting or deleting objects with the same structure or similar media. Posting a private object/media file also permits later reads of that exact data.
 
-To make your app usable under this model:
+To make your document usable under this model:
 - Keep posted object shapes consistent so remembered decisions apply to similar posts/deletes.
 - Make object properties and values human-readable because they appear in permission prompts. HTTP(S) links, Graffiti URLs and actors, UUIDs, and timestamps are displayed meaningfully.
-- Start session-backed actions from a user interaction unless they continue a feature the user enabled. For example, post read receipts automatically only after the user opts in; record that choice in Graffiti so the app can find it on later visits.
-  
-ROUTE STATE
-- Do NOT use window.location for state or navigation. A document does not have access to its own location but subroute information can be read/saved in the URL by getting/setting:
-  - window.address (string | undefined) - main sub-address for a SPA
+- Start session-backed actions from a user interaction unless they continue a feature the user enabled. For example, post read receipts automatically only after the user opts in; record that choice in Graffiti so the document can find it on later visits.
+
+ROUTING
+- Do NOT use window.location for accessing or modifying route state. A document intentionally does not have access to its own location for portability. However, subroute information can be read/saved to the document's URL by getting/setting:
+  - window.address (string | undefined) - main sub-address for a single-page application (SPA)
     - window.addEventListener("addresschange", () => { window.address })
   - window.params (URLSearchParams) - additional parameters for the app
     - window.addEventListener("paramschange", () => { window.params })
-  - Route state may arrive after load; listen for changes.
+  - window.query (string) - the raw query string combining address and params; starts with "?" if not empty
+    - window.addEventListener("querychange", () => { window.query })
+    - window.route.composeQuery(params?: URLSearchParams, address?: string): string
+    - window.route.parseQuery(query: string): { params?: URLSearchParams; address?: string }
+- Route state may arrive after load; listen for changes.
+- For query navigation on-click, use normal anchors: <a :href="query">. Clicks will not refresh the page.
+
+NAVIGATION
+- Do NOT use window.location or window.open for external navigation.
+- For navigation-on-click, use normal anchors: <a href="https://example.com">
+- For programmatic navigation: window.navigate("https://example.com")
+- Also works for relative navigation: window.navigate("?/profile")
+
+TRANSCLUSION (most documents do not need this)
+
+Transclusion By Source
+- A Social.Wiki document can be included within another Social.Wiki document by source HTML. Do NOT use a regular iframe. Use:
+  <sw-transclude :srcdoc="htmlString" :query="query"></sw-transclude>
+- Attributes:
+  - srcdoc supplies the child's HTML; query supplies the state available as the child's window.query.
+  - id identifies the child for permissions; name is a human-readable label for permission prompts. permission-scope="inherit" shares the parent's permission scope; use it only for trusted children.
+  - autosize="height", "width", or "both" resizes container to fit child content; bare autosize means both.
+  - route controls how navigation from the embedded document affects the browser URL. Relative links start from the child's assigned location. It does not choose what loads.
+    - Usually, if a transclude is selectively displayed at a given query (e.g. "?/profile"), use that query as the child's route: <sw-transclude ... route="?/profile"></sw-transclude>
+    - Without route, query navigation updates only the embedded document, leaving the browser URL unchanged. Rooted and external navigation are ignored by default.
+    - Use route="" when the child occupies the parent’s route, as in a transparent wrapper.
+    - Use a route starting with "#/" to give the child an absolute route independent of its parent (see Sites below).
+- window.emit(type, detail) sends from the child to its containing transclusion; transclude.send(type, detail) sends from parent to child. Cross-document event names must start with "sw-". Listen on the receiving transclusion or window with addEventListener and read event.detail; call event.preventDefault() immediately to mark it handled. Unhandled events do not cross further document boundaries unless forwarded, for example:
+  - transclude.onUnhandledEvent = ({ type, detail }) => window.emit(type, detail)
+  - window.onUnhandledEvent = ({ type, detail }) => transclude.send(type, detail)
+
+Sites and Transclusion by Reference
+- Social.Wiki documents are often published as "sites" which are identified by a "name" (string). A site's name and its query (string, empty if absent) combine to form that site's complete address (string):
+  - window.route.composeAddress(name: string, query: string): string
+  - window.route.parseAddress(address?: string): { name: string; query: string }
+- A site does NOT know its own name or full address, only its query (window.query). window.address is a subaddress that is part of the document's query.
+- Sites can be linked to through one of three built-in root "lenses": View (v), Edit (e), and History (h).
+  - View simply displays the site, Edit opens the site up for editing, and History displays past site versions
+  - lensAddress = window.route.composeAddress("v", window.route.composeQuery(undefined, siteAddress))
+  - For an absolute location, the lens address must be prepended with the root symbol "#/"
+  - Navigation on-click: <a :href="`#/${lensAddress}`">
+  - Programmatic navigation: window.navigate(`#/${lensAddress}`)
+- A site can be transcluded by reference via its address. The src attribute supersedes srcdoc; when src is set, its embedded query is used and the separate query attribute is ignored.
+  - <sw-transclude :src="siteAddress"></sw-transclude>
+
+Custom resolution (uncommon, advanced)
+- A document can act like a View lens and choose which published version of a site to display, using its own filtering or moderation rules.
+- Site versions are public Graffiti objects with this shape:
+  - channels: [siteName]
+  - value: { action: "Publish site", "site name": siteName, changes: string, document: mediaUrl, time: number, "previous versions"?: string[] }
+  - allowed is omitted. document is a text/html Graffiti media URL; time is milliseconds since the Unix epoch; "previous versions" contains site version object URLs.
+- A View lens selects a site version, loads its HTML, and displays it with <sw-transclude :srcdoc="html" :query="siteQuery" route=""></sw-transclude>. siteQuery comes from the site's address; route="" passes navigation through the lens.
+- A document may use window.handleDocumentResolution((src, signal) => ...) to choose which View lens resolves <sw-transclude src="..."> in that document and its nested child documents. Most documents leave the default resolver in place.
+  - The resolver returns { srcdoc: string, query: string } or a Promise and should honor signal during asynchronous work.
+  - Example: src="Garden?/flowers" resolves to { srcdoc: chosenViewLensHtml, query: "?/Garden?/flowers" }. The lens displays Garden at ?/flowers.
+- Lenses should report their output with window.emit("sw-lens-output", { status, srcdoc }). Status is "loading", "ok", "not-found", or "error". On "ok", srcdoc is the source HTML the lens displays or edits, and can be used to link to Edit with that HTML as the draft:
+  - editAddress = window.route.composeAddress("e", window.route.composeQuery(new URLSearchParams({ draft: srcdoc }), siteAddress))
+  - <a :href="`#/${editAddress}`">Edit draft</a>
+
+Custom navigation (uncommon, advanced)
+- Links and window.navigate() in an embedded document send navigation requests to its parent. By default, the requesting element's route attribute controls how they are handled.
+- window.handleNavigation((to, childEl) => { ... }) replaces that default for this document's children. to is the requested destination; childEl is the requesting <sw-transclude> element.
+- In the handler, call childEl.navigate(to) to apply a local query starting with "?" (updating its src or query), or window.navigate(to) to forward navigation to the parent.
+- Example (local query navigation, other destinations forwarded):
+  window.handleNavigation((to, childEl) => {
+    if (to.startsWith("?")) childEl.navigate(to);
+    else window.navigate(to);
+  });
 
 APP DESIGN REQUIREMENTS (interpret from USER_REQUEST)
 A) Extract and list: core entities, actions, and views.
 B) Define exactly which Graffiti object "types" you will use (e.g., Post, Like, Comment, Follow, etc.).
 C) For each object type, define:
-   - JSON schema (required fields, example, make as human readable as possible)
+   - JSON schema (required fields, example)
+     - Make as human-readable as possible
+     - Duck-type objects by required properties (avoid "type"/"kind" properties for artifacts; use "action" for verbs)
+     - Leave additionalProperties allowed for extensions
    - allowed policy (public vs private)
    - channels used (and why)
 D) Identify which Graffiti API methods you will use (by name).
@@ -244,7 +315,8 @@ CHANNEL & PRIVACY STRATEGY (must be explicit)
   - object URL (e.g. for comments/likes on a post)
   - topic/page/space name (e.g. for a single shared space)
   - other stable identifiers as needed
-  - Do NOT use location.href. It is not available.
+  - Do NOT use window.location.href. It is not available.
+  - actor/object/media URLs are already prefixed but custom channels schemes should use custom prefixes like `topic:` or `geolocation:` for disambiguation. Do NOT prefix with a URL, this is not the semantic web its a folksonomy.
 - Always pass channels as an array, even for one channel.
 - Explain channel intent in comments.
 - Remember: you cannot truly prevent others from posting to your channels outside your UI.
@@ -273,6 +345,7 @@ LANGUAGE / UX RULES (important)
   - Externally, display human-readable handles whenever you show identity.
   - Use actorToHandle / handleToActor (or their Vue wrappers) for translation.
 - Use friendly UI labels: "user/account" instead of actor; "page/topic/space" instead of channel.
+- Linkify user-generated text (posts, messages): recognize HTTP(S) URLs and site links beginning `#/`. For example, `const parts = text.split(/(https?:\/\/[^\s<>"']+|#\/[^\s<>"']+)/g)`; odd-index parts are links. Render those as `<a :href="part">{{ part }}</a>` and other parts as text (not `v-html`).
 - Do not add design explanations or excessive labels into the UI. Instead use good usability principles to make the UI naturally usable.
 
 OUTPUT FORMAT

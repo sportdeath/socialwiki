@@ -35,8 +35,8 @@ declare global {
      * Replaces the default handling of navigation from this document's
      * transclusions. The handler receives the requesting transclusion, whose
      * `navigate()` method applies relative navigation locally; it may instead
-     * forward a request upward with `window.navigate()`. Returns a function
-     * which removes the handler.
+     * forward a request upward with `window.navigate()`. Pass `undefined` to
+     * restore default route handling.
      */
     handleNavigation: typeof handleNavigation;
 
@@ -94,12 +94,9 @@ type NavigationHandler = (
 let navigationHandler: NavigationHandler | undefined;
 
 export function handleNavigation(
-  onNavigate: NavigationHandler,
-) {
+  onNavigate?: NavigationHandler,
+): void {
   navigationHandler = onNavigate;
-  return () => {
-    if (navigationHandler === onNavigate) navigationHandler = undefined;
-  };
 }
 
 /** Use this document's handler, or the requesting transclusion's fallback. */

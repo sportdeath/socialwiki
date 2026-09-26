@@ -300,6 +300,9 @@ function onQueryChange() {
         cancelDraftUpdate();
         loadDraft(searchDraft);
     }
+
+    // Local edits reach this point after the draft navigation debounce.
+    window.emit("sw-lens-output", { status: "ok", srcdoc: editorHtml.value });
 }
 window.addEventListener("querychange", onQueryChange);
 
