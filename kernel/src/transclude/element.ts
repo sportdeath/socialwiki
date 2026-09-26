@@ -35,6 +35,7 @@ declare global {
 export function defineTranscludeElement(
   resolve: DocumentResolver,
   installParentBridgeEndpoints: ParentBridgeEndpointInstaller,
+  runtimeUrl: string,
 ) {
   /**
    * Displays a document inside a sandboxed iframe.
@@ -82,6 +83,7 @@ export function defineTranscludeElement(
         installParentBridgeEndpoints,
         // Route events from the iframe back to this element
         (event) => this.#receiveFrameEvent(event),
+        runtimeUrl,
       );
     }
 

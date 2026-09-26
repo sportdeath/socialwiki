@@ -33,6 +33,7 @@ defineTranscludeElement(
     receivedRoutes.set(host, setRoute);
     return { destroy() {}, send() {}, setQuery, setRoute };
   },
+  "https://social.wiki/init.js",
 );
 
 function transclude() {

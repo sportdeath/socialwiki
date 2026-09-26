@@ -7,22 +7,24 @@ OUTPUT RULES
 - Include <script src="https://social.wiki/init.js"></script> in <head> before any other scripts. It sets up the runtime, defines window.Graffiti and other globals, and provides an import map for "vue" and related packages.
 - HTML structure:
   <!-- empty placeholder for mounting -->
-  <div id="app">Loading screen</div>
+  <div id="app">Loading...</div>
   <!-- Vue templates -->
   <template id="app-template">
-    <my-component :my-prop="something"></my-component>
+    <my-component :my-prop="myValue"></my-component>
     ...
   </template>
   <template id="my-component-template">VUE CODE HERE</template>
 - Script structure:
   import { createApp } from "vue"
   import { GraffitiPlugin, useGraffiti, ... } from "@graffiti-garden/wrapper-vue"
+  function setup() {
+    const graffiti = useGraffiti();
+    ...
+    return { myValue, ... };
+  }
   createApp({
     template: "#app-template",
-    setup() {
-      const graffiti = useGraffiti();
-      ...
-    },
+    setup,
     components: {
       MyComponent: {
         template: "#my-component-template",

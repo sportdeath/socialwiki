@@ -85,11 +85,14 @@ import {
 import SourceEditor from "./SourceEditor.vue";
 import PublishDialog from "./PublishDialog.vue";
 import ProtectedDialog from "./ProtectedDialog.vue";
-import { useGraffiti, useGraffitiSession } from "@graffiti-garden/wrapper-vue";
+import { useGraffiti, useGraffitiDiscover } from "@graffiti-garden/wrapper-vue";
 import { createSiteVersion, getSiteVersions } from "../utils/site-versions";
-import { randomBytes, bytesToHex } from "@noble/hashes/utils.js";
-import { protectionSchema, type ProtectionObject } from "../utils/schemas";
-import { getTrustContext } from "../utils/trust";
+import {
+    isProtectionObject,
+    protectionSchema,
+    type ProtectionObject,
+} from "../utils/schemas";
+import { useTrustContext } from "../utils/use-trust-context";
 import { sortProtectionHistory } from "../utils/protection";
 import { starterHtml } from "./starter";
 
@@ -97,7 +100,7 @@ const { composeAddress, composeQuery, parseAddress } = window.route;
 
 const sourceEditor =
     useTemplateRef<InstanceType<typeof SourceEditor>>("sourceEditor");
-const previewTranscludeId = bytesToHex(randomBytes());
+const previewTranscludeId = crypto.randomUUID();
 // The starting draft (or last successful publish), not necessarily published data.
 const baselineHtml = ref<string | null>(null);
 
@@ -158,108 +161,44 @@ const viewRoute = computed(
     () =>
         `#/${composeAddress("v", composeQuery(undefined, siteAddress.value))}`,
 );
-const activeProtection = ref<ProtectionObject | null>(null);
-const activeProtectionTrustSource = ref<"default" | "trusted" | null>(null);
-const showProtectedDialog = ref(false);
-let activeProtectionRequest = 0;
-let localDraftSeq = 0;
-const session = useGraffitiSession();
+const { session, trustByActor, trustedEditors } = useTrustContext();
 const graffiti = useGraffiti();
-const isProtectionBySessionActor = computed(
-    () => activeProtection.value?.actor === session.value?.actor,
+const { objects: protectionAnnotations, isFirstPoll: protectionLoading } =
+    useGraffitiDiscover(
+        () => (siteName.value ? [siteName.value] : []),
+        () => protectionSchema(siteName.value),
+    );
+const activeProtection = computed<ProtectionObject | null>(() => {
+    if (protectionLoading.value || !trustedEditors.value) return null;
+    const history = sortProtectionHistory(
+        protectionAnnotations.value
+            .filter(isProtectionObject)
+            .filter((object) => object.value["site name"] === siteName.value),
+        trustedEditors.value,
+    );
+    const latest = history.at(0);
+    return latest?.value.action === "Protect site" ? latest : null;
+});
+const activeProtectionTrustSource = computed<"default" | "trusted" | null>(
+    () => {
+        const protection = activeProtection.value;
+        if (!protection || protection.actor === session.value?.actor)
+            return null;
+        return trustByActor.value?.get(protection.actor) === true
+            ? "default"
+            : "trusted";
+    },
 );
-
-async function waitForSessionStatusKnown() {
-    if (session.value !== undefined) return;
-    await new Promise<void>((resolve) => {
-        const handleSessionReady = () => {
-            graffiti.sessionEvents.removeEventListener(
-                "initialized",
-                handleSessionReady,
-            );
-            graffiti.sessionEvents.removeEventListener(
-                "login",
-                handleSessionReady,
-            );
-            graffiti.sessionEvents.removeEventListener(
-                "logout",
-                handleSessionReady,
-            );
-            resolve();
-        };
-        graffiti.sessionEvents.addEventListener(
-            "initialized",
-            handleSessionReady,
-        );
-        graffiti.sessionEvents.addEventListener("login", handleSessionReady);
-        graffiti.sessionEvents.addEventListener("logout", handleSessionReady);
-    });
-}
-
-async function getProtectionAnnotations(site: string) {
-    const protectionByUrl = new Map<string, ProtectionObject>();
-    for await (const result of graffiti.discover(
-        [site],
-        protectionSchema(site),
-    )) {
-        if (result.error) {
-            console.error(result.error);
-            continue;
-        }
-        if (result.tombstone) {
-            protectionByUrl.delete(result.object.url);
-        } else {
-            protectionByUrl.set(
-                result.object.url,
-                result.object as ProtectionObject,
-            );
-        }
-    }
-
-    return [...protectionByUrl.values()];
-}
-
-async function refreshSiteProtection(site: string, requestId: number) {
-    activeProtection.value = null;
-    activeProtectionTrustSource.value = null;
-    showProtectedDialog.value = false;
-    try {
-        await waitForSessionStatusKnown();
-        if (requestId !== activeProtectionRequest) return;
-
-        const [trustedEditorsContext, protectionAnnotations] =
-            await Promise.all([
-                getTrustContext(graffiti, session.value),
-                getProtectionAnnotations(site),
-            ]);
-        if (requestId !== activeProtectionRequest) return;
-
-        const protectionHistory = sortProtectionHistory(
-            protectionAnnotations,
-            trustedEditorsContext.trustedEditors,
-        );
-        const latestProtection = protectionHistory.at(0);
-        const isProtected = latestProtection?.value.action === "Protect site";
-        if (isProtected && latestProtection) {
-            activeProtection.value = latestProtection;
-            if (latestProtection.actor !== session.value?.actor) {
-                activeProtectionTrustSource.value =
-                    trustedEditorsContext.trustByActor.get(
-                        latestProtection.actor,
-                    ) === true
-                        ? "default"
-                        : "trusted";
-            }
-        }
-        showProtectedDialog.value = isProtected;
-    } catch (error) {
-        console.error(`Error checking site protection: ${String(error)}`);
-        if (requestId !== activeProtectionRequest) return;
-        activeProtection.value = null;
-        activeProtectionTrustSource.value = null;
-        showProtectedDialog.value = false;
-    }
-}
+const showProtectedDialog = ref(false);
+watch(activeProtection, (protection) => {
+    showProtectedDialog.value = protection !== null;
+});
+let localDraftSeq = 0;
+const isProtectionBySessionActor = computed(
+    () =>
+        !!activeProtection.value &&
+        activeProtection.value.actor === session.value?.actor,
+);
 
 function onQueryChange() {
     if (window.address === undefined) return;
@@ -273,11 +212,6 @@ function onQueryChange() {
     siteName.value = nextSiteName;
     siteQuery.value = nextSiteQuery;
     editParams.value = lensParams;
-
-    if (didChangeSite) {
-        const requestId = ++activeProtectionRequest;
-        void refreshSiteProtection(nextSiteName, requestId);
-    }
 
     const searchDraft = lensParams.get("draft");
     const incomingDraftSeq = Number(lensParams.get("draftSeq"));
@@ -399,24 +333,16 @@ onMounted(() => {
 onBeforeUnmount(() => {
     window.removeEventListener("beforeunload", beforeUnload);
     window.removeEventListener("querychange", onQueryChange);
-    clearLoginBypassListener();
 });
 
 const publishing = ref(false);
-let loginBypassListener: ((event: Event) => void) | null = null;
-function clearLoginBypassListener() {
-    if (!loginBypassListener) return;
-    graffiti.sessionEvents.removeEventListener("login", loginBypassListener);
-    loginBypassListener = null;
-}
-function setupLoginBypassListener() {
-    clearLoginBypassListener();
-    loginBypassListener = () => {
-        bypassBeforeUnload.value = false;
-        clearLoginBypassListener();
-    };
-    graffiti.sessionEvents.addEventListener("login", loginBypassListener);
-}
+watch(
+    session,
+    (current) => {
+        if (current) bypassBeforeUnload.value = false;
+    },
+    { flush: "sync" },
+);
 
 async function openPublishDialog() {
     if (publishing.value) return;
@@ -434,17 +360,9 @@ async function openPublishDialog() {
 async function ensurePublishSession() {
     if (session.value) return session.value;
     bypassBeforeUnload.value = true;
-    setupLoginBypassListener();
     try {
         await graffiti.login();
-    } catch (error) {
-        clearLoginBypassListener();
-        bypassBeforeUnload.value = false;
-        throw error;
-    }
-
-    if (!session.value) {
-        clearLoginBypassListener();
+    } finally {
         bypassBeforeUnload.value = false;
     }
     return session.value;

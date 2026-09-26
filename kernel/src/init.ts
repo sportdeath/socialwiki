@@ -45,7 +45,7 @@ if (window.top !== window) {
   // Initialize the <sw-transclude> component that
   // allows this document to include sub-documents
   const { resolve } = bridgedServices;
-  installTransclude(resolve, installParentBridgeEndpoints);
+  installTransclude(resolve, installParentBridgeEndpoints, kernelUrl.href);
 } else {
   // If we are the top-level document, wrap the document in an iframe
   // while this document acts as the host for all nested documents
@@ -120,7 +120,7 @@ if (window.top !== window) {
       createParentBridgeEndpointInstaller(bridgedServices);
 
     // Install the <sw-transclude> component for including sub-documents
-    installTransclude(resolveDocument, installParentBridgeEndpoints);
+    installTransclude(resolveDocument, installParentBridgeEndpoints, kernelUrl.href);
 
     // Transclude the serialized document
     const transclude = document.createElement("sw-transclude");

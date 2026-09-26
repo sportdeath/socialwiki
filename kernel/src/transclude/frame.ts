@@ -25,6 +25,7 @@ export class TranscludeFrame {
   readonly #host: NavigableTransclude;
   readonly #installParentBridgeEndpoints: ParentBridgeEndpointInstaller;
   readonly #onEvent: (event: CustomEvent<unknown>) => void;
+  readonly #runtimeUrl: string;
   readonly #shadow: ShadowRoot;
   readonly #loadingIframe = document.createElement("iframe");
   #displayedFrame: DisplayedFrame | null = null;
@@ -35,10 +36,12 @@ export class TranscludeFrame {
     host: NavigableTransclude,
     installParentBridgeEndpoints: ParentBridgeEndpointInstaller,
     onEvent: (event: CustomEvent<unknown>) => void,
+    runtimeUrl: string,
   ) {
     this.#host = host;
     this.#installParentBridgeEndpoints = installParentBridgeEndpoints;
     this.#onEvent = onEvent;
+    this.#runtimeUrl = runtimeUrl;
     this.#shadow = host.attachShadow({ mode: "closed" });
 
     const style = document.createElement("style");
@@ -109,21 +112,29 @@ export class TranscludeFrame {
     }
     if (generation !== this.#generation) return;
 
+    // Run embedded documents with the same kernel as their containing document.
+    // Keep the resolved source intact for reuse and lens output.
+    const srcdoc = next.srcdoc.replaceAll(
+      "https://social.wiki/init.js",
+      this.#runtimeUrl,
+    );
+
     // Chrome behaves better with blob URLs for top-level sandboxed content.
     // Nested frames use srcdoc because Firefox can block parent-created
     // blob:null URLs across storage partitions.
     const useBlob = window.top === window && window.origin !== "null";
     const blobUrl = useBlob
-      ? URL.createObjectURL(new Blob([next.srcdoc], { type: "text/html" }))
+      ? URL.createObjectURL(new Blob([srcdoc], { type: "text/html" }))
       : null;
     // Safari before version 27 rejects deeply nested about:srcdoc documents
     // as prohibited self-references (WebKit bug 305276). Once a nested frame
     // uses a sandboxed data URL, keep its descendants on data URLs as well.
-    // Only WebKit needs this fallback. Chromium treats data: frames as insecure
-    // and hides secure-context APIs such as navigator.clipboard.
+    // Only WebKit needs this fallback. Its data: frames are not secure contexts,
+    // so APIs such as crypto.subtle and crypto.randomUUID are unavailable there.
     // https://bugs.webkit.org/show_bug.cgi?id=305276
+    // https://github.com/whatwg/html/issues/12091
     const dataUrl = useDataUrlForNestedFrame(window.location.href, navigator.userAgent)
-      ? `data:text/html;charset=utf-8,${encodeURIComponent(next.srcdoc)}`
+      ? `data:text/html;charset=utf-8,${encodeURIComponent(srcdoc)}`
       : null;
 
     iframe.addEventListener(
@@ -143,7 +154,7 @@ export class TranscludeFrame {
     // than the initial about:blank document.
     if (blobUrl) iframe.src = blobUrl;
     else if (dataUrl) iframe.src = dataUrl;
-    else iframe.srcdoc = next.srcdoc;
+    else iframe.srcdoc = srcdoc;
     this.#shadow.append(iframe);
 
     const bridges = this.#installParentBridgeEndpoints(
