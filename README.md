@@ -2,7 +2,12 @@
 
 Social.Wiki is a reimagining of the web where all sites can be collaboratively edited like Wikipedia articles. Social.Wiki can be used to create a variety of interactive social sites including those for [microblogging](https://social.wiki/#/v?/stanza), [messaging](https://social.wiki/#/v?/pinkcord), [ridesharing](https://social.wiki/#/v?/rideshare), [playing games](https://social.wiki/#/v?/pixelart), and much more.
 
-For more information and basic usage, see the [Social.Wiki homepage](https://social.wiki) or check out our academic paper describing Social.Wiki, [published in UIST'26](https://arxiv.org/abs/2608.19433).
+## Resources
+
+- [Social.Wiki homepage](https://social.wiki): Get started browsing and editing on Social.Wiki.
+- [Document Authoring Guide](./DOCUMENT_AUTHORING.md): Context for creating or editing a Social.Wiki site for both people and agents.
+- [Academic paper](https://arxiv.org/abs/2608.19433): A paper describing Social.Wiki and its motivation published in UIST'26
+
 What follows describes Social.Wiki's implementation and developement.
 
 ## Project Structure
