@@ -42,7 +42,9 @@ export class TranscludeFrame {
     this.#installParentBridgeEndpoints = installParentBridgeEndpoints;
     this.#onEvent = onEvent;
     this.#runtimeUrl = runtimeUrl;
-    this.#shadow = host.attachShadow({ mode: "closed" });
+    // Expose nested frames to browser testing and inspection tools. The iframe
+    // sandbox, not the shadow root, isolates each document's live DOM.
+    this.#shadow = host.attachShadow({ mode: "open" });
 
     const style = document.createElement("style");
     style.textContent = `
@@ -119,10 +121,11 @@ export class TranscludeFrame {
       this.#runtimeUrl,
     );
 
-    // Chrome behaves better with blob URLs for top-level sandboxed content.
-    // Nested frames use srcdoc because Firefox can block parent-created
-    // blob:null URLs across storage partitions.
-    const useBlob = window.top === window && window.origin !== "null";
+    // WebKit needs a blob URL at the top level to avoid deeply nested srcdoc
+    // frames. Other browsers can use srcdoc, including embedded previews that
+    // cannot load sandboxed blob frames.
+    const useBlob = window.top === window && window.origin !== "null" &&
+      isWebKit(navigator.userAgent);
     const blobUrl = useBlob
       ? URL.createObjectURL(new Blob([srcdoc], { type: "text/html" }))
       : null;
@@ -184,10 +187,13 @@ export class TranscludeFrame {
 }
 
 export function useDataUrlForNestedFrame(parentUrl: string, userAgent: string): boolean {
-  // Chromium's UA also contains AppleWebKit, so exclude its engine tokens.
-  // CriOS/EdgiOS on iOS use WebKit and retain the workaround.
   return /^(about:srcdoc|data:)/.test(parentUrl) &&
-    /AppleWebKit\//.test(userAgent) &&
+    isWebKit(userAgent);
+}
+
+function isWebKit(userAgent: string): boolean {
+  // Chromium's UA also contains AppleWebKit. CriOS/EdgiOS on iOS use WebKit.
+  return /AppleWebKit\//.test(userAgent) &&
     !/(?:Chrome|Chromium|Edg|OPR)\//.test(userAgent);
 }
 

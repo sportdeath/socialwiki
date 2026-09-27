@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { TranscludeFrame, useDataUrlForNestedFrame } from "../src/transclude/frame";
 import type { NavigableTransclude } from "../src/bridges/navigation/shared";
 
-afterEach(() => { document.body.replaceChildren(); vi.unstubAllGlobals(); });
+afterEach(() => { document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 it("uses data URLs only for nested WebKit frames", () => {
   const chrome = "Mozilla/5.0 AppleWebKit/537.36 Chrome/153.0.0.0 Safari/537.36";
@@ -16,6 +16,32 @@ it("uses data URLs only for nested WebKit frames", () => {
   expect(useDataUrlForNestedFrame("data:text/html,hello", safari)).toBe(true);
   expect(useDataUrlForNestedFrame("about:srcdoc", iosChrome)).toBe(true);
   expect(useDataUrlForNestedFrame("blob:null/123", safari)).toBe(false);
+});
+
+it("uses srcdoc in Chromium previews and preserves WebKit's top-level blob frame", () => {
+  vi.stubGlobal("origin", "http://localhost:8000");
+  const userAgent = vi.spyOn(navigator, "userAgent", "get");
+  const createObjectURL = vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:http://localhost:8000/frame");
+  vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+  const install = vi.fn(() => ({ destroy() {}, send() {}, setRoute() {}, setQuery() {} }));
+
+  userAgent.mockReturnValue("Mozilla/5.0 AppleWebKit/537.36 Chrome/153.0.0.0 Safari/537.36");
+  const chromiumHost = document.createElement("div") as unknown as NavigableTransclude;
+  const chromiumShadow = vi.spyOn(chromiumHost, "attachShadow");
+  const chromiumFrame = new TranscludeFrame(chromiumHost, install, () => {}, "http://localhost:8000/init.js");
+  chromiumFrame.render({ srcdoc: "Chromium", query: "" });
+  expect((chromiumShadow.mock.results[0].value as ShadowRoot).querySelectorAll("iframe")[1].srcdoc).toBe("Chromium");
+  expect(createObjectURL).not.toHaveBeenCalled();
+  chromiumFrame.disconnect();
+
+  userAgent.mockReturnValue("Mozilla/5.0 AppleWebKit/605.1.15 Version/26.0 Safari/605.1.15");
+  const webkitHost = document.createElement("div") as unknown as NavigableTransclude;
+  const webkitShadow = vi.spyOn(webkitHost, "attachShadow");
+  const webkitFrame = new TranscludeFrame(webkitHost, install, () => {}, "http://localhost:8000/init.js");
+  webkitFrame.render({ srcdoc: "WebKit", query: "" });
+  expect((webkitShadow.mock.results[0].value as ShadowRoot).querySelectorAll("iframe")[1].src).toBe("blob:http://localhost:8000/frame");
+  expect(createObjectURL).toHaveBeenCalledOnce();
+  webkitFrame.disconnect();
 });
 
 it("waits for bridge metadata before mounting and discards a superseded preparation", async () => {
