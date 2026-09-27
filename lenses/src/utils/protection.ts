@@ -1,5 +1,6 @@
 import type { Graffiti, GraffitiSession } from "@graffiti-garden/api";
 import type { ProtectionObject, ProtectionSchema } from "./schemas";
+import { siteChannel } from "./site-channel";
 
 export function sortProtectionHistory(
   annotations: ProtectionObject[],
@@ -56,7 +57,7 @@ export async function updateSiteProtection(
     if (!activeProtection) return;
     return await graffiti.post<ProtectionSchema>(
       {
-        channels: [siteName],
+        channels: [siteChannel(siteName)],
         value: {
           action: "Remove site protection",
           "site name": siteName,
@@ -70,7 +71,7 @@ export async function updateSiteProtection(
 
   return await graffiti.post<ProtectionSchema>(
     {
-      channels: [siteName],
+      channels: [siteChannel(siteName)],
       value: {
         action: "Protect site",
         "site name": siteName,

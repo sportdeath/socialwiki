@@ -15,6 +15,7 @@ import {
 import { sortProtectionHistory } from "../utils/protection";
 import { isProtectionObject } from "../utils/schemas";
 import { useTrustContext } from "../utils/use-trust-context";
+import { siteChannels } from "../utils/site-channel";
 import {
   ErrorPage,
   LoadingPage,
@@ -41,7 +42,7 @@ function setup() {
   const requestedLensParams = ref(new URLSearchParams(window.params));
   const siteName = computed(() => parseAddress(requestedAddress.value).name);
   const { objects, error: siteError, isFirstPoll } = useGraffitiDiscover(
-    () => (siteName.value ? [siteName.value] : []),
+    () => (siteName.value ? siteChannels(siteName.value) : []),
     () => siteStateSchema(siteName.value),
   );
 

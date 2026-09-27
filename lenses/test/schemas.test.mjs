@@ -11,6 +11,7 @@ import { protectionSchema, trustSchema } from "../src/utils/schemas.ts";
 import { sortProtectionHistory, updateSiteProtection } from "../src/utils/protection.ts";
 import { computeTrustAnnotationsByActor, trustedActors, trustActor } from "../src/utils/trust.ts";
 import { browserHistorySchema } from "../src/browser/browser-history.ts";
+import { siteChannel, siteChannels } from "../src/utils/site-channel.ts";
 
 const session = { actor: "did:example:alice" };
 function record(url, value, overrides = {}) {
@@ -24,10 +25,10 @@ const legacy = record("legacy", {
 const current = record("current", {
   action: "Publish site", "site name": "mypage", time: 100,
   changes: "Added feature", document: "current-html", "previous versions": ["legacy"],
-});
+}, { channels: [siteChannel("mypage")] });
 const protection = record("protection", {
   action: "Protect site", "site name": "mypage", time: 100,
-});
+}, { channels: [siteChannel("mypage")] });
 const removal = record("removal", {
   action: "Remove site protection", "site name": "mypage",
   "protection removed": "protection", time: 100,
@@ -83,7 +84,7 @@ test("legacy records with unrelated extra action fields still normalize safely",
 test("one-shot discovery handles repeats and URL-only tombstones before normalization", async () => {
   const graffiti = {
     async *discover(channels, schema) {
-      assert.deepEqual(channels, ["mypage"]);
+      assert.deepEqual(channels, siteChannels("mypage"));
       const matches = await compileGraffitiObjectSchema(schema);
       assert(matches(legacy) && matches(current));
       yield { object: legacy };
@@ -101,7 +102,7 @@ test("publishing uses only readable fields and can reference legacy revisions", 
   const { graffiti, posts } = publisher();
   await createSiteVersion(graffiti, "mypage", "<h1>Hello</h1>", normalizeSiteVersions([legacy]), "Added feature", session);
   assert.deepEqual(posts[0], {
-    channels: ["mypage"],
+    channels: [siteChannel("mypage")],
     value: {
       action: "Publish site", "site name": "mypage", changes: "Added feature",
       document: "uploaded-html", "previous versions": [legacy.url], time: posts[0].value.time,
@@ -134,6 +135,7 @@ test("protection removal links to the specific protection and wins at equal time
   await updateSiteProtection(graffiti, "mypage", true, protection, session);
   const matches = await compileGraffitiObjectSchema(protectionSchema("mypage"));
   assert(posts.every((post) => matches({ ...post, actor: session.actor, url: "posted" })));
+  assert(posts.every((post) => post.channels.length === 1 && post.channels[0] === siteChannel("mypage")));
   assert.equal(posts[1].value["protection removed"], protection.url);
   const unrelated = record("unrelated", { ...removal.value, "protection removed": "missing" });
   const untrusted = { ...protection, actor: "did:example:mallory", url: "untrusted" };
@@ -171,6 +173,8 @@ test("browser history requires private, recent visits in the new format", async 
 
 test("the actual starter discovers both wave formats and publishes the readable format", async () => {
   const html = readFileSync(new URL("../src/edit/starter.html", import.meta.url), "utf8");
+  const channelsExpression = html.match(/:channels="([^"]*)"/)[1];
+  assert.deepEqual(new Function("__SITE_NAME__", `return (${channelsExpression});`)("mypage"), siteChannels("mypage"));
   const expression = html.match(/:schema="([\s\S]*?)"/)[1];
   const schema = new Function("__SITE_NAME__", `return (${expression});`)("mypage");
   const matches = await compileGraffitiObjectSchema(schema);
@@ -184,7 +188,7 @@ test("the actual starter discovers both wave formats and publishes the readable 
   await new Function("__SITE_NAME__", "$graffiti", "$graffitiSession", "processingWave", click)(
     "mypage", { post: async (object) => { posts.push(object); } }, { value: session }, false,
   );
-  assert.deepEqual(posts, [{ value: wave.value, channels: ["mypage"] }]);
+  assert.deepEqual(posts, [{ value: wave.value, channels: [siteChannel("mypage")] }]);
 });
 
 

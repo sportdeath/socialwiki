@@ -6,6 +6,7 @@ import type {
   JSONSchema,
 } from "@graffiti-garden/api";
 import { protectionSchema } from "./schemas";
+import { siteChannel, siteChannels } from "./site-channel";
 
 export function siteVersionSchema(siteName: string) {
   return {
@@ -31,7 +32,7 @@ export type SiteVersionSchema = ReturnType<typeof siteVersionSchema>;
 export type SiteVersionObject = GraffitiObject<SiteVersionSchema>;
 
 // Existing publications remain discoverable under their original record URLs.
-function legacySiteVersionSchema(siteChannel: string) {
+function legacySiteVersionSchema(siteName: string) {
   return {
     properties: {
       value: {
@@ -39,7 +40,7 @@ function legacySiteVersionSchema(siteChannel: string) {
           activity: { const: "Update" },
           object: {
             type: "string",
-            const: siteChannel,
+            const: siteName,
           },
           published: { type: "number" },
           summary: { type: "string" },
@@ -179,7 +180,7 @@ export async function createSiteVersion(
   const previousVersions = selectPreviousVersions(knownVersions, time);
   return await graffiti.post<SiteVersionSchema>(
     {
-      channels: [siteName],
+      channels: [siteChannel(siteName)],
       value: {
         action: "Publish site",
         "site name": siteName,
@@ -208,7 +209,7 @@ export async function getSiteVersions(
 ): Promise<SiteVersionObject[]> {
   const versions = new Map<string, GraffitiObjectBase>();
   for await (const result of graffiti.discover(
-    [siteName],
+    siteChannels(siteName),
     siteVersionsSchema(siteName),
   )) {
     if (result.error) {

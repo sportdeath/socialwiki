@@ -46,7 +46,7 @@ delete it, and replace it with your own code.
     <!-- "Discover" any waves from this site -->
     <graffiti-discover
       v-slot="{ objects: waves, isFirstPoll }"
-      :channels="[ __SITE_NAME__ ]"
+      :channels="['site:' + __SITE_NAME__, __SITE_NAME__]"
       :schema="{ properties: { value: {
         anyOf: [
           {
@@ -85,7 +85,7 @@ delete it, and replace it with your own code.
             $graffiti.post(
               {
                 value: { action: 'Wave', 'site name': __SITE_NAME__ },
-                channels: [ __SITE_NAME__ ],
+                channels: ['site:' + __SITE_NAME__],
               },
               $graffitiSession.value
             ).finally(() => {

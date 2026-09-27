@@ -19,6 +19,7 @@ import {
   lenses,
   type Lens,
 } from "../utils/lenses";
+import { siteChannels } from "../utils/site-channel";
 
 function lensSchema(actor: string) {
   return {
@@ -55,7 +56,7 @@ export function useLensSources(
   // Keep one browser-owned query rather than starting a discovery for every
   // resolution. Reset explicitly advances its cursor after deleting versions.
   const { objects, error, isFirstPoll, poll } = useGraffitiDiscover(
-    () => (session() ? lenses : []),
+    () => (session() ? lenses.flatMap(siteChannels) : []),
     () => lensSchema(session()?.actor ?? ""),
     session,
   );

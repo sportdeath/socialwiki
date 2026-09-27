@@ -38,6 +38,7 @@ import {
   updateSiteProtection,
 } from "../utils/protection";
 import { ErrorPage, LoadingPage } from "../utils/status-pages";
+import { siteChannels } from "../utils/site-channel";
 
 const { composeAddress, composeQuery, parseAddress } = window.route;
 
@@ -93,7 +94,7 @@ function setup() {
 
   const { objects: siteVersionsAndAnnotations, error: siteError, isFirstPoll } =
     useGraffitiDiscover(
-      () => [siteName.value],
+      () => (siteName.value ? siteChannels(siteName.value) : []),
       () => siteStateSchema(siteName.value),
     );
   const siteVersions = computed(() => {

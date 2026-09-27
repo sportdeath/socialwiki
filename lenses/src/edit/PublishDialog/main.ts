@@ -7,6 +7,7 @@ import {
     type SiteVersionObject,
 } from "../../utils/site-versions";
 import DialogFrame from "../../utils/DialogFrame/main";
+import { siteChannels } from "../../utils/site-channel";
 type Props = { modelValue: boolean; siteName: string; publishing: boolean };
 type Emit = {
     (event: "publish", siteName: string, summary: string,
@@ -33,7 +34,7 @@ function setupPublishDialog(props: Props, { emit }: { emit: Emit }) {
     const { objects: publishedVersions, error: discoveryError, isFirstPoll } =
         useGraffitiDiscover(
             () => normalizedPublishSiteName.value
-                ? [normalizedPublishSiteName.value] : [],
+                ? siteChannels(normalizedPublishSiteName.value) : [],
             () => siteVersionsSchema(normalizedPublishSiteName.value),
         );
     const publishSiteHref = computed(

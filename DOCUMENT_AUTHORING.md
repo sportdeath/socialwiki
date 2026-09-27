@@ -358,9 +358,10 @@ To make your document usable under this model:
   - actor URI (e.g. for "my posts" feed)
   - object URL (e.g. for comments/likes on a post)
   - topic/page/space name (e.g. for a single shared space)
+  - h3 for geolocation
   - other stable identifiers as needed
   - Do NOT use `window.location.href`. It is not available.
-  - actor/object/media URLs are already prefixed but custom channels schemes should use custom prefixes like `topic:` or `geolocation:` for disambiguation. Do NOT prefix with a URL, this is not the semantic web its a folksonomy.
+  - actor/object/media URLs are already prefixed but custom channels schemes should use custom prefixes like `site:`, `topic:`, or `geolocation:` for disambiguation. Do NOT prefix with a URL, this is not the semantic web its a folksonomy.
 - Always pass channels as an array, even for one channel.
 - Explain channel intent in comments.
 - Remember: you cannot truly prevent others from posting to your channels outside your UI.
@@ -420,7 +421,7 @@ Transclusion is including one Social.Wiki document within another.
 
 - A document can act like a View lens and choose which published version of a site to display, using its own filtering or moderation rules.
 - Site versions are public Graffiti objects with this shape:
-  - `channels: [siteName]`
+  - `channels: ["site:" + siteName]`
   - `value: { action: "Publish site", "site name": siteName, changes: string, document: mediaUrl, time: number, "previous versions"?: string[] }`
   - `allowed` is omitted. `document` is a `text/html` Graffiti media URL; `time` is milliseconds since the Unix epoch; `"previous versions"` contains site version object URLs.
 - A View lens selects a site version, loads its HTML, and displays it with `<sw-transclude :srcdoc="html" :query="siteQuery" route=""></sw-transclude>`. `siteQuery` comes from the site's address; `route=""` passes navigation through the lens.
@@ -503,7 +504,153 @@ Transclusion is including one Social.Wiki document within another.
 
 ## Examples
 
-[TODO]
+### Waving
+
+```html
+<!doctype html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+
+  <!-- Connect the site to Social.Wiki -->
+  <script src="https://social.wiki/init.js"></script>
+
+  <!-- Better default styling -->
+  <meta name="color-scheme" content="light dark" />
+  <link
+    rel="stylesheet"
+    href="https://cdn.jsdelivr.net/npm/water.css@2/out/water.css"
+  />
+
+  <!-- Initialize Vue.js with Graffiti -->
+  <script type="module">
+    import { createApp } from "vue";
+    import { GraffitiPlugin } from "@graffiti-garden/wrapper-vue";
+
+    createApp({
+      template: "#template",
+      data: () => ({
+        processingWave: false,
+        siteName: 'my-cool-site'
+      }),
+    }).use(GraffitiPlugin, { graffiti: new window.Graffiti() })
+      .mount("#app");
+  </script>
+</head>
+
+<body>
+  <div id="app"><h1>Loading…</h1></div>
+
+  <template id="template">
+    <h1>Wave to Others!</h1>
+
+    <!-- "Discover" any waves from this site -->
+    <graffiti-discover
+      v-slot="{ objects: waves, isFirstPoll }"
+      :channels="['site:' + siteName]"
+      :schema="{ properties: { value: {
+        required: ['action', 'site name'],
+        properties: {
+          action: { const: 'Wave' },
+          'site name': { const: siteName }
+        }
+      }}}"
+    >
+      <button v-if="!$graffitiSession.value" @click="$graffiti.login()">
+        Log in to wave!
+      </button>
+
+      <template v-else>
+        <button v-if="isFirstPoll || processingWave" disabled>
+          👋 Loading…
+        </button>
+
+        <!-- If you haven't waved yet, show "Wave" button -->
+        <button
+          v-else-if="!waves.some(
+            wave => wave.actor === $graffitiSession.value.actor
+          )"
+          @click="
+            processingWave = true;
+            $graffiti.post(
+              {
+                value: { action: 'Wave', 'site name': siteName },
+                channels: ['site:' + siteName],
+              },
+              $graffitiSession.value
+            ).finally(() => {
+              processingWave = false;
+            });
+          "
+        >
+          👋 Wave!
+        </button>
+
+        <!-- If you have already waved, show "Unwave" button -->
+        <button
+          v-else
+          @click="
+            waves
+              .filter(wave =>
+                wave.actor === $graffitiSession.value.actor
+              )
+              .forEach(wave => {
+                processingWave = true;
+                $graffiti.delete(
+                  wave,
+                  $graffitiSession.value
+                ).finally(() => {
+                  processingWave = false;
+                });
+              });
+          "
+        >
+          👋 Unwave
+        </button>
+      </template>
+
+      <p>
+        {{ new Set(waves.map(w => w.actor)).size }} people have waved from this site.
+      </p>
+    </graffiti-discover>
+  </template>
+</body>
+```
+
+### Example objects
+
+These are example objects to pass to `graffiti.post(object, session)`. Graffiti adds `actor` and `url`. The shapes and channels you use in your app are entirely up to you.
+
+```js
+const post = {
+  value: {
+    title: "My first post",
+    content: "Hello, world!",
+    time: Date.now(),
+  },
+  channels: ["topic:introductions"]
+};
+
+const reply = {
+  value: {
+    content: "I agree!",
+    "in reply to": postedPost.url,
+    time: Date.now()
+  },
+  channels: [postedPost.url]
+};
+
+const follow = {
+  value: {
+    action: "Follow account",
+    account: actor,
+  },
+  // Available to both of us
+  channels: [session.actor, actor],
+  // Only visible to us
+  allowed: [ actor ]
+};
+```
 
 ## References
 

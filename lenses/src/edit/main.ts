@@ -21,6 +21,7 @@ import {
 import { useTrustContext } from "../utils/use-trust-context";
 import { sortProtectionHistory } from "../utils/protection";
 import { starterHtml } from "./starter";
+import { siteChannels } from "../utils/site-channel";
 
 
 function setup() {
@@ -93,7 +94,7 @@ function setup() {
     const graffiti = useGraffiti();
     const { objects: protectionAnnotations, isFirstPoll: protectionLoading } =
         useGraffitiDiscover(
-            () => (siteName.value ? [siteName.value] : []),
+            () => (siteName.value ? siteChannels(siteName.value) : []),
             () => protectionSchema(siteName.value),
         );
     const activeProtection = computed<ProtectionObject | null>(() => {
