@@ -1,10 +1,13 @@
 # Social.Wiki Document Authoring
 
-Use this as background context when creating or editing Social.Wiki documents with Graffiti + Vue. It describes the runtime, data model, API shapes, and UX constraints that generated apps should follow.
+Social.Wiki is a system for collaboratively editing interactive apps that may include social features like messaging, microblogging, collaborative canvases, ridesharing, and so on. This guide provides context for creating and editing Social.Wiki apps. Social.Wiki apps are created as single HTML documents without companion files. They can store and share data through a system called Graffiti and most use Vue for reactivity. For security, Social.Wiki sites are heavily sandboxed. The Social.Wiki browser and editor are also built as Social.Wiki documents.
+
+This guide describes the Social.Wiki runtime, Graffiti's data model and API, and best practices.
 
 OUTPUT RULES
 - Output exactly ONE runnable HTML file in ONE code block.
-- Include <script src="https://social.wiki/init.js"></script> in <head> before any other scripts. It sets up the runtime, defines window.Graffiti and other globals, and provides an import map for "vue" and related packages.
+- Include <script src="https://social.wiki/init.js"></script> in <head> before any other scripts. It sets up the runtime, defines window.Graffiti and other globals, and provides an import map for "vue" and "@graffiti-garden/wrapper-vue"
+- Do not add another import map. Use full CDN URLs for packages other than "vue" and "@graffiti-garden/wrapper-vue"
 - HTML structure:
   <!-- empty placeholder for mounting -->
   <div id="app">Loading...</div>
@@ -17,22 +20,21 @@ OUTPUT RULES
 - Script structure:
   import { createApp } from "vue"
   import { GraffitiPlugin, useGraffiti, ... } from "@graffiti-garden/wrapper-vue"
+  const MyComponent = {
+    template: "#my-component-template",
+    props: ["my-prop", ...],
+    ...
+  };
   function setup() {
     const graffiti = useGraffiti();
     ...
     return { myValue, ... };
   }
+  ...
   createApp({
     template: "#app-template",
     setup,
-    components: {
-      MyComponent: {
-        template: "#my-component-template",
-        props: ["my-prop", ...],
-        ...
-      },
-      ...
-    }
+    components: { MyComponent, ... },
     ...
   }).use(GraffitiPlugin, { graffiti: new window.Graffiti() })
     .mount("#app")
@@ -153,11 +155,14 @@ VUE COMPOSABLE SHAPES (components are equivalent, but outputs come via v-slot)
    ) => {
      isFirstPoll: Ref<boolean>;
      objects: Ref<GraffitiObject[]>;
+     error: Ref<Error | null>;
      poll: () => Promise<void>;
    }
    - If session omitted, will only return public objects (allowed omitted/undefined/null).
    - Only use session if you explicitly want to include private objects.
-   - Component \<graffiti-discover :channels="[...]" :schema="{...}" v-slot="{ objects, isFirstPoll, poll }">
+   - Component \<graffiti-discover :channels="[...]" :schema="{...}" v-slot="{ objects, error, isFirstPoll, poll }">
+   - If error is set, display it with "Retrying…"; discover retries automatically until it clears.
+   - isFirstPoll is true after a change of arguments until the first discovery poll completes successfully. Use as loading signal.
    - AUTOPOLL IS RESOURCE HEAVY and should be used AT MOST ONCE to enable real-time updates (e.g. messaging).
    - Local changes (post, delete) propagate to discover in real time by default and at no penalty; no autopoll is necessary.
    - YOU MUST PASS AN ARRAY OF CHANNELS EVEN IF YOU ARE ONLY LISTENING TO ONE: :channels="['my-channel']"
@@ -214,6 +219,7 @@ To make your document usable under this model:
 - Keep posted object shapes consistent so remembered decisions apply to similar posts/deletes.
 - Make object properties and values human-readable because they appear in permission prompts. HTTP(S) links, Graffiti URLs and actors, UUIDs, and timestamps are displayed meaningfully.
 - Start session-backed actions from a user interaction unless they continue a feature the user enabled. For example, post read receipts automatically only after the user opts in; record that choice in Graffiti so the document can find it on later visits.
+- Most documents can rely on a parent document (a "browser") to provide a permissions button. A document providing its own navigation UI may call `window.showPermissions()` to open the system permissions manager.
 
 ROUTING
 - Do NOT use window.location for accessing or modifying route state. A document intentionally does not have access to its own location for portability. However, subroute information can be read/saved to the document's URL by getting/setting:
@@ -260,7 +266,7 @@ Sites and Transclusion by Reference
 - Sites can be linked to through one of three built-in root "lenses": View (v), Edit (e), and History (h).
   - View simply displays the site, Edit opens the site up for editing, and History displays past site versions
   - lensAddress = window.route.composeAddress("v", window.route.composeQuery(undefined, siteAddress))
-  - For an absolute location, the lens address must be prepended with the root symbol "#/"
+  - For an absolute location, the lens address must be prepended with the root symbol "#/". This symbol refers to a top-level "browser" document that typically provides an address bar and selects View/Edit/History based on its provided address.
   - Navigation on-click: <a :href="`#/${lensAddress}`">
   - Programmatic navigation: window.navigate(`#/${lensAddress}`)
 - A site can be transcluded by reference via its address. The src attribute supersedes srcdoc; when src is set, its embedded query is used and the separate query attribute is ignored.

@@ -54,7 +54,7 @@ export function useLensSources(
 ) {
   // Keep one browser-owned query rather than starting a discovery for every
   // resolution. Reset explicitly advances its cursor after deleting versions.
-  const { objects, isFirstPoll, poll } = useGraffitiDiscover(
+  const { objects, error, isFirstPoll, poll } = useGraffitiDiscover(
     () => (session() ? lenses : []),
     () => lensSchema(session()?.actor ?? ""),
     session,
@@ -134,7 +134,9 @@ export function useLensSources(
   };
 
   return {
+    error,
     getSource,
+    isFirstPoll,
     isModified(lens: Lens) {
       const actor = session()?.actor;
       return actor

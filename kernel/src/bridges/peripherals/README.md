@@ -36,9 +36,10 @@ duplicating transport, scope composition, permission UI, or lifecycle cleanup.
   Its styles and the lenses import the same root `theme.css` color tokens.
 
 The Social.Wiki browser lens provides the shield button in its address bar.
-It only calls `window.showPeripheralPermissions()`: management and enforcement
+It only calls `window.showPermissions()`: management and enforcement
 remain in this bridge. That call opens the host's controls for the calling
-document and its descendants; every ancestor composes its scope as usual.
+document's permission scope and nested scopes; every ancestor composes its
+scope as usual.
 The Permissions table only lists currently open document scopes and active
 requests in this browser tab. Every iframe registers its scope through the
 bridge, including idle documents that have not requested access this visit.

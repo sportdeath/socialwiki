@@ -1,11 +1,11 @@
-<template>
-    <DialogFrame v-model="open" label="Protected Site" @cancel="open = false">
+<template id="protected-dialog-template">
+    <dialog-frame v-model="open" label="Protected Site" @cancel="open = false">
         <h2 id="protected-title">Protected Site</h2>
-        <ProtectionNotice
+        <protection-notice
             :active-protection="activeProtection"
             :is-protection-by-session-actor="isProtectionBySessionActor"
             :active-protection-trust-source="activeProtectionTrustSource"
-        />
+        ></protection-notice>
         <p>
             You can still edit this site. However, others may not see your
             changes unless they mark <strong>you</strong> as a
@@ -27,19 +27,5 @@
                 Continue to editor
             </button>
         </footer>
-    </DialogFrame>
+    </dialog-frame>
 </template>
-<script setup lang="ts">
-import type { ProtectionObject } from "../utils/schemas";
-import DialogFrame from "../utils/DialogFrame.vue";
-import ProtectionNotice from "../utils/ProtectionNotice.vue";
-const open = defineModel<boolean>({ required: true });
-defineProps<{
-    activeProtection: ProtectionObject | null;
-    isProtectionBySessionActor: boolean;
-    activeProtectionTrustSource: "default" | "trusted" | null;
-    historyRoute: string;
-    viewRoute: string;
-}>();
-const trustedEditorsRoute = "#/v?/trusted-editors";
-</script>

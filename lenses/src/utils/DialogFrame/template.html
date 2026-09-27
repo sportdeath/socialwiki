@@ -1,0 +1,11 @@
+<template id="dialog-frame-template">
+    <dialog
+        ref="dialog"
+        class="lens-dialog"
+        :aria-label="label"
+        @cancel.prevent="emit('cancel')"
+        @click.self="emit('cancel')"
+    >
+        <section class="dialog-panel"><slot></slot></section>
+    </dialog>
+</template>

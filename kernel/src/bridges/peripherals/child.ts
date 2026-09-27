@@ -6,8 +6,8 @@ import { PERIPHERALS_CHANNEL, type ChildMethods, type PeripheralsService,
 
 declare global {
   interface Window {
-    /** Open trusted permission controls for this document and its descendants. */
-    showPeripheralPermissions(): Promise<void>;
+    /** Open trusted permission controls for this document's permission scope. */
+    showPermissions(): Promise<void>;
   }
 }
 
@@ -57,6 +57,6 @@ export function installPeripheralsChild(): PeripheralsService {
     for (const entry of subscriptions.values()) if (entry.kind === "request") entry.close();
   });
   installPeripheralAdapters(service);
-  window.showPeripheralPermissions = async () => { await service.showPermissions([]); };
+  window.showPermissions = async () => { await service.showPermissions([]); };
   return service;
 }

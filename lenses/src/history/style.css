@@ -1,0 +1,181 @@
+.history-pane-content {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.protection-panel {
+    width: 100%;
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.protection-panel h3 {
+    margin: 0;
+    font-size: 1rem;
+}
+
+.protection-help {
+    color: var(--secondary-color);
+    font-size: 0.9rem;
+}
+
+.protection-history > summary {
+    cursor: pointer;
+}
+
+.protection-history-list {
+    list-style: none;
+    margin: 0.5rem 0 0;
+    padding: 0;
+    display: grid;
+    gap: 0.5rem;
+}
+
+.protection-history-list > li {
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    padding: 0.5rem;
+    display: grid;
+    gap: 0.15rem;
+}
+
+.protection-history-list > li time {
+    color: var(--secondary-color);
+    font-size: 0.85rem;
+}
+
+.history-list {
+    flex: 1;
+    width: 100%;
+    list-style: none;
+    padding: 0.75rem;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.history-list > li > article {
+    cursor: pointer;
+    position: relative;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    display: grid;
+    gap: 0.45rem;
+    transition:
+        background-color 0.15s ease,
+        border-color 0.15s ease;
+}
+
+.history-list > li > article:hover {
+    background: var(--background-color-interactive);
+    border-color: var(--border-color-hover);
+}
+
+.history-list > li > article.selected {
+    background: var(--background-color-interactive);
+    border-color: var(--border-color-hover);
+    box-shadow: 0 0 0 1px var(--border-color-hover);
+}
+
+.history-list > li > article.untrusted {
+    border-style: dashed;
+}
+
+.history-list > li > article.untrusted h3 {
+    color: var(--secondary-color);
+}
+
+.version-select:focus-visible {
+    outline: 2px solid var(--border-color-hover);
+    outline-offset: 1px;
+}
+
+.history-list h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    line-height: 1.35;
+    color: var(--link-color);
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+
+.version-select {
+    display: block;
+    width: 100%;
+    text-align: start;
+    font: inherit;
+    color: inherit;
+}
+
+/* Make the card itself part of the version link while keeping its controls
+   and actor link independently interactive. */
+.version-select::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+}
+
+.history-actor,
+.history-trust-inline,
+.history-list footer {
+    position: relative;
+    z-index: 1;
+}
+
+.history-meta {
+    display: grid;
+    gap: 0.1rem;
+}
+
+.history-meta .history-actor {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.history-actor-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.35rem;
+}
+
+.history-meta time {
+    color: var(--secondary-color);
+    font-size: 0.85rem;
+}
+
+.history-trust-inline {
+    font-size: 0.85rem;
+    color: var(--text-color);
+}
+
+.history-untrusted-indicator {
+    font-size: 0.78rem;
+    color: var(--secondary-color);
+    font-style: italic;
+}
+
+.history-default-indicator {
+    font-size: 0.78rem;
+    color: var(--secondary-color);
+    font-style: italic;
+}
+
+.history-trust-inline button {
+    margin-left: 0.25rem;
+}
+
+.history-list footer > ul {
+    list-style: none;
+    display: flex;
+    gap: 0.85rem;
+    margin: 0;
+    padding: 0.15rem 0 0;
+}

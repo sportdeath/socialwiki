@@ -11,45 +11,8 @@ const packages = packageLock.packages as Record<string, PackageRecord>;
 // single compiler-enabled instance. The default Vue entry lacks the compiler.
 const rawBrowserEntrypoints: Record<string, string> = {
   vue: "dist/vue.esm-browser.prod.js",
-  "@graffiti-garden/wrapper-vue": "dist/node/plugin.mjs",
+  "@graffiti-garden/wrapper-vue": "dist/browser/plugin.mjs",
 };
-
-/** Resolve an installed package's ESM entrypoint without duplicating it here. */
-function rawPackageEntrypoint(name: string) {
-  const resolved = import.meta.resolve(name);
-  const packageRoot = `/node_modules/${name}/`;
-  const rootIndex = resolved.lastIndexOf(packageRoot);
-  if (rootIndex < 0) throw new Error(`Could not resolve ${name}'s entrypoint`);
-  return resolved.slice(rootIndex + packageRoot.length);
-}
-
-// CodeMirror extensions exchange identity-sensitive state objects. Loading
-// each package through a separately bundled CDN endpoint can duplicate those
-// objects, so register its raw ESM dependency graph in the import map. Assign
-// before recursing so dependency cycles are harmless.
-function registerRawPackage(name: string) {
-  if (Object.hasOwn(rawBrowserEntrypoints, name)) return;
-
-  const record = packages[`node_modules/${name}`];
-  if (!record) return;
-  rawBrowserEntrypoints[name] = rawPackageEntrypoint(name);
-  for (const dependency of Object.keys({
-    ...record.dependencies,
-    ...record.peerDependencies,
-  })) {
-    registerRawPackage(dependency);
-  }
-}
-
-for (const name of Object.keys(packages.lenses?.dependencies ?? {})) {
-  if (
-    name === "codemirror" ||
-    name.startsWith("@codemirror/") ||
-    name.startsWith("@replit/codemirror-")
-  ) {
-    registerRawPackage(name);
-  }
-}
 
 function packageName(specifier: string) {
   const parts = specifier.split("/");
@@ -62,6 +25,32 @@ function packageVersion(name: string) {
   return version;
 }
 
+function isCodeMirrorDependency(name: string) {
+  return (
+    name.startsWith("@codemirror/") ||
+    name.startsWith("@lezer/") ||
+    name.startsWith("@replit/codemirror-")
+  );
+}
+
+function pinnedDependencies(name: string) {
+  const seen = new Set([name]);
+  function visit(packageName: string) {
+    const record = packages[`node_modules/${packageName}`];
+    for (const dependency of Object.keys({
+      ...record?.dependencies,
+      ...record?.peerDependencies,
+    })) {
+      if (seen.has(dependency)) continue;
+      seen.add(dependency);
+      visit(dependency);
+    }
+  }
+  visit(name);
+  seen.delete(name);
+  return [...seen].sort().map((dependency) => `${dependency}@${packageVersion(dependency)}`);
+}
+
 /** Whether an import refers to an npm package rather than a local module. */
 export function isPackageImport(specifier: string) {
   return (
@@ -72,13 +61,20 @@ export function isPackageImport(specifier: string) {
   );
 }
 
-/**
- * Resolve package imports through jsDelivr. Most use its ESM service, which
- * follows package metadata; identity-sensitive package graphs use raw ESM.
- */
+/** Resolve package imports to CDN modules without bundling them into lenses. */
 export function packageImportUrl(specifier: string) {
   const name = packageName(specifier);
   const subpath = specifier.slice(name.length);
+  // Pin each package's dependency graph so esm.sh does not load a newer,
+  // second copy of an identity-sensitive CodeMirror extension or state.
+  if (
+    !subpath &&
+    (name === "codemirror" || isCodeMirrorDependency(name))
+  ) {
+    const dependencies = pinnedDependencies(name);
+    const pins = dependencies.length ? `?deps=${dependencies.join(",")}` : "";
+    return `https://esm.sh/${name}@${packageVersion(name)}${pins}`;
+  }
   const rawEntrypoint =
     subpath.length === 0 ? rawBrowserEntrypoints[name] : undefined;
   if (rawEntrypoint) {
@@ -90,9 +86,5 @@ export function packageImportUrl(specifier: string) {
 // Public imports supplied to every Social.Wiki document by the kernel.
 // Exact versions come from the lockfile, so the map stays in sync on updates.
 export const browserImports = Object.fromEntries(
-  [
-    "@graffiti-garden/api",
-    "@graffiti-garden/wrapper-synchronize",
-    ...Object.keys(rawBrowserEntrypoints),
-  ].map((name) => [name, packageImportUrl(name)]),
+  Object.keys(rawBrowserEntrypoints).map((name) => [name, packageImportUrl(name)]),
 );

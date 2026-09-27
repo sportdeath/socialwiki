@@ -1,0 +1,75 @@
+<template id="edit-template">
+    <main>
+        <source-editor
+            ref="sourceEditor"
+            v-model="editorHtml"
+            :baseline="baselineHtml ?? ''"
+            :publishing="publishing"
+            :should-shake-publish="shouldShakePublish"
+            @publish="openPublishDialog"
+            @download="download"
+        >
+            <template #preview-controls>
+                <nav class="editor-controls">
+                    <ul>
+                        <li>
+                            <button
+                                class="refresh-button"
+                                title="Refresh the preview"
+                                @click="refreshPreview"
+                            >
+                                Refresh
+                                <span
+                                    v-if="debouncing"
+                                    class="refresh-spinner"
+                                    aria-hidden="true"
+                                ></span>
+                            </button>
+                        </li>
+                        <li>
+                            <label class="top-level-checkbox">
+                                <input type="checkbox" v-model="livePreview" />
+                                Auto-refresh
+                            </label>
+                        </li>
+                    </ul>
+                </nav>
+            </template>
+
+            <!-- Right pane body (Preview) -->
+            <template #preview>
+                <div class="pane">
+                    <sw-transclude
+                        :id="previewTranscludeId"
+                        name="Preview"
+                        :route="previewRoute"
+                        :query="siteQuery"
+                        :key="refreshKey"
+                        :srcdoc="previewHtml"
+                    ></sw-transclude>
+                </div>
+            </template>
+        </source-editor>
+
+        <publish-dialog
+            v-if="showPublishDialog"
+            v-model="showPublishDialog"
+            :site-name="siteName"
+            :publishing="publishing"
+            @publish="submitPublishDialog"
+        ></publish-dialog>
+
+        <protected-dialog
+            v-model="showProtectedDialog"
+            :active-protection="activeProtection"
+            :is-protection-by-session-actor="isProtectionBySessionActor"
+            :active-protection-trust-source="activeProtectionTrustSource"
+            :history-route="historyRoute"
+            :view-route="viewRoute"
+        ></protected-dialog>
+
+        <div v-if="publishing" class="backdrop" @click.prevent="">
+            <h1 class="dots">Publishing</h1>
+        </div>
+    </main>
+</template>

@@ -12,7 +12,7 @@ export function useTrustContext() {
   const actor = computed(() => session.value?.actor);
   const sessionReady = computed(() => session.value !== undefined);
   // Trust belongs to the actor, so site navigation reuses this discovery.
-  const { objects, isFirstPoll } = useGraffitiDiscover(
+  const { objects, error, isFirstPoll } = useGraffitiDiscover(
     () => (actor.value ? [actor.value] : []),
     () => trustSchema(actor.value),
   );
@@ -26,5 +26,5 @@ export function useTrustContext() {
     return trustedActors(trustByActor.value, actor.value);
   });
 
-  return { session, sessionReady, trustByActor, trustedEditors };
+  return { session, sessionReady, trustByActor, trustedEditors, trustError: error };
 }

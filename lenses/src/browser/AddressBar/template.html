@@ -1,0 +1,61 @@
+<template id="address-bar-template">
+    <form
+        class="address-search"
+        role="search"
+        @submit.prevent="navigateToInputAddress"
+        @focusin="onAddressFocusIn"
+        ref="address-search"
+        @focusout="onAddressFocusOut"
+    >
+        <input
+            ref="address-input"
+            type="text"
+            v-model="addressInput"
+            placeholder="Enter site name"
+            @mousedown="selectAddress"
+            @focus="selectAddressOnFocus"
+            @keydown="onAddressInputKeydown"
+            @focusout="addressFocused = false"
+            @dragstart.prevent
+        />
+        <slot name="actions"></slot>
+        <ul
+            ref="address-dropdown"
+            class="dropdown"
+            v-if="
+                isDropdownOpen &&
+                (addressInput !== siteAddress ||
+                    historySuggestions.length ||
+                    historyEnabled === false)
+            "
+            @keydown="onDropdownKeydown"
+        >
+            <li v-if="addressInput !== siteAddress">
+                <a
+                    :href="routeForInputAddress(siteAddress || 'Social.Wiki')"
+                >
+                    Current site: {{ siteAddress }}
+                </a>
+            </li>
+            <li
+                v-for="suggestion in historySuggestions"
+                :key="suggestion.address"
+            >
+                <a
+                    :href="routeForInputAddress(suggestion.address)"
+                >
+                    <span>{{ suggestion.address }}</span>
+                    <small>
+                        {{ suggestion.visits }}
+                        {{ suggestion.visits === 1 ? "visit" : "visits" }}
+                    </small>
+                </a>
+            </li>
+            <li v-if="historyEnabled === false">
+                <button type="button" @click="enableBrowserHistory">
+                    Enable browser history
+                </button>
+            </li>
+        </ul>
+    </form>
+</template>

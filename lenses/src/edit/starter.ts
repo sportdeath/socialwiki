@@ -1,5 +1,5 @@
 import html from "./starter.html?raw";
-import { escapeHtml } from "@vue/shared";
+import { escapeHtml } from "../utils/escape-html";
 import { lensesUrl } from "../utils/locator";
 
 export function starterHtml(siteName: string) {

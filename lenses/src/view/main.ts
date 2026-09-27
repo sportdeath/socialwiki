@@ -32,7 +32,7 @@ function emitLensOutput(status: string, srcdoc?: string) {
 
 function setup() {
   const graffiti = useGraffiti();
-  const { sessionReady, trustedEditors } = useTrustContext();
+  const { sessionReady, trustedEditors, trustError } = useTrustContext();
   const transclude = ref<TranscludeElement | null>(null);
   const displayed = ref({ html: LoadingPage, id: "loading" });
   const displayedSiteName = ref<string>();
@@ -40,7 +40,7 @@ function setup() {
   const requestedAddress = ref(window.address);
   const requestedLensParams = ref(new URLSearchParams(window.params));
   const siteName = computed(() => parseAddress(requestedAddress.value).name);
-  const { objects, isFirstPoll } = useGraffitiDiscover(
+  const { objects, error: siteError, isFirstPoll } = useGraffitiDiscover(
     () => (siteName.value ? [siteName.value] : []),
     () => siteStateSchema(siteName.value),
   );
@@ -91,12 +91,22 @@ function setup() {
     if (!requestedVersion && (isFirstPoll.value || !editors)) {
       if (force || contentKey !== currentContentKey) {
         // A new site or forced refresh invalidates any pending render and
-        // shows loading until the data needed to select a version arrives.
+        // shows a status until the data needed to select a version arrives.
         activeRenderVersion++;
         currentContentKey = "";
         renderedAddress = "";
-        emitLensOutput("loading");
-        showDocument(LoadingPage, "loading");
+        const error = (isFirstPoll.value ? siteError.value : null) ??
+          (!editors ? trustError.value : null);
+        if (error) {
+          emitLensOutput("error");
+          showDocument(
+            ErrorPage(`Could not check site data: ${error.message}. Retrying…`),
+            "discovery-error",
+          );
+        } else {
+          emitLensOutput("loading");
+          showDocument(LoadingPage, "loading");
+        }
       }
       return;
     }
@@ -199,7 +209,7 @@ function setup() {
   // Connecting a child replays login; watching the session object itself
   // would reload the child and repeat that login indefinitely.
   watch(
-    [requestedAddress, requestedLensParams, isFirstPoll, sessionReady],
+    [requestedAddress, requestedLensParams, isFirstPoll, siteError, trustError, sessionReady],
     () => void renderLens(),
     { immediate: true, flush: "post" },
   );

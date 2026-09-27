@@ -7,11 +7,20 @@
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="color-scheme" content="light dark" />
         <link rel="icon" href="data:," />
+        <link rel="stylesheet" href="/style.css" />
+        <link rel="stylesheet" href="../utils/DialogFrame/style.css" />
+        <link rel="stylesheet" href="./AddressBar/style.css" />
+        <link rel="stylesheet" href="./SettingsDialog/style.css" />
+        <link rel="stylesheet" href="./style.css" />
         <script vite-ignore src="../init.js" data-document-route="#/"></script>
         <script vite-ignore src="../locator.js"></script>
         <script type="module" src="./main.ts"></script>
     </head>
     <body>
-        <div id="app"></div>
+        <div id="app"><h1 class="status dots">Loading</h1></div>
+        <!-- @include ./template.html -->
+        <!-- @include ./AddressBar/template.html -->
+        <!-- @include ./SettingsDialog/template.html -->
+        <!-- @include ../utils/DialogFrame/template.html -->
     </body>
 </html>

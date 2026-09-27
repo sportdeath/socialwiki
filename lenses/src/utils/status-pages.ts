@@ -1,5 +1,5 @@
 import styleCss from "./status-pages.css?inline";
-import { escapeHtml } from "@vue/shared";
+import { escapeHtml } from "./escape-html";
 const style = `<style>${styleCss}</style>`;
 
 export const LoadingPage = `
@@ -10,7 +10,7 @@ export const LoadingPage = `
       ${style}
     </head>
     <body>
-        <h1 class="status dots">Site loading</h1>
+        <h1 class="status dots">Loading</h1>
     </body>
 </html>
 `;

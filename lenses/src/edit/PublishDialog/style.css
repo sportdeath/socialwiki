@@ -1,0 +1,66 @@
+.publish-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.35rem;
+}
+
+.publish-field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.45rem;
+    font-size: 1.15rem;
+}
+
+.publish-field :is(input, textarea) {
+    width: 100%;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    background: var(--background-color);
+    color: var(--text-color);
+    padding: 0.5rem 0.65rem;
+    font: inherit;
+}
+
+.publish-field :is(input, textarea):focus-visible {
+    outline: 2px solid var(--border-color-hover);
+    outline-offset: 1px;
+}
+
+.publish-audience-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    line-height: 1.4;
+    font-size: 1.3rem;
+    cursor: pointer;
+}
+
+.publish-audience-label {
+    display: block;
+    flex: 1;
+    padding: 0.55rem 0.7rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    background: var(--background-color-interactive);
+    cursor: pointer;
+}
+
+.publish-audience-checkbox input {
+    width: 2rem;
+    height: 2rem;
+    flex: 0 0 auto;
+    margin-top: 0;
+    cursor: pointer;
+}
+
+.publish-site-name-link {
+    color: var(--link-color);
+    font-weight: 700;
+    text-decoration: underline 2px;
+    text-underline-offset: 0.12em;
+}
+
+.publish-license {
+    font-size: 1rem;
+    color: var(--secondary-color);
+}

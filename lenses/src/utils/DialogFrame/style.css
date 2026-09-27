@@ -1,30 +1,3 @@
-<template>
-    <dialog
-        ref="dialog"
-        class="lens-dialog"
-        :aria-label="label"
-        @cancel.prevent="emit('cancel')"
-        @click.self="emit('cancel')"
-    >
-        <section class="dialog-panel"><slot /></section>
-    </dialog>
-</template>
-<script setup lang="ts">
-import { useTemplateRef, watchEffect } from "vue";
-const open = defineModel<boolean>({ required: true });
-defineProps<{ label: string }>();
-const emit = defineEmits<{ cancel: [] }>();
-const dialog = useTemplateRef<HTMLDialogElement>("dialog");
-// Native modal dialogs provide focus containment/restoration and Escape handling.
-watchEffect(
-    () => {
-        if (open.value && !dialog.value?.open) dialog.value?.showModal();
-        else if (!open.value && dialog.value?.open) dialog.value.close();
-    },
-    { flush: "post" },
-);
-</script>
-<style>
 .lens-dialog {
     position: fixed;
     inset: 0;
@@ -92,4 +65,3 @@ watchEffect(
     color: var(--text-color);
     cursor: not-allowed;
 }
-</style>

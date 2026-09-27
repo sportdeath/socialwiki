@@ -1,0 +1,128 @@
+<template id="browser-template">
+    <header>
+        <a :href="homeRoute">
+            <h1>
+                <span class="brand-full">Social.Wiki</span>
+                <span class="brand-short" aria-hidden="true">SW</span>
+            </h1>
+        </a>
+
+        <address-bar
+            :address="siteAddress"
+            :route-for-input-address="routeForInputAddress"
+            v-model="isDropdownOpen"
+            @navigate="navigateToInputAddress"
+            @focus="isSmall && (navOpen = false)"
+        >
+            <template #actions>
+                <button
+                    type="button"
+                    class="guard-permissions"
+                    title="Show permissions"
+                    aria-label="Show permissions"
+                    @click="openPermissions"
+                >
+                    <span class="permissions-shield-icon" aria-hidden="true"></span>
+                    <span class="permissions-full">Permissions</span>
+                </button>
+            </template>
+        </address-bar>
+
+        <details :open="navOpen">
+            <summary @click.prevent="navOpen = !navOpen">Menu</summary>
+
+            <nav>
+                <ul>
+                    <li v-if="routeReady">
+                        <a
+                            :href="viewRoute"
+                            :class="{ active: lens === 'v' }"
+                            :aria-current="lens === 'v' ? 'page' : undefined"
+                            title="The current version of this site"
+                        >
+                            View
+                        </a>
+                    </li>
+                    <li v-if="routeReady">
+                        <a
+                            :href="editRoute"
+                            :class="{ active: lens === 'e' }"
+                            :aria-current="lens === 'e' ? 'page' : undefined"
+                            title="Edit the source code of this site"
+                        >
+                            Edit
+                        </a>
+                    </li>
+                    <li v-if="routeReady">
+                        <a
+                            :href="historyRoute"
+                            :class="{ active: lens === 'h' }"
+                            :aria-current="lens === 'h' ? 'page' : undefined"
+                            title="Past revisions of this site"
+                        >
+                            History
+                        </a>
+                    </li>
+                    <li v-if="$graffitiSession.value === undefined">
+                        Loading...
+                    </li>
+                    <li v-else-if="$graffitiSession.value === null">
+                        <button @click="login" :disabled="loggingIn">
+                            {{ loggingIn ? "Logging in..." : "Log In" }}
+                        </button>
+                    </li>
+                    <li v-else>
+                        <button @click="openSettingsDialog" class="secondary">
+                            Settings
+                        </button>
+                    </li>
+                </ul>
+            </nav>
+        </details>
+        <div
+            v-if="isDropdownOpen || (navOpen && isSmall)"
+            class="backdrop"
+            @pointerdown.prevent="onBackdropClick"
+        ></div>
+    </header>
+    <settings-dialog
+        v-model="showSettingsDialog"
+        :lens-sources="lensSources"
+    ></settings-dialog>
+    <main>
+        <div
+            v-if="session && lensDiscoveryLoading && lensDiscoveryError"
+            class="status"
+            role="alert"
+        >
+            <h1>Could not check lens versions.</h1>
+            <p>{{ lensDiscoveryError.message }}</p>
+            <p>Retrying…</p>
+        </div>
+        <sw-transclude
+            v-else-if="
+                session !== undefined &&
+                routeReady &&
+                (lens === 'v' || directLensSource !== undefined)
+            "
+            :key="`${session?.actor ?? 'anonymous'}:${lens}:${lensRevision}`"
+            :id="lens"
+            permission-scope="inherit"
+            :name="
+                lens === 'v'
+                    ? 'View'
+                    : lens === 'e'
+                      ? 'Edit'
+                      : lens === 'h'
+                        ? 'History'
+                        : lens
+            "
+            :route="lensRoute"
+            :src="lens === 'v' ? lensQuery : undefined"
+            :srcdoc="lens === 'v' ? undefined : directLensSource"
+            :query="lens === 'v' ? undefined : lensQuery"
+            @sw-lens-output="onLensOutput"
+        ></sw-transclude>
+        <h1 v-else class="status dots">Loading</h1>
+    </main>
+</template>

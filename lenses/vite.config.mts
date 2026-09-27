@@ -1,10 +1,11 @@
-import { resolve } from "node:path";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
 
-import vue from "@vitejs/plugin-vue";
 import ts from "typescript";
 import { defineConfig, type Plugin, type UserConfig } from "vite";
 import { viteSingleFile } from "vite-plugin-singlefile";
 import {
+  browserImports,
   isPackageImport,
   packageImportUrl,
 } from "../browser-imports.mts";
@@ -19,6 +20,52 @@ export const entries = {
 } as const;
 const locatorEntry = resolve(root, "locator.ts");
 
+function includeTemplates(entryHtml: string): Plugin {
+  const include = /^[ \t]*<!--\s*@include\s+([^\s]+)\s*-->/gm;
+  const templatePath = (relative: string) => resolve(dirname(entryHtml), relative);
+  return {
+    name: "include-lens-templates",
+    buildStart() {
+      for (const [, relative] of readFileSync(entryHtml, "utf8").matchAll(include)) {
+        this.addWatchFile(templatePath(relative));
+      }
+    },
+    transformIndexHtml: {
+      order: "pre",
+      handler(html) {
+        return html.replace(include, (_match, relative: string) => {
+          return readFileSync(templatePath(relative), "utf8");
+        });
+      },
+    },
+  };
+}
+
+function readableScript(code: string) {
+  const ast = ts.createSourceFile("lens.js", code, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+
+  // esbuild emits `void 0` for source `undefined`; restore the clearer spelling
+  // only for actual expressions, not text inside the lens's HTML strings.
+  const positions: Array<{ start: number; end: number }> = [];
+  function visit(node: ts.Node) {
+    if (ts.isVoidExpression(node) && ts.isNumericLiteral(node.expression) && node.expression.text === "0") {
+      positions.push({ start: node.getStart(ast), end: node.getEnd() });
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  for (const { start, end } of positions.sort((a, b) => b.start - a.start)) {
+    code = `${code.slice(0, start)}undefined${code.slice(end)}`;
+  }
+
+  // These markers keep source comments through bundling; the markers and pure
+  // annotations are no longer needed in the editable HTML.
+  return code
+    .replace(/(^[ \t]*)\/\/!/gm, "$1//")
+    .replace(/(^[ \t]*)\/\*!/gm, "$1/*")
+    .replace(/\/\* @__PURE__ \*\/ ?/g, "");
+}
+
 function readableLens(name: string): Plugin {
   return {
     name: "readable-lens",
@@ -29,36 +76,31 @@ function readableLens(name: string): Plugin {
           continue;
         }
         const source = String(output.source);
+        let foundStyle = false;
+        let foundScript = false;
         const readableSource = source
           .replace(
             /<style(?=[^>]*\brel="stylesheet")[^>]*>([\s\S]*?)<\/style>/,
-            `<style>\n/* BEGIN Social.Wiki ${name} lens styles */\n$1\n/* END Social.Wiki ${name} lens styles */\n</style>`,
+            (_match, css: string) => {
+              foundStyle = true;
+              return `<style>\n${css}\n</style>`;
+            },
           )
           .replace(
             /<script(?=[^>]*\btype="module")(?=[^>]*\bcrossorigin)[^>]*>([\s\S]*?)<\/script>/,
-            `<script type="module">\n/* BEGIN Social.Wiki ${name} lens */\n$1\n/* END Social.Wiki ${name} lens */\n</script>`,
+            (_match, script: string) => {
+              foundScript = true;
+              return `<script type="module">\n${readableScript(script)}\n</script>`;
+            },
           );
-        if (
-          readableSource === source ||
-          !readableSource.includes(`BEGIN Social.Wiki ${name} lens styles`) ||
-          !readableSource.includes(`BEGIN Social.Wiki ${name} lens */`)
-        ) {
-          throw new Error(`Could not mark up the generated ${name} lens`);
+        if (!foundStyle || !foundScript) {
+          throw new Error(`Could not format the generated ${name} lens`);
         }
         output.source = readableSource;
       }
     },
   };
 }
-
-const vuePlugin = () =>
-  vue({
-    template: {
-      compilerOptions: {
-        isCustomElement: (tag) => tag === "sw-transclude",
-      },
-    },
-  });
 
 function markTypeScriptComments(code: string) {
   const scanner = ts.createScanner(
@@ -73,7 +115,7 @@ function markTypeScriptComments(code: string) {
       token === ts.SyntaxKind.SingleLineCommentTrivia ||
       token === ts.SyntaxKind.MultiLineCommentTrivia
     ) {
-      const start = scanner.getTokenPos();
+      const start = scanner.getTokenStart();
       const text = scanner.getTokenText();
       if (
         text[2] !== "!" &&
@@ -105,21 +147,6 @@ function preserveSourceComments(): Plugin {
       if (file.endsWith(".ts")) {
         return { code: markTypeScriptComments(code), map: null };
       }
-      if (file.endsWith(".vue")) {
-        if (id.includes("type=script")) {
-          return { code: markTypeScriptComments(code), map: null };
-        }
-        if (!id.includes("?")) {
-          return {
-            code: code.replace(
-              /(<script\b[^>]*>)([\s\S]*?)(<\/script>)/g,
-              (_match, open, script, close) =>
-                `${open}${markTypeScriptComments(script)}${close}`,
-            ),
-            map: null,
-          };
-        }
-      }
     },
   };
 }
@@ -135,8 +162,8 @@ export function buildConfig(
     // Only the top-level needs to copy over the 404 redirect
     publicDir: entry === "index" ? "public" : false,
     plugins: [
+      includeTemplates(entries[entry]),
       preserveSourceComments(),
-      vuePlugin(),
       viteSingleFile({ removeViteModuleLoader: true }),
       ...(entry === "index" ? [] : [readableLens(entry)]),
     ],
@@ -152,7 +179,11 @@ export function buildConfig(
         input: entries[entry],
         external: isPackageImport,
         output: {
-          paths: packageImportUrl,
+          paths: (specifier) =>
+            entry !== "index" &&
+            Object.hasOwn(browserImports, specifier)
+              ? specifier
+              : packageImportUrl(specifier),
         },
       },
     },

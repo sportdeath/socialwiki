@@ -1,0 +1,92 @@
+<template id="publish-dialog-template">
+    <dialog-frame
+        v-model="open"
+        label="Publish changes"
+        @cancel="cancelPublishDialog"
+    >
+        <h2 id="publish-title">Publish changes</h2>
+        <form
+            class="publish-form"
+            @submit.prevent="submitPublishDialog"
+        >
+            <label class="publish-field">
+                <span>Site name</span>
+                <input
+                    v-model="publishDialogSiteName"
+                    type="text"
+                    required
+                    autocomplete="off"
+                    @focus="selectAllPublishSiteName"
+                    @click="selectAllPublishSiteName"
+                    :disabled="publishing"
+                />
+            </label>
+
+            <label class="publish-field">
+                Edit summary (Briefly describe your changes)
+                <input
+                    ref="publishSummaryInput"
+                    v-model="publishDialogSummary"
+                    type="text"
+                    required
+                    autocomplete="off"
+                    :disabled="publishing"
+                />
+            </label>
+
+            <div class="publish-audience-checkbox">
+                <input
+                    id="publish-audience-confirm"
+                    v-model="publishAudienceConfirmed"
+                    type="checkbox"
+                    required
+                    :disabled="publishing"
+                />
+                <label
+                    for="publish-audience-confirm"
+                    class="publish-audience-label"
+                >
+                    I understand this change will be seen by anyone who visits
+                    the site "<a
+                        class="publish-site-name-link"
+                        :href="publishSiteHref"
+                        >{{ normalizedPublishSiteName || "this site" }}</a
+                    >".
+                </label>
+            </div>
+
+            <p class="publish-license">
+                By publishing changes, you irrevocably agree to release your
+                contribution under the
+                <a
+                    href="https://www.gnu.org/licenses/gpl-3.0.en.html"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >GNU GPLv3 License</a
+                >.
+            </p>
+
+            <p v-if="discoveryError" role="alert">
+                Could not check existing versions: {{ discoveryError.message }}. Retrying…
+            </p>
+            <footer>
+                <button
+                    type="button"
+                    class="secondary"
+                    :disabled="publishing"
+                    @click="cancelPublishDialog"
+                >
+                    Cancel
+                </button>
+                <button
+                    type="submit"
+                    class="allow-button"
+                    :disabled="publishing || isFirstPoll || !isPublishDialogValid"
+                >
+                    {{ isFirstPoll && discoveryError ? "Retrying..." : normalizedPublishSiteName && isFirstPoll
+                        ? "Checking existing versions..." : "Publish" }}
+                </button>
+            </footer>
+        </form>
+    </dialog-frame>
+</template>

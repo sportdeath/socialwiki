@@ -1,0 +1,126 @@
+<template id="settings-dialog-template">
+    <dialog-frame
+        v-model="open"
+        class="settings-dialog"
+        label="Settings"
+        @cancel="open = false"
+    >
+        <h2>Settings</h2>
+        <div class="settings-actions">
+            <button
+                v-if="session"
+                type="button"
+                class="warning"
+                :disabled="busy"
+                @click="logout"
+            >
+                {{ loggingOut ? "Logging out..." : "Log Out" }}
+            </button>
+        </div>
+
+        <section class="lens-settings">
+            <h3>Modify Social.Wiki</h3>
+            <p v-if="lensDiscoveryError" role="alert">
+                Could not check lens versions: {{ lensDiscoveryError.message }}. Retrying…
+            </p>
+            <p class="lens-warning">
+                Advanced: changing these will change how you interact with all Social.Wiki sites.
+            </p>
+
+            <div class="lens-row">
+                <div class="lens-name">
+                    <strong>View</strong>
+                    <span v-if="lensSources.isModified('v')" class="modified">
+                        Modified
+                    </span>
+                </div>
+                <button type="button" :disabled="busy" @click="modifyLens('v')">
+                    {{ modifying === "v" ? "Opening..." : "Modify" }}
+                </button>
+                <button
+                    v-if="session"
+                    type="button"
+                    class="warning"
+                    :disabled="busy || !lensSources.isModified('v')"
+                    @click="resetLens('v')"
+                >
+                    {{ resetting === "v" ? "Resetting..." : "Reset" }}
+                </button>
+            </div>
+            <div class="lens-row">
+                <div class="lens-name">
+                    <strong>Edit</strong>
+                    <span v-if="lensSources.isModified('e')" class="modified">
+                        Modified
+                    </span>
+                </div>
+                <button type="button" :disabled="busy" @click="modifyLens('e')">
+                    {{ modifying === "e" ? "Opening..." : "Modify" }}
+                </button>
+                <button
+                    v-if="session"
+                    type="button"
+                    class="warning"
+                    :disabled="busy || !lensSources.isModified('e')"
+                    @click="resetLens('e')"
+                >
+                    {{ resetting === "e" ? "Resetting..." : "Reset" }}
+                </button>
+            </div>
+            <div class="lens-row">
+                <div class="lens-name">
+                    <strong>History</strong>
+                    <span v-if="lensSources.isModified('h')" class="modified">
+                        Modified
+                    </span>
+                </div>
+                <button type="button" :disabled="busy" @click="modifyLens('h')">
+                    {{ modifying === "h" ? "Opening..." : "Modify" }}
+                </button>
+                <button
+                    v-if="session"
+                    type="button"
+                    class="warning"
+                    :disabled="busy || !lensSources.isModified('h')"
+                    @click="resetLens('h')"
+                >
+                    {{ resetting === "h" ? "Resetting..." : "Reset" }}
+                </button>
+            </div>
+            <div class="lens-row">
+                <div class="lens-name">
+                    <strong>Browser</strong>
+                    <span
+                        v-if="lensSources.isModified('browser')"
+                        class="modified"
+                    >
+                        Modified
+                    </span>
+                </div>
+                <button
+                    type="button"
+                    :disabled="busy"
+                    @click="modifyLens('browser')"
+                >
+                    {{ modifying === "browser" ? "Opening..." : "Modify" }}
+                </button>
+                <button
+                    v-if="session"
+                    type="button"
+                    class="warning"
+                    :disabled="busy || !lensSources.isModified('browser')"
+                    @click="resetLens('browser')"
+                >
+                    {{
+                        resetting === "browser" ? "Resetting..." : "Reset"
+                    }}
+                </button>
+            </div>
+        </section>
+        <footer>
+            <button type="button" class="secondary" @click="open = false">
+                Close
+            </button>
+        </footer>
+    </dialog-frame>
+</template>

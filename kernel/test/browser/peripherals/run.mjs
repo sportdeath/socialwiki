@@ -39,7 +39,7 @@ const server = createServer((request, response) => {
   let html = example.replace("http://localhost:5173/init.js", `${base}/init.js`);
   for (let i = 1; i < depth; i++) {
     const toolbar = i === depth - 1 ? `<header><a href="${base}/">Examples</a>
-      <button onclick="window.showPeripheralPermissions()">Permissions</button></header>` : "";
+      <button onclick="window.showPermissions()">Permissions</button></header>` : "";
     html = `<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
       <meta name="color-scheme" content="light dark"><title>${name} example</title>
       <style>html,body {height:100%;margin:0;overflow:hidden} body {display:flex;flex-direction:column;font:16px/1.5 system-ui}

@@ -1,0 +1,104 @@
+<template id="source-editor-template">
+    <two-pane-layout left-title="Editor" right-title="Preview">
+        <template #left-controls>
+            <nav class="editor-controls">
+                <ul class="editor-toolbar">
+                    <li>
+                        <button
+                            type="button"
+                            class="publish-button"
+                            :class="{ 'publish-shake': shouldShakePublish }"
+                            :disabled="publishing"
+                            @click="emit('publish')"
+                        >
+                            Publish
+                        </button>
+                    </li>
+
+                    <li>
+                        <button type="button" @click="emit('download')">
+                            Download
+                        </button>
+                    </li>
+
+                    <li>
+                        <details
+                            ref="viewMenuDetails"
+                            @keydown.esc.stop.prevent="closeViewMenu"
+                        >
+                            <summary>▾ View</summary>
+
+                            <ul class="editor-menu">
+                                <li>
+                                    <label class="menu-checkbox">
+                                        <input
+                                            type="checkbox"
+                                            v-model="showDiff"
+                                        />
+                                        Show changes
+                                    </label>
+                                </li>
+
+                                <li
+                                    class="menu-separator"
+                                    aria-hidden="true"
+                                ></li>
+
+                                <li>
+                                    <label class="menu-checkbox">
+                                        <input
+                                            type="checkbox"
+                                            v-model="darkMode"
+                                        />
+                                        Dark mode
+                                    </label>
+                                </li>
+
+                                <li>
+                                    <label class="menu-checkbox">
+                                        <input
+                                            type="checkbox"
+                                            v-model="wordWrap"
+                                        />
+                                        Word wrap
+                                    </label>
+                                </li>
+
+                                <li>
+                                    <label class="menu-checkbox">
+                                        <input
+                                            type="checkbox"
+                                            v-model="renderWhitespace"
+                                        />
+                                        Show whitespace
+                                    </label>
+                                </li>
+
+                                <li>
+                                    <label class="menu-checkbox">
+                                        <input
+                                            type="checkbox"
+                                            v-model="vimModeEnabled"
+                                        />
+                                        Vim mode
+                                    </label>
+                                </li>
+                            </ul>
+                        </details>
+                    </li>
+                </ul>
+            </nav>
+        </template>
+
+        <template #right-controls><slot name="preview-controls"></slot></template>
+
+        <!-- Left pane body (Editor) -->
+        <template #left-pane>
+            <div class="pane">
+                <div ref="editorElement" class="code-editor"></div>
+            </div>
+        </template>
+
+        <template #right-pane><slot name="preview"></slot></template>
+    </two-pane-layout>
+</template>

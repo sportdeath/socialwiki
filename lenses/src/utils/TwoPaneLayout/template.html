@@ -1,0 +1,37 @@
+<template id="two-pane-layout-template">
+    <div
+        class="sw-two-panes"
+        :class="{ 'is-resizing': isResizing }"
+        ref="containerRef"
+    >
+        <section
+            class="sw-two-pane"
+            :class="{ 'is-active': activePane === 'left' }"
+            :style="{ width: leftWidth + '%' }"
+        >
+            <header @click="setActive('left')">
+                <h2>{{ leftTitle }}</h2>
+                <div class="sw-two-pane-controls">
+                    <slot name="left-controls"></slot>
+                </div>
+            </header>
+            <div class="sw-two-pane-body">
+                <slot name="left-pane"></slot>
+            </div>
+        </section>
+
+        <div class="sw-two-pane-divider" @mousedown="startResize"></div>
+
+        <section class="sw-two-pane" :class="{ 'is-active': activePane === 'right' }">
+            <header @click="setActive('right')">
+                <h2>{{ rightTitle }}</h2>
+                <div class="sw-two-pane-controls">
+                    <slot name="right-controls"></slot>
+                </div>
+            </header>
+            <div class="sw-two-pane-body">
+                <slot name="right-pane"></slot>
+            </div>
+        </section>
+    </div>
+</template>
