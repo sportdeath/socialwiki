@@ -271,9 +271,11 @@ useGraffitiDiscover(
 - Only use `session` if you explicitly want to include private objects.
 - Component `<graffiti-discover :channels="[...]" :schema="{...}" v-slot="{ objects, error, isFirstPoll, poll }">`
 - If `error` is set, display it with "Retrying…"; discover retries automatically until it clears.
-- `isFirstPoll` is true after a change of arguments until the first discovery poll completes successfully. Use as loading signal.
+- Discovery automatically polls when first attached and when arguments change. Use `poll()` only for explicit refresh.
+- `isFirstPoll` stays true until the first successful poll after a change of arguments; use it as a loading signal.
 - AUTOPOLL IS RESOURCE HEAVY and should be used AT MOST ONCE to enable real-time updates (e.g. messaging).
-- Local changes (post, delete) propagate to discover in real time by default and at no penalty; no autopoll is necessary.
+- Local changes (post, delete) propagate reactively to discover; no autopoll necessary.
+- For large lists, batch channels when possible instead of starting a discovery for every item.
 - YOU MUST PASS AN ARRAY OF CHANNELS EVEN IF YOU ARE ONLY LISTENING TO ONE: `:channels="['my-channel']"`
 
 ##### useGraffitiGet
@@ -313,7 +315,7 @@ useGraffitiGetMedia(
 - `media` is `undefined` while loading and `null` when no media is available. When `media` is `null`, `error === null` means not found; otherwise `error` contains the failure.
 - Component equivalent: `<graffiti-get-media :url="url" :accept="{ ... }" v-slot="{ media, error, poll }">`
 - Accept is REQUIRED even if you want to accept all types. In that case `accept={}`
-- By default, the component already displays most media types (images, PDF, audio, video, etc.) with a download button fallback. Unless you want to process the media itself, do not put template code inside the `<graffiti-get-media></graffiti-get-media>` tag.
+- By default, the component already displays most media types (images, PDF, audio, video, etc.) with a download link fallback. Unless you want to process the media itself, do not put template code inside the `<graffiti-get-media></graffiti-get-media>` tag.
 - If `session` omitted, will only return public media (`allowed` omitted/undefined/null).
 - Only use `session` if you explicitly want to include private media.
 
@@ -361,11 +363,12 @@ To make your document usable under this model:
   - h3 for geolocation
   - other stable identifiers as needed
   - Do NOT use `window.location.href`. It is not available.
-  - actor/object/media URLs are already prefixed but custom channels schemes should use custom prefixes like `site:`, `topic:`, or `geolocation:` for disambiguation. Do NOT prefix with a URL, this is not the semantic web its a folksonomy.
+  - Actor/object/media URLs need no prefix. Use short custom prefixes such as `topic:` or `geolocation:`, not URLs (i.e. folksonomy, not the semantic web).
 - Always pass channels as an array, even for one channel.
 - Explain channel intent in comments.
 - Remember: you cannot truly prevent others from posting to your channels outside your UI.
   - Mitigate by filtering displayed objects (e.g., only owner-authored posts) + schema constraints.
+  - Treat values like timestamps and locations as untrusted. `actor` and `url` are unforgeable.
 
 ### Modifying and Deleting within Graffiti
 
@@ -375,7 +378,6 @@ To make your document usable under this model:
 - To enable removal by non-owners, post a new object describing the removal and interpret it in your UI; it does not delete the original object.
   - Example value: `{ action: 'Remove post', post: "GRAFFITI_OBJECT_URL" }`
 - Create additional objects to enable other forms of collaboration and moderation.
-
 
 ## Transclusion (most documents do not need this)
 
@@ -424,13 +426,15 @@ Transclusion is including one Social.Wiki document within another.
   - `channels: ["site:" + siteName]`
   - `value: { action: "Publish site", "site name": siteName, changes: string, document: mediaUrl, time: number, "previous versions"?: string[] }`
   - `allowed` is omitted. `document` is a `text/html` Graffiti media URL; `time` is milliseconds since the Unix epoch; `"previous versions"` contains site version object URLs.
-- A View lens selects a site version, loads its HTML, and displays it with `<sw-transclude :srcdoc="html" :query="siteQuery" route=""></sw-transclude>`. `siteQuery` comes from the site's address; `route=""` passes navigation through the lens.
+- A View lens selects a site version, loads its HTML, and displays it with `<sw-transclude :srcdoc="html" :query="siteQuery" :id="sourceId" :name="siteName" route=""></sw-transclude>`. `siteQuery` comes from the site's address; `route=""` passes navigation through the lens. Keep `sourceId` stable for the same HTML and change it when the HTML changes (e.g. sha256 of HTML); a query-only change should update `siteQuery` without reloading the HTML.
+- Publishers supply `time` and `"previous versions"`. A custom View lens must decide which publishers and competing versions to trust; the greatest `time` alone is not authoritative.
 - Normally, `<sw-transclude src="...">` resolves through a View lens. A default is provided, but a document may use `window.handleDocumentResolution((src, signal) => ...)` to choose another resolver for `src` transclusions in itself and its descendants. Most documents do not need this.
   - The resolver returns `{ srcdoc: string, query: string }` or a Promise and should honor `signal` during asynchronous work.
   - Example: `src="Garden?/flowers"` resolves to `{ srcdoc: chosenViewLensHtml, query: "?/Garden?/flowers" }`. The lens displays Garden at `?/flowers`.
-- Lenses should report their output with `window.emit("sw-lens-output", { status, srcdoc })`. Status is `"loading"`, `"ok"`, `"not-found"`, or `"error"`. On `"ok"`, `srcdoc` is the source HTML the lens displays or edits, and can be used to link to Edit with that HTML as the draft:
+- Lenses should report their output with `window.emit("sw-lens-output", { status, srcdoc })`. Status is `"loading"`, `"ok"`, `"not-found"`, or `"error"`. For asynchronous resolution, emit `"loading"` first and discard stale results. On `"ok"`, `srcdoc` is the source HTML the lens displays or edits, and can be used to link to Edit with that HTML as the draft:
   - `editAddress = window.route.composeAddress("e", window.route.composeQuery(new URLSearchParams({ draft: srcdoc }), siteAddress))`
   - ``<a :href="`#/${editAddress}`">Edit draft</a>``
+  - If forwarding child events, handle a child's `sw-lens-output` with `event.preventDefault()` so it is not reported as the lens's own.
 
 ### Custom navigation (uncommon, advanced)
 
@@ -446,26 +450,33 @@ Transclusion is including one Social.Wiki document within another.
   });
   ```
 
+### Building a browser (uncommon, advanced)
+
+- Parse `window.address` with `window.route.parseAddress` for the lens name and query, then use `window.route.parseQuery` for the site address and lens parameters.
+- `src` names a site and resolves it through View by default. To display Edit or History, use `srcdoc` with that lens's HTML.
+- Set `data-document-route="#/"` on the `init.js` script to establish the document as the root (otherwise `#/...` links will go to `https://social.wiki/`).
+
 ## Best Practices
 
 ### Design Process
 
-1. Extract and list: core entities, actions, and views.
-2. Define exactly which Graffiti object "types" you will use (e.g., Post, Like, Comment, Follow, etc.).
-3. For each object type, define:
+1. Describe the core user journey and the interface needed to support it.
+    - Use semantic interface elements when appropriate like calendars, maps, and canvases rather than exposing a generic data editor
+2. Define the entities, actions, and views needed to implement the interface.
+3. Define exactly which Graffiti object "types" you will use (e.g., Post, Like, Comment, Follow, etc.).
+4. For each object type, define:
     - JSON schema (required fields, example)
       - Make as human-readable as possible
       - Duck-type objects by required properties (avoid `"type"`/`"kind"` properties for artifacts; use `"action"` for verbs)
       - Leave `additionalProperties` allowed for extensions
     - `allowed` policy (public vs private)
     - `channels` used (and why)
-4. Identify which Graffiti API methods you will use (by name).
+5. Identify which Graffiti methods, composables, and components you will use.
     - For methods with an optional session, decide if you need it for private objects or media.
-5. Identify which Vue wrappers you will use (composables/components) and where.
 6. Optional: identify state to store in route with `window.address`/`params`.
 7. Implement UI that supports:
     - login/logout
-    - creating objects
+    - creating objects with appropriate actions
     - discovering and displaying objects in appropriate views
     - any interactions like like/comment/delete
     - clear feedback states (loading/disabled buttons)
@@ -478,6 +489,7 @@ Transclusion is including one Social.Wiki document within another.
   - Externally, display human-readable handles whenever you show identity.
   - Use `actorToHandle` / `handleToActor` (or their Vue wrappers) for translation.
 - Use friendly UI labels: "user/account" instead of actor; "page/topic/space" instead of channel.
+- In people-based apps, make first contacts discoverable (e.g., a directory, shared-space participants, or invite link). In cases where a handle must be entered, show the user their own handle as an example.
 - Linkify user-generated text (posts, messages): recognize HTTP(S) URLs and site links beginning `#/`. Show the site name for links such as `#/v?/mysite` -> `<a href="#/v?/mysite">mysite</a>`:
 
   ```js
@@ -491,14 +503,16 @@ Transclusion is including one Social.Wiki document within another.
 
   Render odd-index parts as `<a :href="part">{{ linkText(part) }}</a>` and the rest as text (not `v-html`).
 
-- Do not add design explanations or excessive labels into the UI. Instead use good usability principles to make the UI naturally usable.
-- Use loading states and disable buttons while awaiting async calls.
+- Do not add design explanations or excessive instructions into the UI. An app built with good usability principles should not need an instruction manual.
+- Use loading states while awaiting async calls.
+- Use optimistic rendering for interactions users may repeat while `graffiti.post` is in progress, such as sending messages or painting on a canvas. Show each new item immediately as pending, then remove that copy when `graffiti.post` finishes. For non-optimistic interactions, disable the button while posting to prevent duplicates.
 
 ### Implementation
 
 - Break out functionality into Vue components where appropriate.
 - To reduce styling complexity, consider using semantic HTML and a classless CSS library and only apply styling on top as necessary.
 - Social.Wiki is collaborative, so add comments throughout to clarify design decisions and reasoning to future authors.
+- Keep the single HTML readable; do not minify code people will edit.
 - DOUBLE CHECK that you are passing an ARRAY OF CHANNELS, even if you are only using one: `<graffiti-discover :channels="['my-channel']" ...>`
 - DOUBLE CHECK that your schemas are relative to the WHOLE OBJECT, not just the object's value: `{ properties: { value: { properties: {...}, required: [...] } } }`
 
@@ -651,6 +665,13 @@ const follow = {
   allowed: [ actor ]
 };
 ```
+
+## Good-Faith Collaboration
+
+When editing a site (a named document), remember that you may be overwriting work that someone else made. To avoid conflict and edit wars:
+- When changing an existing feature, consider making it a setting. For example, introduce a dark mode toggle rather than simply making the whole site dark.
+- If the reasonable default is not clear, consider introducing a setup wizard to new users.
+- If settings/setup are not enough to reconcile, consider forking the site to a new name. A disambiguation page at the original name can link to different versions.
 
 ## References
 
