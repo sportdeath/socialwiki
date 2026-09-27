@@ -127,10 +127,10 @@ The document runs in a sandboxed originless iframe. Some browser functionalities
 - Fetching Graffiti objects requires a JSON Schema that will filter for objects matching a specific shape.
 - Using the schema `{}` will match everything, but DO NOT USE UNLESS NECESSARY.
 - The schema applies to the whole object (`value`, `channels`, `allowed`, `actor`, `url`), not just `object.value`. Generally just filtering for `value` is OK, but filtering `actor` can be useful if you only want objects by a certain set of actors.
-- Start from this base schema:
+- Start from this shape:
 
   ```js
-  { properties: { value: { properties: {}, required: [] } } }
+  { properties: { value: { /* Your value schema here */ } } }
   ```
 
 ### Graffiti API
@@ -425,7 +425,7 @@ Transclusion is including one Social.Wiki document within another.
   - `value: { action: "Publish site", "site name": siteName, changes: string, document: mediaUrl, time: number, "previous versions"?: string[] }`
   - `allowed` is omitted. `document` is a `text/html` Graffiti media URL; `time` is milliseconds since the Unix epoch; `"previous versions"` contains site version object URLs.
 - A View lens selects a site version, loads its HTML, and displays it with `<sw-transclude :srcdoc="html" :query="siteQuery" route=""></sw-transclude>`. `siteQuery` comes from the site's address; `route=""` passes navigation through the lens.
-- A document may use `window.handleDocumentResolution((src, signal) => ...)` to choose which View lens resolves `<sw-transclude src="...">` in that document and its nested child documents. Most documents leave the default resolver in place.
+- Normally, `<sw-transclude src="...">` resolves through a View lens. A default is provided, but a document may use `window.handleDocumentResolution((src, signal) => ...)` to choose another resolver for `src` transclusions in itself and its descendants. Most documents do not need this.
   - The resolver returns `{ srcdoc: string, query: string }` or a Promise and should honor `signal` during asynchronous work.
   - Example: `src="Garden?/flowers"` resolves to `{ srcdoc: chosenViewLensHtml, query: "?/Garden?/flowers" }`. The lens displays Garden at `?/flowers`.
 - Lenses should report their output with `window.emit("sw-lens-output", { status, srcdoc })`. Status is `"loading"`, `"ok"`, `"not-found"`, or `"error"`. On `"ok"`, `srcdoc` is the source HTML the lens displays or edits, and can be used to link to Edit with that HTML as the draft:
@@ -645,9 +645,9 @@ const follow = {
     action: "Follow account",
     account: actor,
   },
-  // Available to both of us
+  // Discoverable through either account's channel
   channels: [session.actor, actor],
-  // Only visible to us
+  // Readable only by the followed account and the creator
   allowed: [ actor ]
 };
 ```
