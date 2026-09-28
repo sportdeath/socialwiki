@@ -418,31 +418,24 @@ Transclusion is including one Social.Wiki document within another.
 - A site can be transcluded by reference via its address. The `src` attribute supersedes `srcdoc`; when `src` is set, its embedded query is used and the separate `query` attribute is ignored.
   - `<sw-transclude :src="siteAddress"></sw-transclude>`
 
-### Building lenses and custom resolution (uncommon, advanced)
+### Custom lenses (uncommon, advanced)
 
-- A document can act like a View lens and choose which published version of a site to display, using its own filtering or moderation rules.
+- Lenses are regular Social.Wiki documents and new ones can introduce different moderation policies for collaborative editing.
+- See the [View](https://social.wiki/view/index.html), [Edit](https://social.wiki/edit/index.html), and [History](https://social.wiki/history/index.html) documents for complete examples.
 - A lens receives the site's address in `window.address` (parse it with `window.route.parseAddress`) and lens options in `window.params`.
 - Site versions are public Graffiti objects with this shape:
   - `channels: ["site:" + siteName]`
   - `value: { action: "Publish site", "site name": siteName, changes: string, document: mediaUrl, time: number, "previous versions"?: string[] }`
-  - `allowed` is omitted. `document` is a `text/html` Graffiti media URL; `time` is milliseconds since the Unix epoch; `"previous versions"` contains site version object URLs.
-- A View lens selects a site version, loads its HTML, and displays it with `<sw-transclude :srcdoc="html" :query="siteQuery" :id="sourceId" :name="siteName" route=""></sw-transclude>`. `siteQuery` comes from the site's address; `route=""` passes navigation through the lens. Keep `sourceId` stable for the same HTML and change it when the HTML changes (e.g. sha256 of HTML); a query-only change should update `siteQuery` without reloading the HTML.
-- Publishers supply `time` and `"previous versions"`. A custom View lens must decide which publishers and competing versions to trust; the greatest `time` alone is not authoritative.
-- Normally, `<sw-transclude src="...">` resolves through a View lens. A default is provided, but a document may use `window.handleDocumentResolution((src, signal) => ...)` to choose another resolver for `src` transclusions in itself and its descendants. Most documents do not need this.
-  - The resolver returns `{ srcdoc: string, query: string }` or a Promise and should honor `signal` during asynchronous work.
-  - Example: `src="Garden?/flowers"` resolves to `{ srcdoc: chosenViewLensHtml, query: "?/Garden?/flowers" }`. The lens displays Garden at `?/flowers`.
-- Every lens must report its output with `window.emit("sw-lens-output", { status, srcdoc })`. Status is `"loading"`, `"ok"`, `"not-found"`, or `"error"`. For asynchronous resolution, emit `"loading"` first and discard stale results. On `"ok"`, `srcdoc` is the source HTML the lens displays or edits, and can be used to link to Edit with that HTML as the draft:
-  - `editAddress = window.route.composeAddress("e", window.route.composeQuery(new URLSearchParams({ draft: srcdoc }), siteAddress))`
-  - ``<a :href="`#/${editAddress}`">Edit draft</a>``
-  - If forwarding child events, handle a child's `sw-lens-output` with `event.preventDefault()` so it is not reported as the lens's own.
+  - `allowed` is omitted (public).
+- A custom View lens selects which versions and publishers to trust. It transcludes the selected HTML with the site's query and `route=""`. Keep the child's `id` stable when only the query changes so the document does not reload.
+- Every lens reports `window.emit("sw-lens-output", { status, srcdoc })`, where `status` is `"loading"`, `"ok"`, `"not-found"`, or `"error"`. On `"ok"`, `srcdoc` is the source HTML displayed or edited. For asynchronous resolution, emit `"loading"` first and ignore stale results. If forwarding child events, consume their `sw-lens-output` rather than reporting it as the lens's own.
 
-### Custom navigation (uncommon, advanced)
+#### Custom navigation
 
 - Links and `window.navigate()` in an embedded document send navigation requests to its parent. By default, the requesting element's `route` attribute controls how they are handled.
 - `window.handleNavigation((to, childEl) => { ... })` replaces that default for this document's children. `to` is the requested destination; `childEl` is the requesting `<sw-transclude>` element.
 - In the handler, call `childEl.navigate(to)` to apply a local query starting with `"?"` (updating its `src` or `query`), or `window.navigate(to)` to forward navigation to the parent.
 - Example (local query navigation, other destinations forwarded):
-
   ```js
   window.handleNavigation((to, childEl) => {
     if (to.startsWith("?")) childEl.navigate(to);
@@ -452,9 +445,14 @@ Transclusion is including one Social.Wiki document within another.
 
 ### Building a browser (uncommon, advanced)
 
-- Parse `window.address` with `window.route.parseAddress` for the lens name and query, then use `window.route.parseQuery` for the site address and lens parameters.
-- `src` names a site and resolves it through View by default. To display Edit or History, use `srcdoc` with that lens's HTML.
-- Set `data-document-route="#/"` on the `init.js` script to establish the document as the root (otherwise `#/...` links will go to `https://social.wiki/`).
+- A browser selects and transcludes a lens from its route. See the [existing browser lens](https://social.wiki/browser/index.html) for a complete example.
+- Set `data-document-route="#/"` on the `init.js` script so `#/...` links resolve within the browser.
+
+#### Custom resolution
+
+- Normally, `<sw-transclude src="...">` resolves through the default View lens but a document may use `window.handleDocumentResolution((src, signal) => ...)` to choose another resolver for `src` transclusions in itself and its descendants. Most documents do not need this.
+  - The resolver returns `{ srcdoc: string, query: string }` or a Promise and should honor `signal` during asynchronous work.
+  - Example: `src="Garden?/flowers"` resolves to `{ srcdoc: chosenViewLensHtml, query: "?/Garden?/flowers" }`. The lens displays Garden at `?/flowers`.
 
 ## Best Practices
 
