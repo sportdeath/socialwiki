@@ -82,6 +82,7 @@ The document runs in a sandboxed originless iframe. Some browser functionalities
     - `window.route.parseQuery(query: string): { params?: URLSearchParams; address?: string }`
 - Route state may arrive after load; listen for changes.
 - For query navigation on-click, use normal anchors: `<a :href="query">`. Clicks will not refresh the page.
+- Avoid exposing users to raw query strings. For a non-empty `query`, `<a :href="query">` automatically translates queries into absolute links on New Tab / Copy Link actions. For programmatic copying, use `await window.copyLink(query)` in response to a user action to copy an absolute link to the clipboard.
 
 ### Navigation
 
@@ -413,6 +414,7 @@ Transclusion is including one Social.Wiki document within another.
   - For an absolute location, the lens address must be prepended with the root symbol `"#/"`. This symbol refers to a top-level "browser" document that typically provides an address bar and selects View/Edit/History based on its provided address.
   - Navigation on-click: ``<a :href="`#/${lensAddress}`">``
   - Programmatic navigation: ``window.navigate(`#/${lensAddress}`)``
+  - Copy absolute link: ``window.copyLink(`#/${lensAddress}`)``
 - A site can be transcluded by reference via its address. The `src` attribute supersedes `srcdoc`; when `src` is set, its embedded query is used and the separate `query` attribute is ignored.
   - `<sw-transclude :src="siteAddress"></sw-transclude>`
 

@@ -31,6 +31,9 @@ declare global {
      */
     navigate: (to: string) => void;
 
+    /** Copy a route or absolute HTTP(S) link and return its public URL. */
+    copyLink: (to: string) => Promise<string>;
+
     /**
      * Replaces the default handling of navigation from this document's
      * transclusions. The handler receives the requesting transclusion, whose

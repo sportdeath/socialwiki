@@ -22,6 +22,29 @@ export function installNavigationChild(events: EventsChild) {
   let currentParamsSerialized: string | undefined;
   const documentRoute = createDocumentRouteState();
 
+  window.copyLink = async (to: string) => {
+    const isRoute = to.startsWith("?") || to.startsWith("#/") || to.startsWith("#?");
+    let url: URL | null;
+    if (isRoute) {
+      const currentRoute = documentRoute.getDocumentRoute();
+      if (!currentRoute) {
+        throw new Error("Cannot copy a route without a public document route");
+      }
+      url = serializeRouteUrl(to, currentRoute);
+      if (!url) throw new Error("Cannot resolve this route to an HTTP(S) URL");
+    } else {
+      url = new URL(to);
+    }
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      throw new TypeError("Only HTTP(S) links can be copied");
+    }
+    if (!navigator.clipboard?.writeText) {
+      throw new Error("Clipboard access is unavailable");
+    }
+    await navigator.clipboard.writeText(url.href);
+    return url.href;
+  };
+
   function normalizeParams(params?: URLSearchParams | string): string {
     if (params === undefined) return "";
     const serialized =
