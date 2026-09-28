@@ -1,4 +1,5 @@
 import { GraffitiGuarded } from "@graffiti-garden/wrapper-data-guard";
+import { GraffitiLocal } from "@graffiti-garden/implementation-local";
 import { installTransclude } from "./transclude";
 import { installChildBridgeEndpoints } from "./bridges/child";
 import { DEFAULT_DOCUMENT_ROUTE } from "./constants";
@@ -17,6 +18,7 @@ import {
 import { decodeUrlAddress } from "./url-route";
 
 declare const KERNEL_IMPORT_MAP: { imports: Record<string, string> };
+declare const TEST_GRAFFITI: boolean;
 
 const currentScript = document.currentScript;
 if (!(currentScript instanceof HTMLScriptElement) || !currentScript.src) {
@@ -58,11 +60,11 @@ if (window.top !== window) {
     document.documentElement.replaceChildren(document.createElement("body"));
 
     // Install top-level services: Graffiti, peripherals, resolution, and navigation
-    const graffiti = new GraffitiGuarded();
+    const graffitiGuarded = TEST_GRAFFITI ? undefined : new GraffitiGuarded();
     const peripherals = createPeripheralsHost(
       undefined,
-      createPeripheralPermissions({
-        dataPermissionUrl: (source) => graffiti.auditUrl({ source }),
+      createPeripheralPermissions(TEST_GRAFFITI ? {} : {
+        dataPermissionUrl: (source) => graffitiGuarded!.auditUrl({ source }),
       }),
     );
     handleDocumentResolution(createDefaultResolver(kernelUrl.href));
@@ -111,7 +113,11 @@ if (window.top !== window) {
     // Make an installer that allows those services to be
     // bridged to sub-documents.
     const bridgedServices = {
-      createGraffiti: () => graffiti,
+      // Create Graffiti Local when a frame connects so the bridge observes
+      // its initial session events.
+      createGraffiti: () => TEST_GRAFFITI
+        ? new GraffitiLocal()
+        : graffitiGuarded!,
       resolve: resolveDocument,
       documentRoute,
       peripherals,

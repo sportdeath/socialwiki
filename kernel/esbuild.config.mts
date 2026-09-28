@@ -1,4 +1,5 @@
 import * as esbuild from "esbuild";
+import { polyfillNode } from "esbuild-plugin-polyfill-node";
 import { browserImports } from "../browser-imports.mts";
 
 const options = {
@@ -9,7 +10,6 @@ const options = {
   minify: true,
   // Lenses include this as a classic script.
   format: "iife",
-  outdir: "dist",
   loader: {
     ".css": "text",
   },
@@ -18,9 +18,17 @@ const options = {
   },
 } satisfies esbuild.BuildOptions;
 
-if (process.argv.includes("--watch")) {
-  const context = await esbuild.context(options);
-  await context.watch();
-} else {
-  await esbuild.build(options);
+for (const [name, testGraffiti] of [["init", false], ["init-test", true]] as const) {
+  const buildOptions = {
+    ...options,
+    outfile: `dist/${name}.js`,
+    define: { ...options.define, TEST_GRAFFITI: String(testGraffiti) },
+    plugins: [polyfillNode()],
+  };
+  if (process.argv.includes("--watch")) {
+    const context = await esbuild.context(buildOptions);
+    await context.watch();
+  } else {
+    await esbuild.build(buildOptions);
+  }
 }

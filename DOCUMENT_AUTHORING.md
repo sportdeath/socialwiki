@@ -14,6 +14,7 @@ This guide describes the Social.Wiki runtime, Graffiti's data model and API, and
   ```
   It sets up the runtime, defines `window.Graffiti` and other globals, and provides an import map for `"vue"` and `"@graffiti-garden/wrapper-vue"`
 - Do not add your own import map. Use full CDN URLs for packages other than `"vue"` and `"@graffiti-garden/wrapper-vue"`
+- Import each Vue helper you use from `"vue"` (such as `ref` or `computed`); there is no global `Vue`.
 - HTML structure:
 
   ```html
@@ -513,6 +514,7 @@ Transclusion is including one Social.Wiki document within another.
 - To reduce styling complexity, consider using semantic HTML and a classless CSS library and only apply styling on top as necessary.
 - Social.Wiki is collaborative, so add comments throughout to clarify design decisions and reasoning to future authors.
 - Keep the single HTML readable; do not minify code people will edit.
+- Test the HTML over HTTP(S), not `file://`, with `https://social.wiki/init-test.js`. Its accounts and data stay in your browser, so create as many test users and objects as needed. Check that the document mounts and its main interactions work, then restore `init.js` before publishing.
 - DOUBLE CHECK that you are passing an ARRAY OF CHANNELS, even if you are only using one: `<graffiti-discover :channels="['my-channel']" ...>`
 - DOUBLE CHECK that your schemas are relative to the WHOLE OBJECT, not just the object's value: `{ properties: { value: { properties: {...}, required: [...] } } }`
 
@@ -670,7 +672,7 @@ const follow = {
 
 When editing a site (a named document), remember that you may be overwriting work that someone else made. To avoid conflict and edit wars:
 - When changing an existing feature, consider making it a setting. For example, introduce a dark mode toggle rather than simply making the whole site dark.
-- If the reasonable default is not clear, consider introducing a setup wizard to new users.
+- If the reasonable default is not clear, consider introducing a setup wizard for new users.
 - If settings/setup are not enough to reconcile, consider forking the site to a new name. A disambiguation page at the original name can link to different versions.
 
 ## References

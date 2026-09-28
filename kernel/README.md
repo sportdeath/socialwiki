@@ -20,6 +20,14 @@ It can also be loaded from the npm package through a CDN:
 <script src="https://cdn.jsdelivr.net/npm/social-wiki@latest/dist/init.js"></script>
 ```
 
+For local smoke tests, replace `init.js` with `init-test.js` at the same
+location. It uses Graffiti Local, so test data stays in that browser instead of
+reaching the live Graffiti service. Graffiti Local lets you choose a username
+when the document requests login; log out and choose another name to test a
+second user.
+Serve the document over HTTP(S), and restore `init.js` before publishing.
+This mode does not exercise live Graffiti data permissions or remote synchronization.
+
 ## Runtime API
 
 Social.Wiki documents receive:
