@@ -16,7 +16,6 @@ This guide describes the Social.Wiki runtime, Graffiti's data model and API, and
 - Do not add your own import map. Use full CDN URLs for packages other than `"vue"` and `"@graffiti-garden/wrapper-vue"`
 - Import each Vue helper you use from `"vue"` (such as `ref` or `computed`); there is no global `Vue`.
 - HTML structure:
-
   ```html
   <!-- empty placeholder for mounting -->
   <div id="app">Loading...</div>
@@ -27,9 +26,7 @@ This guide describes the Social.Wiki runtime, Graffiti's data model and API, and
   </template>
   <template id="my-component-template">VUE CODE HERE</template>
   ```
-
 - Script structure:
-
   ```js
   import { createApp } from "vue"
   import { GraffitiPlugin, useGraffiti, ... } from "@graffiti-garden/wrapper-vue"
@@ -57,9 +54,7 @@ This guide describes the Social.Wiki runtime, Graffiti's data model and API, and
 
 The document runs in a sandboxed originless iframe. Some browser functionalities are restored by <https://social.wiki/init.js> but others are unavailable.
 
-- Do NOT use `window.location`, `window.origin`, or `window.open`
-- Do NOT use cookies, `localStorage`, or `IndexedDB`. Use Graffiti for data persistence.
-- You may use the following when available; some require user permission or interaction:
+- You MAY use the following when available; some require user permission or interaction:
   - Camera and microphone via `navigator.mediaDevices.getUserMedia()`
   - Device location via `navigator.geolocation`
   - Clipboard via `navigator.clipboard`
@@ -67,6 +62,8 @@ The document runs in a sandboxed originless iframe. Some browser functionalities
   - `crypto.randomUUID()`, `crypto.getRandomValues()` and `crypto.subtle`
   - Local files via `<input type="file">` or `showOpenFilePicker()`, `showSaveFilePicker()`, and `showDirectoryPicker()`
   - Downloads are permitted via `<a href="..." download>`
+- Do NOT use `window.location`, `window.origin`, or `window.open`
+- Do NOT use cookies, `localStorage`, or `IndexedDB`. Use Graffiti for data persistence.
 - Do NOT use service workers or push notifications.
 - Do NOT use screen capture, audio output selection, Web Serial, WebUSB, Web Bluetooth, WebHID, Web MIDI, or Web NFC. Do not assume other device APIs work.
 - External `fetch()` requests need the server to allow cross-origin requests; the document sends `Origin: null`.
@@ -160,6 +157,7 @@ get(
 ```
 
 - Validates against required JSON schema.
+- Fetches one object by its known URL; use discovery (below) to find multiple objects by channel.
 - If `session` omitted, object must be public (`allowed` omitted/undefined/null).
 - Only use `session` if you explicitly want to include private objects.
 - If retriever != creator, `allowed`/`channels` are masked (BCC-like).
@@ -274,9 +272,8 @@ useGraffitiDiscover(
 - If `error` is set, display it with "Retrying…"; discover retries automatically until it clears.
 - Discovery automatically polls when first attached and when arguments change. Use `poll()` only for explicit refresh.
 - `isFirstPoll` stays true until the first successful poll after a change of arguments; use it as a loading signal.
-- AUTOPOLL IS RESOURCE HEAVY and should be used AT MOST ONCE to enable real-time updates (e.g. messaging).
-- Local changes (post, delete) propagate reactively to discover; no autopoll necessary.
-- For large lists, batch channels when possible instead of starting a discovery for every item.
+- For ongoing updates from other people (e.g. messaging), enable `autopoll` on at most ONE discovery; it is resource heavy. Local posts/deletes propagate reactively to `objects`; no `autopoll` necessary.
+- Discover calls are expensive. For per-item data (e.g. reactions), discover in batches. E.g. pass `() => posts.objects.value.map(post => post.url)` to a second `useGraffitiDiscover`; do not put a discovery in each repeated row.
 - YOU MUST PASS AN ARRAY OF CHANNELS EVEN IF YOU ARE ONLY LISTENING TO ONE: `:channels="['my-channel']"`
 
 ##### useGraffitiGet
@@ -312,11 +309,10 @@ useGraffitiGetMedia(
 }
 ```
 
-- Also provides a `dataUrl` field for convenient media rendering.
+- A Graffiti media URL cannot go directly in `<img src>`. For ordinary display, use `<graffiti-get-media :url="url" :accept="{ ... }"></graffiti-get-media>`; it handles common media types and a download fallback.
+- For custom rendering, use the composable's `media.dataUrl` or the component's `v-slot="{ media, error, poll }"`.
 - `media` is `undefined` while loading and `null` when no media is available. When `media` is `null`, `error === null` means not found; otherwise `error` contains the failure.
-- Component equivalent: `<graffiti-get-media :url="url" :accept="{ ... }" v-slot="{ media, error, poll }">`
 - Accept is REQUIRED even if you want to accept all types. In that case `accept={}`
-- By default, the component already displays most media types (images, PDF, audio, video, etc.) with a download link fallback. Unless you want to process the media itself, do not put template code inside the `<graffiti-get-media></graffiti-get-media>` tag.
 - If `session` omitted, will only return public media (`allowed` omitted/undefined/null).
 - Only use `session` if you explicitly want to include private media.
 
@@ -420,9 +416,10 @@ Transclusion is including one Social.Wiki document within another.
 - A site can be transcluded by reference via its address. The `src` attribute supersedes `srcdoc`; when `src` is set, its embedded query is used and the separate `query` attribute is ignored.
   - `<sw-transclude :src="siteAddress"></sw-transclude>`
 
-### Custom resolution (uncommon, advanced)
+### Building lenses and custom resolution (uncommon, advanced)
 
 - A document can act like a View lens and choose which published version of a site to display, using its own filtering or moderation rules.
+- A lens receives the site's address in `window.address` (parse it with `window.route.parseAddress`) and lens options in `window.params`.
 - Site versions are public Graffiti objects with this shape:
   - `channels: ["site:" + siteName]`
   - `value: { action: "Publish site", "site name": siteName, changes: string, document: mediaUrl, time: number, "previous versions"?: string[] }`
@@ -432,7 +429,7 @@ Transclusion is including one Social.Wiki document within another.
 - Normally, `<sw-transclude src="...">` resolves through a View lens. A default is provided, but a document may use `window.handleDocumentResolution((src, signal) => ...)` to choose another resolver for `src` transclusions in itself and its descendants. Most documents do not need this.
   - The resolver returns `{ srcdoc: string, query: string }` or a Promise and should honor `signal` during asynchronous work.
   - Example: `src="Garden?/flowers"` resolves to `{ srcdoc: chosenViewLensHtml, query: "?/Garden?/flowers" }`. The lens displays Garden at `?/flowers`.
-- Lenses should report their output with `window.emit("sw-lens-output", { status, srcdoc })`. Status is `"loading"`, `"ok"`, `"not-found"`, or `"error"`. For asynchronous resolution, emit `"loading"` first and discard stale results. On `"ok"`, `srcdoc` is the source HTML the lens displays or edits, and can be used to link to Edit with that HTML as the draft:
+- Every lens must report its output with `window.emit("sw-lens-output", { status, srcdoc })`. Status is `"loading"`, `"ok"`, `"not-found"`, or `"error"`. For asynchronous resolution, emit `"loading"` first and discard stale results. On `"ok"`, `srcdoc` is the source HTML the lens displays or edits, and can be used to link to Edit with that HTML as the draft:
   - `editAddress = window.route.composeAddress("e", window.route.composeQuery(new URLSearchParams({ draft: srcdoc }), siteAddress))`
   - ``<a :href="`#/${editAddress}`">Edit draft</a>``
   - If forwarding child events, handle a child's `sw-lens-output` with `event.preventDefault()` so it is not reported as the lens's own.
@@ -547,6 +544,7 @@ Transclusion is including one Social.Wiki document within another.
       template: "#template",
       data: () => ({
         processingWave: false,
+        waveError: "",
         siteName: 'my-cool-site'
       }),
     }).use(GraffitiPlugin, { graffiti: new window.Graffiti() })
@@ -562,7 +560,7 @@ Transclusion is including one Social.Wiki document within another.
 
     <!-- "Discover" any waves from this site -->
     <graffiti-discover
-      v-slot="{ objects: waves, isFirstPoll }"
+      v-slot="{ objects: waves, isFirstPoll, error }"
       :channels="['site:' + siteName]"
       :schema="{ properties: { value: {
         required: ['action', 'site name'],
@@ -572,7 +570,11 @@ Transclusion is including one Social.Wiki document within another.
         }
       }}}"
     >
-      <button v-if="!$graffitiSession.value" @click="$graffiti.login()">
+      <p v-if="error" role="status">Could not load waves: {{ error.message }}. Retrying…</p>
+      <p v-if="waveError" role="status">{{ waveError }}</p>
+
+      <p v-if="$graffitiSession.value === undefined">Checking your account…</p>
+      <button v-else-if="$graffitiSession.value === null" @click="$graffiti.login()">
         Log in to wave!
       </button>
 
@@ -588,13 +590,16 @@ Transclusion is including one Social.Wiki document within another.
           )"
           @click="
             processingWave = true;
+            waveError = '';
             $graffiti.post(
               {
                 value: { action: 'Wave', 'site name': siteName },
                 channels: ['site:' + siteName],
               },
               $graffitiSession.value
-            ).finally(() => {
+            ).catch(error => {
+              waveError = error.message || 'Could not wave.';
+            }).finally(() => {
               processingWave = false;
             });
           "
@@ -612,10 +617,13 @@ Transclusion is including one Social.Wiki document within another.
               )
               .forEach(wave => {
                 processingWave = true;
+                waveError = '';
                 $graffiti.delete(
                   wave,
                   $graffitiSession.value
-                ).finally(() => {
+                ).catch(error => {
+                  waveError = error.message || 'Could not remove your wave.';
+                }).finally(() => {
                   processingWave = false;
                 });
               });
