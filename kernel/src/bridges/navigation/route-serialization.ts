@@ -1,17 +1,11 @@
-import { encodeUrlAddress } from "../../url-route";
-import {
-  queryDocumentRoute,
-  type DocumentRoute,
-} from "./document-route";
+import { encodeUrlQuery } from "../../url-route";
+import type { DocumentRoute } from "./document-route";
 
-/** Serialize a decoded document route for the browser. */
-function documentRouteUrl(
-  documentRoute: DocumentRoute,
-  rootUrl = documentRoute.rootUrl,
-): URL | null {
+/** Serialize a complete decoded root query for the browser. */
+function documentRouteUrl(query: string, rootUrl: string): URL | null {
   const url = new URL(rootUrl);
   if (url.protocol !== "http:" && url.protocol !== "https:") return null;
-  url.hash = `#/${encodeUrlAddress(documentRoute.address)}`;
+  url.hash = encodeUrlQuery(query);
   return url;
 }
 
@@ -27,28 +21,15 @@ export function serializeRouteUrl(
   // make sure that it stays on the current document (queryRootUrl) rather
   // than inheriting the default base (rootUrl)
   if (to.startsWith("?")) {
-    const route = queryDocumentRoute(to, documentRoute);
-    return route ? documentRouteUrl(route, route.queryRootUrl) : null;
+    return documentRouteUrl(
+      documentRoute.queryPrefix + to,
+      documentRoute.queryRootUrl ?? documentRoute.rootUrl,
+    );
   }
 
-  // Read the authored hash directly: URL would preserve valid percent escapes,
-  // but percent signs in Social.Wiki names are literal until this boundary.
-  const hashIndex = to.indexOf("#");
-  const hash = hashIndex < 0 ? "" : to.slice(hashIndex);
-  if (!hash.startsWith("#/")) return null;
-
-  const url = new URL(to, documentRoute.rootUrl);
-  const root = new URL(documentRoute.rootUrl);
-  if (
-    url.origin !== root.origin ||
-    url.pathname !== root.pathname ||
-    url.search !== root.search
-  ) {
-    return null;
-  }
-
-  return documentRouteUrl({
-    rootUrl: documentRoute.rootUrl,
-    address: hash.slice(2),
-  });
+  // Only hash links authored within a document are raw Social.Wiki routes.
+  // Complete web URLs, including copied Social.Wiki links, are already encoded.
+  if (!to.startsWith("#/") && !to.startsWith("#?")) return null;
+  const query = to.startsWith("#/") ? `?/${to.slice(2)}` : to.slice(1);
+  return documentRouteUrl(query, documentRoute.rootUrl);
 }

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   childDocumentRoute,
-  queryDocumentRoute,
   resolveChildNavigation,
 } from "../src/bridges/navigation/document-route";
 
@@ -9,40 +8,46 @@ describe("document routes", () => {
   it.each([
     [
       "a page with no query",
-      "v?/mypage",
+      "?/v?/mypage",
       "?/something",
-      "v?/mypage?/something",
+      "?/v?/mypage?/something",
     ],
     [
       "a lens",
-      "v",
+      "?/v",
       "?/other",
-      "v?/other",
+      "?/v?/other",
     ],
     [
       "a root browser",
       "",
       "?/h?/mypage",
-      "h?/mypage",
+      "?/h?/mypage",
+    ],
+    [
+      "a parameterized root browser",
+      "?room=id/v",
+      "?/mypage",
+      "?room=id/v?/mypage",
     ],
     [
       "an embedded browser",
-      "e?/browser",
+      "?/e?/browser",
       "?/h?/mypage",
-      "e?/browser?/h?/mypage",
+      "?/e?/browser?/h?/mypage",
     ],
   ])("materializes a relative link from %s", (
     _description,
-    documentAddress,
+    queryPrefix,
     to,
     expected,
   ) => {
     expect(
-      queryDocumentRoute(to, {
+      childDocumentRoute({
         rootUrl: "https://social.wiki/",
-        address: documentAddress,
-      }),
-    ).toEqual({ rootUrl: "https://social.wiki/", address: expected });
+        queryPrefix,
+      }, to),
+    ).toEqual({ rootUrl: "https://social.wiki/", queryPrefix: expected });
   });
 
   it.each([
@@ -54,9 +59,9 @@ describe("document routes", () => {
     ],
     [
       "a transparent wrapper",
-      "v?/mypage",
+      "?/v?/mypage",
       "",
-      "v?/mypage",
+      "?/v?/mypage",
     ],
     [
       "a noncanonical child address",
@@ -65,37 +70,48 @@ describe("document routes", () => {
       null,
     ],
     [
+      "a parameterized child of the root",
+      "",
+      "?room=id/v",
+      "?room=id/v",
+    ],
+    ["a root query without a child", "", "?room=id", ""],
+    ["an empty root address", "", "?/", ""],
+    ["a nested query without a child", "?/v", "?room=id", "?/v"],
+    [
       "an explicit child query",
-      "v",
+      "?/v",
       "?/mypage",
-      "v?/mypage",
+      "?/v?/mypage",
     ],
     [
       "a versioned page",
-      "v",
+      "?/v",
       "?version=media-id/mypage",
-      "v?version=media-id/mypage",
+      "?/v?version=media-id/mypage",
     ],
     [
       "an absolute child route",
-      "h?/mypage",
+      "?/h?/mypage",
       "#/v?version=media-id/mypage",
-      "v?version=media-id/mypage",
+      "?/v?version=media-id/mypage",
     ],
+    ["a rooted browser", "?/h?/mypage", "#/", ""],
+    ["a rooted browser with parameters", "?/h?/mypage", "#?room=id", ""],
   ])("derives the document route for %s", (
     _description,
-    parentAddress,
+    parentPrefix,
     route,
     expected,
   ) => {
     const result = childDocumentRoute(
-      { rootUrl: "https://social.wiki/", address: parentAddress },
+      { rootUrl: "https://social.wiki/", queryPrefix: parentPrefix },
       route,
     );
     expect(result).toEqual(
       expected === null
         ? null
-        : { rootUrl: "https://social.wiki/", address: expected },
+        : { rootUrl: "https://social.wiki/", queryPrefix: expected },
     );
   });
 
@@ -105,13 +121,13 @@ describe("document routes", () => {
         {
           rootUrl: "https://social.wiki/",
           queryRootUrl: "https://example.com/browser.html",
-          address: "h?/mypage",
+          queryPrefix: "?/h?/mypage",
         },
         "#/v?/standalone",
       ),
     ).toEqual({
       rootUrl: "https://social.wiki/",
-      address: "v?/standalone",
+      queryPrefix: "?/v?/standalone",
     });
   });
 
@@ -137,7 +153,18 @@ describe("document routes", () => {
       "?/test",
       "?version=object-url/page?/test",
     ],
+    [
+      "a rooted parameterized route",
+      "#?room=id/v",
+      "?/test",
+      "#?room=id/v?/test",
+    ],
     ["a routed root link", "?/home", "#/v?/other", "#/v?/other"],
+    ["a relative link from the root", "#/", "?/test", "#/test"],
+    ["parameters from the root", "#/", "?room=id", "#?room=id"],
+    ["a relative link from a rooted browser", "#?room=id", "?/test", "#/test"],
+    ["a relative link from an empty root address", "?/", "?/test", "?/test"],
+    ["a relative link from root parameters", "?room=id", "?/test", "?/test"],
     [
       "an absolute route",
       "#/v?version=object-url/page",

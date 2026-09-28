@@ -38,7 +38,7 @@ it("exposes coherent query state and navigates only on local changes", () => {
 
   events.parent.send(QUERY_EVENT, {
     query: "?mode=compact/alice",
-    documentRoute: { rootUrl: "https://social.wiki/", address: "v" },
+    documentRoute: { rootUrl: "https://social.wiki/", queryPrefix: "?/v" },
   });
 
   expect(snapshots.map(({ event }) => event).sort()).toEqual(
@@ -108,7 +108,7 @@ it("exposes coherent query state and navigates only on local changes", () => {
   // Mirror the containing query update before preparing a native relative link.
   events.parent.send(QUERY_EVENT, {
     query: "?mode=compact&sort=new/alice",
-    documentRoute: { rootUrl: "https://social.wiki/", address: "v" },
+    documentRoute: { rootUrl: "https://social.wiki/", queryPrefix: "?/v" },
   });
 
   const relativeRouteLink = document.createElement("a");
@@ -136,7 +136,7 @@ it("exposes coherent query state and navigates only on local changes", () => {
   // A prepared link must be recomposed if only its document route changes.
   events.parent.send(QUERY_EVENT, {
     query: "?mode=compact&sort=new/alice",
-    documentRoute: { rootUrl: "https://social.wiki/", address: "e" },
+    documentRoute: { rootUrl: "https://social.wiki/", queryPrefix: "?/e" },
   });
   relativeRouteLink.dispatchEvent(
     new MouseEvent("pointerdown", { bubbles: true, cancelable: true }),
@@ -152,7 +152,7 @@ it("exposes coherent query state and navigates only on local changes", () => {
     documentRoute: {
       rootUrl: "https://social.wiki/",
       queryRootUrl: "https://first.example/browser.html",
-      address: "e",
+      queryPrefix: "?/e",
     },
   });
   relativeRouteLink.dispatchEvent(
@@ -165,7 +165,7 @@ it("exposes coherent query state and navigates only on local changes", () => {
     documentRoute: {
       rootUrl: "https://social.wiki/",
       queryRootUrl: "https://second.example/browser.html",
-      address: "e",
+      queryPrefix: "?/e",
     },
   });
   relativeRouteLink.dispatchEvent(
@@ -188,7 +188,7 @@ it("exposes coherent query state and navigates only on local changes", () => {
     documentRoute: {
       rootUrl: "https://social.wiki/",
       queryRootUrl: "https://second.example/browser.html",
-      address: "e",
+      queryPrefix: "?/e",
     },
   });
   relativeRouteLink.remove();
@@ -312,6 +312,42 @@ it("exposes coherent query state and navigates only on local changes", () => {
   expect(shadowLink.href).toContain("#/v?/Cr%C3%A8me%20br%C3%BBl%C3%A9e");
   shadowHost.remove();
 
+  const rootParamsLink = document.createElement("a");
+  rootParamsLink.setAttribute("href", "#?room=id");
+  document.body.append(rootParamsLink);
+  const rootParamsClick = new MouseEvent("click", {
+    bubbles: true,
+    cancelable: true,
+  });
+  rootParamsLink.dispatchEvent(rootParamsClick);
+  expect(rootParamsClick.defaultPrevented).toBe(true);
+  expect(rootParamsLink.href).toBe("https://social.wiki/#?room=id");
+  expect(
+    emitted.filter(({ eventName }) => eventName === NAVIGATE_EVENT).at(-1),
+  ).toEqual({
+    eventName: NAVIGATE_EVENT,
+    payload: { to: "#?room=id" },
+  });
+  rootParamsLink.remove();
+
+  // A copied absolute link is already encoded. Preparing or clicking it must
+  // not turn the percent escapes in its route into literal percent signs.
+  const copiedLink = document.createElement("a");
+  const copiedHref = "https://social.wiki/#?room=id/Cr%C3%A8me";
+  copiedLink.setAttribute("href", copiedHref);
+  document.body.append(copiedLink);
+  copiedLink.dispatchEvent(
+    new MouseEvent("pointerdown", { bubbles: true, cancelable: true }),
+  );
+  expect(copiedLink.href).toBe(copiedHref);
+  copiedLink.dispatchEvent(
+    new MouseEvent("click", { bubbles: true, cancelable: true }),
+  );
+  expect(
+    emitted.filter(({ eventName }) => eventName === NAVIGATE_EVENT).at(-1),
+  ).toEqual({ eventName: NAVIGATE_EVENT, payload: { to: copiedHref } });
+  copiedLink.remove();
+
   for (const event of changeEvents) window.removeEventListener(event, record);
 });
 
@@ -394,7 +430,7 @@ it("propagates document route changes when a child's query is unchanged", async 
   });
   const documentRoute = createDocumentRouteState({
     rootUrl: "https://social.wiki/",
-    address: "v",
+    queryPrefix: "?/v",
   });
   const parent = installNavigationParent(
     document.createElement("sw-transclude"),
@@ -410,19 +446,19 @@ it("propagates document route changes when a child's query is unchanged", async 
     type: QUERY_EVENT,
     detail: {
       query: "?/alice",
-      documentRoute: { rootUrl: "https://social.wiki/", address: "v" },
+      documentRoute: { rootUrl: "https://social.wiki/", queryPrefix: "?/v" },
     },
   });
 
   documentRoute.setDocumentRoute({
     rootUrl: "https://social.wiki/",
-    address: "e",
+    queryPrefix: "?/e",
   });
   expect(received.at(-1)).toEqual({
     type: QUERY_EVENT,
     detail: {
       query: "?/alice",
-      documentRoute: { rootUrl: "https://social.wiki/", address: "e" },
+      documentRoute: { rootUrl: "https://social.wiki/", queryPrefix: "?/e" },
     },
   });
 
@@ -441,7 +477,7 @@ it("recomputes a child document route when its route changes", async () => {
     events.parent,
     createDocumentRouteState({
       rootUrl: "https://social.wiki/",
-      address: "v",
+      queryPrefix: "?/v",
     }),
   );
   parent.setRoute("?/alice");
@@ -455,7 +491,7 @@ it("recomputes a child document route when its route changes", async () => {
       query: "?/alice",
       documentRoute: {
         rootUrl: "https://social.wiki/",
-        address: "v?/alice",
+        queryPrefix: "?/v?/alice",
       },
     },
   });
@@ -467,7 +503,7 @@ it("recomputes a child document route when its route changes", async () => {
       query: "?/alice",
       documentRoute: {
         rootUrl: "https://social.wiki/",
-        address: "v?version=media-id/bob",
+        queryPrefix: "?/v?version=media-id/bob",
       },
     },
   });

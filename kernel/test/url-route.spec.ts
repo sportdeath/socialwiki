@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { composeAddress, composeQuery } from "../src/route";
-import { decodeUrlAddress, encodeUrlAddress } from "../src/url-route";
+import {
+  decodeUrlAddress,
+  decodeUrlQuery,
+  encodeUrlAddress,
+  encodeUrlQuery,
+} from "../src/url-route";
 
 describe("top-level URL routes", () => {
   it("round trips encoded names throughout a nested address", () => {
@@ -28,5 +33,21 @@ describe("top-level URL routes", () => {
   it("round trips names containing percent-escape-like text", () => {
     const address = "v?/100%20real/%2F/%25";
     expect(decodeUrlAddress(encodeUrlAddress(address))).toBe(address);
+  });
+
+  it("round trips root queries while preserving native fragments", () => {
+    expect(encodeUrlQuery("?room=id")).toBe("#?room=id");
+    expect(decodeUrlQuery("#?room=id")).toBe("?room=id");
+    expect(decodeUrlQuery(encodeUrlQuery("?/"))).toBe("?/");
+    expect(encodeUrlQuery("?/v?/日本語")).toBe("#/v?/%E6%97%A5%E6%9C%AC%E8%AA%9E");
+    expect(encodeUrlQuery("?room=id/v?/日本語")).toBe(
+      "#?room=id/v?/%E6%97%A5%E6%9C%AC%E8%AA%9E",
+    );
+    expect(decodeUrlQuery("#/v?/%E6%97%A5%E6%9C%AC%E8%AA%9E")).toBe("?/v?/日本語");
+    expect(decodeUrlQuery("#?room=id/v?/%E6%97%A5%E6%9C%AC%E8%AA%9E")).toBe(
+      "?room=id/v?/日本語",
+    );
+    expect(decodeUrlQuery("#section")).toBeUndefined();
+    expect(decodeUrlQuery("#")).toBeUndefined();
   });
 });

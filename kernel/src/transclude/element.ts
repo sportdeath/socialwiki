@@ -51,7 +51,7 @@ export function defineTranscludeElement(
    * - route: places this document in the containing document's public route.
    *   An absent route makes an independent side transclusion, an empty route
    *   preserves the containing route, `?/...` advances it relative to the
-   *   containing document, and `#/...` identifies an absolute root route.
+   *   containing document, and `#/...` or `#?...` identifies a root route.
    * - autosize: controls the host's size; it accepts "off" (the default),
    *   "width", "height", or "both". A bare autosize attribute means "both".
    * - permission-scope: when set to "inherit", the containing document trusts

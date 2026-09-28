@@ -218,7 +218,7 @@ export function installNavigationChild(events: EventsChild) {
       prepared.documentRoute?.rootUrl === currentDocumentRoute?.rootUrl &&
       prepared.documentRoute?.queryRootUrl ===
         currentDocumentRoute?.queryRootUrl &&
-      prepared.documentRoute?.address === currentDocumentRoute?.address
+      prepared.documentRoute?.queryPrefix === currentDocumentRoute?.queryPrefix
     ) {
       return prepared.sourceHref;
     }
@@ -284,8 +284,12 @@ export function installNavigationChild(events: EventsChild) {
 
     // Native fragments in srcdoc resolve against the containing document's
     // base URL and can reload that parent inside this frame. Scroll locally
-    // instead. `#/...` remains an absolute Social.Wiki route.
-    if (href.startsWith("#") && !href.startsWith("#/")) {
+    // instead. `#/...` and `#?...` remain rooted Social.Wiki routes.
+    if (
+      href.startsWith("#") &&
+      !href.startsWith("#/") &&
+      !href.startsWith("#?")
+    ) {
       e.preventDefault();
       const encodedName = href.slice(1);
       if (!encodedName) {

@@ -51,7 +51,7 @@ or direct access to ancestor windows. They use the kernel APIs above for navigat
 resolution, events, and Graffiti.
 
 Scripts, styles, images, ordinary web links, and other resources must use
-absolute URLs. Query-relative `?/...` links and root `#/...` links are reserved
+absolute URLs. Query-relative `?/...` links and root `#/...` or `#?...` links are reserved
 for Social.Wiki navigation.
 
 Peripheral inputs like location, microphone, camera, and serial access are currently not available
@@ -68,7 +68,7 @@ There is intentionally no relative `..` route syntax. It should always be possib
 to copy a document somewhere else and have it behave identically. Relative linking would
 disable this property. 
 
-An explicit `#/...` route targets the "root" for absolute links.
+An explicit `#/...` or `#?...` route targets the "root" for absolute links.
 
 ## Resolution Base
 

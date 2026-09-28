@@ -15,7 +15,7 @@ import {
   handleDocumentResolution,
   resolveDocument,
 } from "./bridges/resolution/shared";
-import { decodeUrlAddress } from "./url-route";
+import { decodeUrlQuery } from "./url-route";
 
 declare const KERNEL_IMPORT_MAP: { imports: Record<string, string> };
 declare const TEST_GRAFFITI: boolean;
@@ -81,7 +81,7 @@ if (window.top !== window) {
     const rootRoute = {
       rootUrl: rootDocumentRoute.href,
       queryRootUrl: documentUrl,
-      address: "",
+      queryPrefix: "",
     };
     const documentRoute = createDocumentRouteState(rootRoute);
 
@@ -151,10 +151,7 @@ if (window.top !== window) {
 
     // Forward any changes to the route to the top-level document
     const syncRoute = () => {
-      const hash = window.location.hash;
-      const query = hash.startsWith("#/")
-        ? `?/${decodeUrlAddress(hash.slice(2))}`
-        : "";
+      const query = decodeUrlQuery(window.location.hash) ?? "";
       if (transclude.getAttribute("query") !== query) {
         transclude.setAttribute("query", query);
       }

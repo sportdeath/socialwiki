@@ -55,3 +55,16 @@ export function encodeUrlAddress(address?: string): string {
     ),
   );
 }
+
+/** The empty-parameter root query `?/...` has the shorter URL form `#/...`. */
+export function encodeUrlQuery(query: string): string {
+  const encoded = encodeUrlAddress(query);
+  return encoded.startsWith("?/") ? `#/${encoded.slice(2)}` : `#${encoded}`;
+}
+
+/** Decode only Social.Wiki URL routes; other hashes remain native fragments. */
+export function decodeUrlQuery(hash: string): string | undefined {
+  if (hash.startsWith("#/")) return `?/${decodeUrlAddress(hash.slice(2))}`;
+  if (hash.startsWith("#?")) return decodeUrlAddress(hash.slice(1));
+  return undefined;
+}
