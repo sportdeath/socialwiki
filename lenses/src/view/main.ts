@@ -19,6 +19,7 @@ import { siteChannels } from "../utils/site-channel";
 import {
   ErrorPage,
   LoadingPage,
+  NoSiteSelected,
   SiteNotFound,
 } from "../utils/status-pages";
 
@@ -40,6 +41,7 @@ function setup() {
   const siteQuery = ref("");
   const requestedAddress = ref(window.address);
   const requestedLensParams = ref(new URLSearchParams(window.params));
+  const routeReady = ref(window.address !== undefined);
   const siteName = computed(() => parseAddress(requestedAddress.value).name);
   const { objects, error: siteError, isFirstPoll } = useGraffitiDiscover(
     () => (siteName.value ? siteChannels(siteName.value) : []),
@@ -74,9 +76,21 @@ function setup() {
   let activeRenderVersion = 0;
 
   async function renderLens(force = false) {
-    if (!sessionReady.value) return;
+    if (!routeReady.value) return;
     const address = requestedAddress.value;
-    if (!address?.length) return;
+    if (!address?.length) {
+      if (currentContentKey !== "no-site") {
+        activeRenderVersion++;
+        currentContentKey = "no-site";
+        renderedAddress = "";
+        displayedSiteName.value = undefined;
+        siteQuery.value = "";
+        emitLensOutput("not-found");
+        showDocument(NoSiteSelected, "no-site");
+      }
+      return;
+    }
+    if (!sessionReady.value) return;
 
     const { name, query } = parseAddress(address);
     const requestedVersion = requestedLensParams.value.get("version") ?? "";
@@ -191,6 +205,7 @@ function setup() {
   }
 
   function onQueryChange() {
+    routeReady.value = true;
     requestedAddress.value = window.address;
     requestedLensParams.value = new URLSearchParams(window.params);
   }
@@ -210,7 +225,7 @@ function setup() {
   // Connecting a child replays login; watching the session object itself
   // would reload the child and repeat that login indefinitely.
   watch(
-    [requestedAddress, requestedLensParams, isFirstPoll, siteError, trustError, sessionReady],
+    [routeReady, requestedAddress, requestedLensParams, isFirstPoll, siteError, trustError, sessionReady],
     () => void renderLens(),
     { immediate: true, flush: "post" },
   );

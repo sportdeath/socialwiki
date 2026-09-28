@@ -15,6 +15,19 @@ export const LoadingPage = `
 </html>
 `;
 
+export const NoSiteSelected = `
+<!doctype html>
+<html>
+    <head>
+      <meta charset="utf-8" />
+      ${style}
+    </head>
+    <body>
+        <h1 class="status">No site selected.</h1>
+    </body>
+</html>
+`;
+
 export const SiteNotFound = (siteName: string, initUrl: string) => `
 <!doctype html>
 <html>

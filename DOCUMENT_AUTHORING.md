@@ -384,11 +384,9 @@ Transclusion is including one Social.Wiki document within another.
 ### Transclusion By Source
 
 - A Social.Wiki document can be included within another Social.Wiki document by source HTML. Do NOT use a regular iframe. Use:
-
   ```html
   <sw-transclude :srcdoc="htmlString" :query="query"></sw-transclude>
   ```
-
 - Attributes:
   - `srcdoc` supplies the child's HTML; `query` supplies the state available as the child's `window.query`.
   - `id` identifies the child for permissions; `name` is a human-readable label for permission prompts. `permission-scope="inherit"` shares the parent's permission scope; use it only for trusted children.
@@ -450,7 +448,7 @@ Transclusion is including one Social.Wiki document within another.
 
 #### Custom resolution
 
-- Normally, `<sw-transclude src="...">` resolves through the default View lens but a document may use `window.handleDocumentResolution((src, signal) => ...)` to choose another resolver for `src` transclusions in itself and its descendants. Most documents do not need this.
+- Normally, `<sw-transclude src="...">` resolves through the default View lens but a document may use `window.handleDocumentResolution((src, signal) => ...)` to choose another resolver for `src` transclusions in itself and its descendants. Typically only browsers need to use this.
   - The resolver returns `{ srcdoc: string, query: string }` or a Promise and should honor `signal` during asynchronous work.
   - Example: `src="Garden?/flowers"` resolves to `{ srcdoc: chosenViewLensHtml, query: "?/Garden?/flowers" }`. The lens displays Garden at `?/flowers`.
 
