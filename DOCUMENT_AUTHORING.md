@@ -6,8 +6,7 @@ This guide describes the Social.Wiki runtime, Graffiti's data model and API, and
 
 ## File Setup
 
-- A Social.Wiki document must be exactly ONE runnable HTML file with no companion files.
-- NO BUILD TOOLING.
+- A Social.Wiki document must be one readable, runnable HTML file with no companion files.
 - Include this in `<head>` before any other scripts:
   ```html
   <script src="https://social.wiki/init.js"></script>
@@ -273,9 +272,10 @@ useGraffitiDiscover(
 - If `error` is set, display it with "Retrying…"; discover retries automatically until it clears.
 - Discovery automatically polls when first attached and when arguments change. Use `poll()` only for explicit refresh.
 - `isFirstPoll` stays true until the first successful poll after a change of arguments; use it as a loading signal.
+- If `error` is set, display it with "Retrying…" even while `isFirstPoll` is true; discover retries automatically until it clears.
 - For ongoing updates from other people (e.g. messaging), enable `autopoll` on at most ONE discovery; it is resource heavy. Local posts/deletes propagate reactively to `objects`; no `autopoll` necessary.
 - Discover calls are expensive. For per-item data (e.g. reactions), discover in batches. E.g. pass `() => posts.objects.value.map(post => post.url)` to a second `useGraffitiDiscover`; do not put a discovery in each repeated row.
-- YOU MUST PASS AN ARRAY OF CHANNELS EVEN IF YOU ARE ONLY LISTENING TO ONE: `:channels="['my-channel']"`
+- Pass an array of channels even for one channel: `:channels="['my-channel']"`
 
 ##### useGraffitiGet
 
@@ -425,7 +425,7 @@ Transclusion is including one Social.Wiki document within another.
   - `channels: ["site:" + siteName]`
   - `value: { action: "Publish site", "site name": siteName, changes: string, document: mediaUrl, time: number, "previous versions"?: string[] }`
   - `allowed` is omitted (public).
-- A custom View lens selects which versions and publishers to trust. It transcludes the selected HTML with the site's query and `route=""`. Keep the child's `id` stable when only the query changes so the document does not reload.
+- A custom View lens selects which versions and publishers to trust. It transcludes the selected HTML with the site's query and `route=""`.
 - Every lens reports `window.emit("sw-lens-output", { status, srcdoc })`, where `status` is `"loading"`, `"ok"`, `"not-found"`, or `"error"`. On `"ok"`, `srcdoc` is the source HTML displayed or edited. For asynchronous resolution, emit `"loading"` first and ignore stale results. If forwarding child events, consume their `sw-lens-output` rather than reporting it as the lens's own.
 
 #### Custom navigation
@@ -502,6 +502,8 @@ Transclusion is including one Social.Wiki document within another.
 - Do not add design explanations or excessive instructions into the UI. An app built with good usability principles should not need an instruction manual.
 - Use loading states while awaiting async calls.
 - Use optimistic rendering for interactions users may repeat while `graffiti.post` is in progress, such as sending messages or painting on a canvas. Show each new item immediately as pending, then remove that copy when `graffiti.post` finishes. For non-optimistic interactions, disable the button while posting to prevent duplicates.
+- Handle failed posts, deletes, and media uploads visibly; remove or mark failed optimistic items. Report success only after required operations succeed.
+- Ensure the app is responsive and renders well on mobile and desktop.
 
 ### Implementation
 
@@ -509,9 +511,8 @@ Transclusion is including one Social.Wiki document within another.
 - To reduce styling complexity, consider using semantic HTML and a classless CSS library and only apply styling on top as necessary.
 - Social.Wiki is collaborative, so add comments throughout to clarify design decisions and reasoning to future authors.
 - Keep the single HTML readable; do not minify code people will edit.
-- Test the HTML over HTTP(S), not `file://`, with `https://social.wiki/init-test.js`. Its accounts and data stay in your browser, so create as many test users and objects as needed. Check that the document mounts and its main interactions work, then restore `init.js` before publishing.
-- DOUBLE CHECK that you are passing an ARRAY OF CHANNELS, even if you are only using one: `<graffiti-discover :channels="['my-channel']" ...>`
-- DOUBLE CHECK that your schemas are relative to the WHOLE OBJECT, not just the object's value: `{ properties: { value: { properties: {...}, required: [...] } } }`
+- Build shared views from discovered objects; in-memory component state will not survive reload or show others' updates.
+- Test the HTML over HTTP(S), not `file://`, with `https://social.wiki/init-test.js`. Its accounts and data stay in your browser, so create as many test users and objects as needed. Check that the document mounts, external content loads, and its main interactions work, then restore `init.js` before publishing.
 
 ## Examples
 
