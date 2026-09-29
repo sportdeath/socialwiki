@@ -269,7 +269,6 @@ useGraffitiDiscover(
 - If `session` omitted, will only return public objects (`allowed` omitted/undefined/null).
 - Only use `session` if you explicitly want to include private objects.
 - Component `<graffiti-discover :channels="[...]" :schema="{...}" v-slot="{ objects, error, isFirstPoll, poll }">`
-- If `error` is set, display it with "Retrying…"; discover retries automatically until it clears.
 - Discovery automatically polls when first attached and when arguments change. Use `poll()` only for explicit refresh.
 - `isFirstPoll` stays true until the first successful poll after a change of arguments; use it as a loading signal.
 - If `error` is set, display it with "Retrying…" even while `isFirstPoll` is true; discover retries automatically until it clears.
@@ -441,7 +440,7 @@ Transclusion is including one Social.Wiki document within another.
   });
   ```
 
-### Building a browser (uncommon, advanced)
+### Custom browser (uncommon, advanced)
 
 - A browser selects and transcludes a lens from its route. See the [existing browser lens](https://social.wiki/browser/index.html) for a complete example.
 - Set `data-document-route="#/"` on the `init.js` script so `#/...` links resolve within the browser.
