@@ -52,6 +52,7 @@ export default defineComponent({
     leftTitle: { type: String, required: true },
     rightTitle: { type: String, required: true },
     initialLeftWidth: Number,
+    singlePane: { type: Boolean, default: false },
   },
   setup: setupTwoPaneLayout,
 });

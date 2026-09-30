@@ -20,3 +20,9 @@ for (const source of [kernel, lenses]) {
     }
   }
 }
+
+// Serve the matching guide beside the lenses without embedding it in Edit.
+const guide = new URL("./DOCUMENT_AUTHORING.md", import.meta.url);
+const publishedGuide = new URL("DOCUMENT_AUTHORING.md", distribution);
+if (link) await symlink(guide, publishedGuide, "file");
+else await cp(guide, publishedGuide);

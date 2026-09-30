@@ -1,15 +1,16 @@
 <template id="two-pane-layout-template">
     <div
         class="sw-two-panes"
-        :class="{ 'is-resizing': isResizing }"
+        :class="{ 'is-resizing': isResizing, 'is-single': singlePane }"
         ref="containerRef"
     >
         <section
             class="sw-two-pane"
             :class="{ 'is-active': activePane === 'left' }"
-            :style="{ width: leftWidth + '%' }"
+            :style="{ width: singlePane ? '100%' : leftWidth + '%' }"
         >
             <header @click="setActive('left')">
+                <slot name="leading-left-controls"></slot>
                 <h2>{{ leftTitle }}</h2>
                 <div class="sw-two-pane-controls">
                     <slot name="left-controls"></slot>
@@ -20,9 +21,9 @@
             </div>
         </section>
 
-        <div class="sw-two-pane-divider" @mousedown="startResize"></div>
+        <div v-if="!singlePane" class="sw-two-pane-divider" @mousedown="startResize"></div>
 
-        <section class="sw-two-pane" :class="{ 'is-active': activePane === 'right' }">
+        <section v-if="!singlePane" class="sw-two-pane" :class="{ 'is-active': activePane === 'right' }">
             <header @click="setActive('right')">
                 <h2>{{ rightTitle }}</h2>
                 <div class="sw-two-pane-controls">

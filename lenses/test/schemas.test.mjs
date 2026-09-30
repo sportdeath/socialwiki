@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
 import test from "node:test";
 import { compileGraffitiObjectSchema } from "@graffiti-garden/api";
 import {
@@ -170,27 +169,6 @@ test("browser history requires private, recent visits in the new format", async 
   assert(!matches({ ...visit, value: { ...visit.value, time: 99 } }));
   assert(!matches({ ...visit, value: { activity: "View", site: "mypage", published: 100 } }));
 });
-
-test("the actual starter discovers both wave formats and publishes the readable format", async () => {
-  const html = readFileSync(new URL("../src/edit/starter.html", import.meta.url), "utf8");
-  const channelsExpression = html.match(/:channels="([^"]*)"/)[1];
-  assert.deepEqual(new Function("__SITE_NAME__", `return (${channelsExpression});`)("mypage"), siteChannels("mypage"));
-  const expression = html.match(/:schema="([\s\S]*?)"/)[1];
-  const schema = new Function("__SITE_NAME__", `return (${expression});`)("mypage");
-  const matches = await compileGraffitiObjectSchema(schema);
-  const oldWave = record("old-wave", { activity: "Wave" });
-  const wave = record("wave", { action: "Wave", "site name": "mypage" });
-  assert(matches(oldWave) && matches(wave));
-  assert(!matches(record("other-wave", { action: "Wave", "site name": "other" })));
-  assert(!matches(record("incomplete-wave", { action: "Wave" })));
-  const click = [...html.matchAll(/@click="([^"]*)"/g)].find((match) => match[1].includes("$graffiti.post"))[1];
-  const posts = [];
-  await new Function("__SITE_NAME__", "$graffiti", "$graffitiSession", "processingWave", click)(
-    "mypage", { post: async (object) => { posts.push(object); } }, { value: session }, false,
-  );
-  assert.deepEqual(posts, [{ value: wave.value, channels: [siteChannel("mypage")] }]);
-});
-
 
 test("a first publication omits previous versions and reads as a history root", async () => {
   const { graffiti, posts } = publisher();

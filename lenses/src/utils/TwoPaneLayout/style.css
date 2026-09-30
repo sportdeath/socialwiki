@@ -54,6 +54,10 @@
     gap: 0.35rem;
 }
 
+.sw-two-panes.is-single > .sw-two-pane {
+    flex: 1;
+}
+
 .sw-two-pane > .sw-two-pane-body {
     flex: 1;
     min-height: 0;
