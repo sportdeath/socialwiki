@@ -9,6 +9,9 @@ import {
     useTemplateRef,
 } from "vue";
 import SourceEditor, { type SourceEditorHandle } from "./SourceEditor/main";
+import PathChoices, { type EditPath } from "./PathChoices/main";
+import AiEditor from "./AiEditor/main";
+import LocalEditor from "./LocalEditor/main";
 import PublishDialog from "./PublishDialog/main";
 import ProtectedDialog from "./ProtectedDialog/main";
 import { useGraffiti, useGraffitiDiscover } from "@graffiti-garden/wrapper-vue";
@@ -20,8 +23,10 @@ import {
 } from "../utils/schemas";
 import { useTrustContext } from "../utils/use-trust-context";
 import { sortProtectionHistory } from "../utils/protection";
-import { starterHtml } from "./starter";
+import starterHtml from "./starter.html?raw";
 import { siteChannels } from "../utils/site-channel";
+import { authoringGuideSourceUrl, authoringGuideUrl } from "./authoring";
+import { folderName } from "./local-files";
 
 
 function setup() {
@@ -29,6 +34,26 @@ function setup() {
 
     const sourceEditor =
         useTemplateRef<SourceEditorHandle>("sourceEditor");
+    const selectedPath = ref<EditPath | null>(null);
+    const siteMode = ref<"create" | "edit" | null>(null);
+    const aiResultPasted = ref(false);
+    const localPreviewReady = ref(false);
+    watch(selectedPath, (path) => {
+        if (path !== "local") localPreviewReady.value = false;
+    });
+    const guideText = ref<string | null>(null);
+    const guideError = ref("");
+    async function loadGuide() {
+        guideError.value = "";
+        try {
+            const response = await fetch(authoringGuideSourceUrl);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            guideText.value = await response.text();
+        } catch (error) {
+            guideError.value = `Could not load the authoring guide: ${String(error)}`;
+        }
+    }
+    onMounted(() => { void loadGuide(); });
     const previewTranscludeId = crypto.randomUUID();
     // The starting draft (or last successful publish), not necessarily published data.
     const baselineHtml = ref<string | null>(null);
@@ -36,9 +61,23 @@ function setup() {
     // Initialize the editor, diff and preview with the existing HTML
     const editorHtml = ref("");
     const previewHtml = ref("");
+    // The minimal base is only a starting point for the code and local paths.
+    // AI creation stays full screen until there is an actual result.
+    const hasWorkingDocument = computed(() =>
+        siteMode.value === "edit" ||
+        (!!editorHtml.value.trim() && editorHtml.value !== starterHtml),
+    );
+    // New local sites show a preview only after files are connected or uploaded.
+    const isSplitWorkflow = computed(() =>
+        selectedPath.value === "local"
+            ? siteMode.value === "edit" || localPreviewReady.value
+            : selectedPath.value === "code" || hasWorkingDocument.value,
+    );
     const hasUnsavedChanges = computed(
         () =>
-            baselineHtml.value !== null && editorHtml.value !== baselineHtml.value,
+            baselineHtml.value !== null &&
+            editorHtml.value !== baselineHtml.value &&
+            !(siteMode.value === "create" && editorHtml.value === starterHtml),
     );
     const hasShownPublishReminder = ref(false);
     const shouldShakePublish = ref(false);
@@ -123,6 +162,9 @@ function setup() {
         showProtectedDialog.value = protection !== null;
     });
     let localDraftSeq = 0;
+    const initialDraftForPath = () =>
+        selectedPath.value === "local" || selectedPath.value === "code"
+            ? starterHtml : "";
     const isProtectionBySessionActor = computed(
         () =>
             !!activeProtection.value &&
@@ -137,12 +179,23 @@ function setup() {
             window.address,
         );
         const didChangeSite = siteName.value !== nextSiteName;
+        if (didChangeSite) {
+            aiResultPasted.value = false;
+            localPreviewReady.value = false;
+        }
 
         siteName.value = nextSiteName;
         siteQuery.value = nextSiteQuery;
         editParams.value = lensParams;
+        const routePath = lensParams.get("path");
+        selectedPath.value = routePath === "ai" || routePath === "local" || routePath === "code"
+            ? routePath : null;
 
         const searchDraft = lensParams.get("draft");
+        // The browser seeds Edit with the displayed document as a draft. Without
+        // one, default to Create; siteMode carries that choice through later drafts.
+        if (lensParams.get("aiPasted") === "1") aiResultPasted.value = true;
+        const routeMode = lensParams.get("siteMode");
         const incomingDraftSeq = Number(lensParams.get("draftSeq"));
         // Draft updates travel through the browser's route and come back here.
         // An older echo must not overwrite edits typed while it was in flight.
@@ -154,10 +207,16 @@ function setup() {
         if (didChangeSite || baselineHtml.value === null) {
             cancelDraftUpdate();
             localDraftSeq = 0;
-            // An empty incoming draft is intentional; only a missing draft uses the starter.
-            const html = searchDraft ?? starterHtml(siteName.value);
-            loadDraft(html);
-            baselineHtml.value = html;
+            // An empty draft is intentional; only a missing draft uses the path's base.
+            if (searchDraft !== null) {
+                loadDraft(searchDraft);
+                baselineHtml.value = searchDraft;
+                siteMode.value = routeMode === "create" ? "create" : "edit";
+            } else {
+                loadDraft(initialDraftForPath());
+                baselineHtml.value = "";
+                siteMode.value = routeMode === "edit" ? "edit" : "create";
+            }
             resetPublishReminderState();
         } else if (searchDraft !== null && !isLocalDraftEcho) {
             cancelDraftUpdate();
@@ -174,11 +233,55 @@ function setup() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `${encodeURIComponent(siteName.value)}.html`;
+        a.download = `${folderName(siteName.value)}.html`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
+    }
+
+    function choosePath(path: EditPath | null) {
+        if (siteMode.value === null) return;
+        cancelDraftUpdate();
+        const params = new URLSearchParams(editParams.value);
+        if (path) params.set("path", path);
+        else params.delete("path");
+        params.set("siteMode", siteMode.value);
+        if (editorHtml.value) {
+            params.set("draft", editorHtml.value);
+            params.set("draftSeq", String(++localDraftSeq));
+        }
+        selectedPath.value = path;
+        editParams.value = params;
+        window.navigate(composeQuery(params, siteAddress.value));
+        if ((path === "local" || path === "code") && !editorHtml.value) {
+            editorHtml.value = starterHtml;
+            previewHtml.value = editorHtml.value;
+        }
+    }
+
+    function persistAiResult() {
+        cancelDraftUpdate();
+        const params = new URLSearchParams(editParams.value);
+        // Keep the paste/publish step available after a route reload.
+        params.set("aiPasted", "1");
+        params.set("draft", editorHtml.value);
+        params.set("draftSeq", String(++localDraftSeq));
+        if (siteMode.value) params.set("siteMode", siteMode.value);
+        editParams.value = params;
+        window.navigate(composeQuery(params, siteAddress.value));
+    }
+
+    function pasteAiResult(html: string) {
+        editorHtml.value = html;
+        refreshPreview();
+        aiResultPasted.value = true;
+        persistAiResult();
+    }
+
+    function updateLocalHtml(html: string) {
+        editorHtml.value = html;
+        refreshPreview();
     }
 
     const showPublishDialog = ref(false);
@@ -215,14 +318,15 @@ function setup() {
         timeout = window.setTimeout(() => {
             if (livePreview.value) previewHtml.value = newHtml;
             const draftSeq = ++localDraftSeq;
+            const params = new URLSearchParams(editParams.value);
+            params.set("draft", newHtml);
+            params.set("draftSeq", String(draftSeq));
+            if (siteMode.value) params.set("siteMode", siteMode.value);
 
             // Set the draft HTML
             window.navigate(
                 composeQuery(
-                    new URLSearchParams({
-                        draft: newHtml,
-                        draftSeq: String(draftSeq),
-                    }),
+                    params,
                     composeAddress(siteName.value, siteQuery.value),
                 ),
             );
@@ -347,32 +451,46 @@ function setup() {
     return {
         activeProtection,
         activeProtectionTrustSource,
+        aiResultPasted,
+        authoringGuideUrl,
         baselineHtml,
+        choosePath,
         debouncing,
         download,
         editorHtml,
+        guideError,
+        guideText,
+        hasWorkingDocument,
         historyRoute,
         isProtectionBySessionActor,
+        isSplitWorkflow,
         livePreview,
+        loadGuide,
+        localPreviewReady,
         openPublishDialog,
+        pasteAiResult,
         previewHtml,
         previewRoute,
         previewTranscludeId,
         publishing,
         refreshKey,
         refreshPreview,
+        selectedPath,
         shouldShakePublish,
         showProtectedDialog,
         showPublishDialog,
+        siteAddress,
+        siteMode,
         siteName,
         siteQuery,
         submitPublishDialog,
+        updateLocalHtml,
         viewRoute,
     };
 }
 
 createApp({
     template: "#edit-template",
-    components: { SourceEditor, PublishDialog, ProtectedDialog },
+    components: { SourceEditor, PathChoices, AiEditor, LocalEditor, PublishDialog, ProtectedDialog },
     setup,
 }).use(GraffitiPlugin, { graffiti: new window.Graffiti() }).mount("#app");

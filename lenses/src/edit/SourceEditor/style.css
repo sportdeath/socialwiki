@@ -21,9 +21,17 @@
 }
 
 /* Editor menubar + dropdowns */
+nav.editor-controls > ul {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.35rem;
+}
+
 nav.editor-controls > ul.editor-toolbar > li {
     position: relative;
 }
+
+nav.editor-controls summary { white-space: nowrap; }
 
 :is(
     nav.editor-controls summary,

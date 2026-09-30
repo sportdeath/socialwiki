@@ -1,53 +1,89 @@
 <template id="edit-template">
     <main>
+        <div v-if="siteMode === null" class="edit-loading" role="status">
+            <h1>Loading editor…</h1>
+        </div>
+
+        <!-- Keep one pane layout mounted across paths so its split width survives. -->
         <source-editor
+            v-else
             ref="sourceEditor"
             v-model="editorHtml"
             :baseline="baselineHtml ?? ''"
             :publishing="publishing"
             :should-shake-publish="shouldShakePublish"
+            :guide-url="authoringGuideUrl"
+            :mode="siteMode"
+            :active="selectedPath === 'code'"
+            :single-pane="!isSplitWorkflow"
+            :show-back="!!selectedPath"
             @publish="openPublishDialog"
             @download="download"
+            @choose-path="choosePath(null)"
         >
             <template #preview-controls>
-                <nav class="editor-controls">
+                <nav v-if="selectedPath === 'code'" class="editor-controls">
                     <ul>
                         <li>
-                            <button
-                                class="refresh-button"
-                                title="Refresh the preview"
-                                @click="refreshPreview"
-                            >
+                            <button class="refresh-button" title="Refresh the preview" @click="refreshPreview">
                                 Refresh
-                                <span
-                                    v-if="debouncing"
-                                    class="refresh-spinner"
-                                    aria-hidden="true"
-                                ></span>
+                                <span v-if="debouncing" class="refresh-spinner" aria-hidden="true"></span>
                             </button>
                         </li>
-                        <li>
-                            <label class="top-level-checkbox">
-                                <input type="checkbox" v-model="livePreview" />
-                                Auto-refresh
-                            </label>
-                        </li>
+                        <li><label class="top-level-checkbox"><input type="checkbox" v-model="livePreview" /> Auto-refresh</label></li>
                     </ul>
                 </nav>
+                <button v-else type="button" @click="refreshPreview">Refresh</button>
             </template>
-
-            <!-- Right pane body (Preview) -->
-            <template #preview>
-                <div class="pane">
-                    <sw-transclude
-                        :id="previewTranscludeId"
-                        name="Preview"
-                        :route="previewRoute"
-                        :query="siteQuery"
-                        :key="refreshKey"
-                        :srcdoc="previewHtml"
-                    ></sw-transclude>
+            <template #workflow>
+                <div class="workflow-body">
+                    <path-choices
+                        v-if="!selectedPath"
+                        :mode="siteMode"
+                        :site-name="siteName"
+                        @select="choosePath"
+                    ></path-choices>
+                    <ai-editor
+                        v-else-if="selectedPath === 'ai'"
+                        :key="siteName"
+                        :mode="siteMode"
+                        :site-name="siteName"
+                        :html="editorHtml"
+                        :guide-text="guideText"
+                        :guide-error="guideError"
+                        :has-working-document="hasWorkingDocument"
+                        :result-pasted="aiResultPasted"
+                        :publishing="publishing"
+                        @paste="pasteAiResult"
+                        @publish="openPublishDialog"
+                        @retry-guide="loadGuide"
+                    ></ai-editor>
+                    <local-editor
+                        v-else-if="selectedPath === 'local'"
+                        :key="siteName"
+                        :site-name="siteName"
+                        :html="editorHtml"
+                        :guide-text="guideText"
+                        :guide-error="guideError"
+                        :can-publish="hasWorkingDocument && isSplitWorkflow"
+                        :publishing="publishing"
+                        @update-html="updateLocalHtml"
+                        @preview-ready="localPreviewReady = true"
+                        @publish="openPublishDialog"
+                        @retry-guide="loadGuide"
+                    ></local-editor>
                 </div>
+            </template>
+            <template #preview>
+                <sw-transclude
+                    class="workflow-preview"
+                    :id="previewTranscludeId"
+                    name="Preview"
+                    :route="previewRoute"
+                    :query="siteQuery"
+                    :key="refreshKey"
+                    :srcdoc="previewHtml"
+                ></sw-transclude>
             </template>
         </source-editor>
 

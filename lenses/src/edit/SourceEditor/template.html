@@ -1,7 +1,10 @@
 <template id="source-editor-template">
-    <two-pane-layout left-title="Editor" right-title="Preview">
+    <two-pane-layout left-title="Editor" right-title="Preview" :single-pane="singlePane">
+        <template #leading-left-controls>
+            <button v-if="showBack" type="button" class="editor-back" :aria-label="`Other ways to ${mode}`" :title="`Other ways to ${mode}`" @click="emit('choose-path')">←</button>
+        </template>
         <template #left-controls>
-            <nav class="editor-controls">
+            <nav v-if="active" class="editor-controls">
                 <ul class="editor-toolbar">
                     <li>
                         <button
@@ -21,6 +24,7 @@
                         </button>
                     </li>
 
+                    <li><a class="guide-pill" :href="guideUrl" target="_blank" rel="noopener noreferrer">Authoring guide</a></li>
                     <li>
                         <details
                             ref="viewMenuDetails"
@@ -94,9 +98,10 @@
 
         <!-- Left pane body (Editor) -->
         <template #left-pane>
-            <div class="pane">
+            <div v-if="active" class="pane">
                 <div ref="editorElement" class="code-editor"></div>
             </div>
+            <slot v-else name="workflow"></slot>
         </template>
 
         <template #right-pane><slot name="preview"></slot></template>

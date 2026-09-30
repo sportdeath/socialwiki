@@ -1,0 +1,42 @@
+<template id="edit-ai-template">
+    <div class="workflow-steps">
+        <h1>{{ mode === 'create' ? 'Create' : 'Edit' }} with AI</h1>
+        <section class="workflow-step">
+            <h2>1. {{ mode === 'create' ? 'Describe what you want to build' : 'Describe what you want to change' }}</h2>
+            <textarea v-model="request" rows="7" :placeholder="mode === 'create' ? 'Create an app that…' : 'Add a feature that…'"></textarea>
+        </section>
+        <section class="workflow-step">
+            <h2>2. Copy instructions</h2>
+            <p>We will include the details your chatbot needs to work on this site.</p>
+            <div class="workflow-action">
+                <button type="button" :disabled="!guideText || !request.trim()" @click="copyInstructions">Copy instructions</button>
+                <span v-if="copyFeedback" role="status">{{ copyFeedback }}</span>
+            </div>
+            <p v-if="guideError" role="alert">{{ guideError }} <button type="button" @click="$emit('retry-guide')">Retry</button></p>
+        </section>
+        <template v-if="copied || resultPasted">
+            <section ref="chatbotStep" class="workflow-step">
+                <h2>3. Open a chatbot</h2>
+                <p>Paste the instructions into a chatbot. When it finishes, copy its entire response.</p>
+                <nav aria-label="Chatbots" class="chatbot-nav">
+                    <ul class="chatbot-links">
+                        <li v-for="site in aiSites" :key="site.name"><a :href="site.href" target="_blank" rel="noopener noreferrer"><img :src="site.icon" alt="" loading="lazy" /><span>{{ site.name }}</span></a></li>
+                    </ul>
+                </nav>
+            </section>
+            <section class="workflow-step">
+                <h2>4. Paste the result</h2>
+                <div class="workflow-action">
+                    <button type="button" @click="pasteResult">Paste result from clipboard</button>
+                    <span v-if="pasteFeedback" role="status">{{ pasteFeedback }}</span>
+                </div>
+                <p v-if="resultPasted">You can paste another result or describe a further change.</p>
+            </section>
+        </template>
+        <section v-if="resultPasted && hasWorkingDocument" ref="publishStep" class="workflow-step">
+            <h2>5. Preview and publish</h2>
+            <p>Check the preview, then publish when you are ready.</p>
+            <button type="button" class="publish-button" :disabled="publishing" @click="$emit('publish')">Publish</button>
+        </section>
+    </div>
+</template>

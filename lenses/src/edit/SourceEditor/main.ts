@@ -1,6 +1,7 @@
 import {
     computed,
     defineComponent,
+    nextTick,
     ref,
     watch,
     onMounted,
@@ -22,10 +23,15 @@ type Props = {
     baseline: string;
     publishing: boolean;
     shouldShakePublish: boolean;
+    guideUrl: string;
+    mode: "create" | "edit";
+    active: boolean;
+    singlePane: boolean;
+    showBack: boolean;
 };
 export type SourceEditorHandle = { closeMenu: () => void };
 type Emit = {
-    (event: "publish" | "download"): void;
+    (event: "publish" | "download" | "choose-path"): void;
     (event: "update:modelValue", value: string): void;
 };
 
@@ -126,8 +132,8 @@ function setupSourceEditor(
         reconfigure(vimConfig, optional(enabled, vim())),
     );
 
-    onMounted(() => {
-        document.addEventListener("pointerdown", onMenuPointerDown);
+    function mountEditor() {
+        if (editor) return;
         const parent = editorElement.value;
         if (!parent) throw new Error("Missing CodeMirror editor container");
 
@@ -146,19 +152,36 @@ function setupSourceEditor(
                         indentWithTab,
                     ]),
                     EditorView.updateListener.of(syncEditorModel),
-                    themeConfig.of(oneDark),
-                    wrappingConfig.of(EditorView.lineWrapping),
-                    whitespaceConfig.of([]),
-                    vimConfig.of([]),
-                    diffConfig.of([]),
+                    // Returning from another path recreates CodeMirror with saved settings.
+                    themeConfig.of(optional(darkMode.value, oneDark)),
+                    wrappingConfig.of(optional(wordWrap.value, EditorView.lineWrapping)),
+                    whitespaceConfig.of(optional(renderWhitespace.value, highlightWhitespace())),
+                    vimConfig.of(optional(vimModeEnabled.value, vim())),
+                    diffConfig.of(currentDiffExtension()),
                 ],
             }),
         });
-    });
-    onBeforeUnmount(() => {
-        document.removeEventListener("pointerdown", onMenuPointerDown);
+    }
+    function destroyEditor() {
         editor?.destroy();
         editor = null;
+    }
+    onMounted(() => {
+        document.addEventListener("pointerdown", onMenuPointerDown);
+        if (props.active) mountEditor();
+    });
+    watch(() => props.active, async (active) => {
+        if (active) {
+            await nextTick();
+            if (props.active) mountEditor();
+        } else {
+            closeViewMenu();
+            destroyEditor();
+        }
+    }, { flush: "post" });
+    onBeforeUnmount(() => {
+        document.removeEventListener("pointerdown", onMenuPointerDown);
+        destroyEditor();
     });
     expose({ closeMenu: closeViewMenu });
     return {
@@ -182,7 +205,12 @@ export default defineComponent({
         baseline: { type: String, required: true },
         publishing: { type: Boolean, required: true },
         shouldShakePublish: { type: Boolean, required: true },
+        guideUrl: { type: String, required: true },
+        mode: { type: String, required: true },
+        active: { type: Boolean, required: true },
+        singlePane: { type: Boolean, required: true },
+        showBack: { type: Boolean, required: true },
     },
-    emits: ["publish", "download", "update:modelValue"],
+    emits: ["publish", "download", "choose-path", "update:modelValue"],
     setup: setupSourceEditor,
 });

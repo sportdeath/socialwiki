@@ -1,0 +1,36 @@
+<template id="edit-local-template">
+    <div class="workflow-steps">
+        <h1>Use a local editor</h1>
+        <div v-if="!folderAccess" class="workflow-alert" role="note">
+            For best experience use a Chromium-based browser to automatically sync your local edits here. On this browser, you will need to manually upload your edits.
+        </div>
+        <section class="workflow-step">
+            <h2 v-if="folderAccess">1. Have you edited this site on your local machine before?</h2>
+            <h2 v-else>1. Download the site files</h2>
+            <div class="workflow-action">
+                <button type="button" :disabled="!guideText || busy" @click="createFolder">{{ folderAccess ? 'No, download site files' : 'Download site files (ZIP)' }}</button>
+                <button v-if="folderAccess" type="button" :disabled="busy" @click="openExistingFolder">Yes, reconnect a folder</button>
+                <span v-if="saveFeedback" role="status">{{ saveFeedback }}</span>
+            </div>
+            <p v-if="guideError" role="alert">{{ guideError }} <button type="button" @click="$emit('retry-guide')">Retry</button></p>
+        </section>
+        <template v-if="siteReady">
+            <section class="workflow-step">
+                <h2>2. Edit index.html</h2>
+                <p v-if="folderAccess && folder">Make your changes in your own editor. Changes will sync here live.</p>
+                <p v-else-if="folderAccess">Open your site folder above to resume live sync.</p>
+                <p v-else>Make your changes in your own editor, then upload the updated index.html here.</p>
+                <div v-if="!folderAccess || uploadFeedback" class="workflow-action">
+                    <input v-if="!folderAccess" ref="uploadInput" type="file" accept=".html,text/html" hidden @change="uploadFile" />
+                    <button v-if="!folderAccess" type="button" @click="uploadInput?.click()">Upload updated index.html</button>
+                    <span v-if="uploadFeedback" role="status">{{ uploadFeedback }}</span>
+                </div>
+            </section>
+            <section v-if="canPublish" class="workflow-step">
+                <h2>3. Preview and publish</h2>
+                <p>Check the preview, then publish when you are ready.</p>
+                <button type="button" class="publish-button" :disabled="publishing" @click="$emit('publish')">Publish</button>
+            </section>
+        </template>
+    </div>
+</template>
