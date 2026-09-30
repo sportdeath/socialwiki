@@ -22,18 +22,17 @@
             @choose-path="choosePath(null)"
         >
             <template #preview-controls>
-                <nav v-if="selectedPath === 'code'" class="editor-controls">
+                <nav class="editor-controls">
                     <ul>
                         <li>
-                            <button class="refresh-button" title="Refresh the preview" @click="refreshPreview">
+                            <button type="button" class="refresh-button" title="Refresh the preview" @click="refreshPreview">
                                 Refresh
-                                <span v-if="debouncing" class="refresh-spinner" aria-hidden="true"></span>
+                                <span v-if="selectedPath === 'code' && debouncing" class="refresh-spinner" aria-hidden="true"></span>
                             </button>
                         </li>
-                        <li><label class="top-level-checkbox"><input type="checkbox" v-model="livePreview" /> Auto-refresh</label></li>
+                        <li v-if="selectedPath === 'code'"><label class="top-level-checkbox"><input type="checkbox" v-model="livePreview" /> Auto-refresh</label></li>
                     </ul>
                 </nav>
-                <button v-else type="button" @click="refreshPreview">Refresh</button>
             </template>
             <template #workflow>
                 <div class="workflow-body">
