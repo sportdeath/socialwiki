@@ -1,6 +1,7 @@
 import type { BridgedServices } from "./shared";
 import { installAutosizeParent } from "./autosize/parent";
 import { installEventsParent } from "./events/parent";
+import { installDocumentMetadataParent } from "./document-metadata/parent";
 import { installGraffitiParent } from "./graffiti/parent";
 import { installNavigationParent } from "./navigation/parent";
 import type { NavigableTransclude } from "./navigation/shared";
@@ -19,6 +20,7 @@ export function createParentBridgeEndpointInstaller(
     onEvent: (event: CustomEvent<unknown>) => void,
   ) => {
     const events = installEventsParent(iframe, onEvent);
+    const metadataBridge = installDocumentMetadataParent(events);
     const navigationBridge = installNavigationParent(
       host,
       events,
@@ -32,6 +34,7 @@ export function createParentBridgeEndpointInstaller(
     return {
       destroy() {
         navigationBridge.destroy();
+        metadataBridge.destroy();
         autosize.destroy();
         resolution.destroy();
         events.destroy();

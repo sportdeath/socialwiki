@@ -16,6 +16,10 @@ import {
 } from "@graffiti-garden/wrapper-vue";
 import { useLensSources } from "./lens-resolver";
 import { ErrorPage } from "../utils/status-pages";
+import {
+    applyDocumentMetadata,
+    isDocumentMetadata,
+} from "../../../kernel/src/bridges/document-metadata/shared";
 
 function setup() {
     const { composeAddress, composeQuery, parseAddress, parseQuery } = window.route;
@@ -154,15 +158,17 @@ function setup() {
 
         const { name: nextSiteName } = parseAddress(nestedAddress);
         const { name: currentSiteName } = parseAddress(siteAddress.value);
-        if (
+        const didDocumentChange =
             name !== lens.value ||
             nextSiteName !== currentSiteName ||
-            (params?.toString() ?? "") !== (lensParams.value?.toString() ?? "")
-        ) {
+            (params?.toString() ?? "") !== (lensParams.value?.toString() ?? "");
+        if (didDocumentChange) {
             // A new lens, lens configuration, or site invalidates the retained
             // output. The site's own query does not: View updates that state
             // without reloading or re-emitting the same source document.
             srcdoc.value = null;
+            applyDocumentMetadata({ title: "", icon: null },
+                nextSiteName || "Social.Wiki");
         }
 
         lens.value = name;
@@ -200,6 +206,13 @@ function setup() {
             return;
         }
         srcdoc.value = output ?? null;
+    }
+
+    function onLensMetadata(event: CustomEvent<unknown>) {
+        if (!isDocumentMetadata(event.detail)) return;
+        event.preventDefault();
+        const siteName = parseAddress(siteAddress.value).name || "Social.Wiki";
+        applyDocumentMetadata(event.detail, siteName);
     }
 
     onBeforeUnmount(() => {
@@ -304,6 +317,7 @@ function setup() {
         navigateToInputAddress,
         onBackdropClick,
         onLensOutput,
+        onLensMetadata,
         openPermissions,
         openSettingsDialog,
         routeForInputAddress,

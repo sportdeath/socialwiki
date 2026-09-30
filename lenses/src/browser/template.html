@@ -122,6 +122,7 @@
             :srcdoc="lens === 'v' ? undefined : directLensSource"
             :query="lens === 'v' ? undefined : lensQuery"
             @sw-lens-output="onLensOutput"
+            @sw-document-metadata="onLensMetadata"
         ></sw-transclude>
         <h1 v-else class="status dots">Loading</h1>
     </main>

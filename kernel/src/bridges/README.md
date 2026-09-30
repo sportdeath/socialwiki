@@ -32,6 +32,13 @@ helpers, and future guarded bridges should use the same identity logic.
 - `resolution`: the ability for a document to be resolved according to Social.Wiki's lenses.
   Its default root policy displays every address through Social.Wiki's View lens.
 - `autosize`: the ability for documents to adjust their size to fit their container
+- `document-metadata`: reports a document's native `<title>` and supported
+  `<link rel="icon">` to its immediate container. The container chooses whether
+  that child represents its own title and icon; side transclusions have no
+  automatic effect on the browser tab. Icons crossing the bridge must be
+  absolute HTTPS URLs or image `data:` URLs. Document serialization resolves
+  relative icon URLs from fetched documents first; unresolved relative and blob
+  URLs are ignored.
 - `graffiti`: a [graffiti](https://github.com/graffiti-garden/graffiti) connection.
 - `peripherals`: a shared guarded connection for browser capabilities, with
   adapters for geolocation, camera/microphone, local files, notifications,

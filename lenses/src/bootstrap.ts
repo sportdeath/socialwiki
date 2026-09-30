@@ -8,6 +8,11 @@ import { loadDocument } from "../../kernel/src/bridges/resolution/document";
 import { lensesUrl } from "./utils/locator";
 import { getSiteVersions } from "./utils/site-versions";
 import { ErrorPage } from "./utils/status-pages";
+import {
+  applyDocumentMetadata,
+  DOCUMENT_METADATA_EVENT,
+  isDocumentMetadata,
+} from "../../kernel/src/bridges/document-metadata/shared";
 
 function getBrowserElement() {
   const element = document.querySelector("sw-transclude");
@@ -19,6 +24,12 @@ function getBrowserElement() {
 
 export function startBrowserLoader() {
   const browser = getBrowserElement();
+  browser.addEventListener(DOCUMENT_METADATA_EVENT, (event) => {
+    const metadata = (event as CustomEvent<unknown>).detail;
+    if (!isDocumentMetadata(metadata)) return;
+    event.preventDefault();
+    applyDocumentMetadata(metadata, "Social.Wiki");
+  });
   const graffiti = new window.Graffiti();
   let session: GraffitiSession | null = null;
   let initialized = false;
@@ -56,6 +67,7 @@ export function startBrowserLoader() {
 
   async function loadBrowser() {
     const version = ++loadVersion;
+    applyDocumentMetadata({ title: "", icon: null }, "Social.Wiki");
 
     try {
       const html = session ? await publishedBrowser(session) : null;

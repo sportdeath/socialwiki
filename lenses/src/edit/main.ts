@@ -178,6 +178,7 @@ function setup() {
         const { name: nextSiteName, query: nextSiteQuery } = parseAddress(
             window.address,
         );
+        document.title = `Edit: ${nextSiteName || "Social.Wiki"}`;
         const didChangeSite = siteName.value !== nextSiteName;
         if (didChangeSite) {
             aiResultPasted.value = false;

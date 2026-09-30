@@ -54,6 +54,8 @@ This guide describes the Social.Wiki runtime, Graffiti's data model and API, and
 The document runs in a sandboxed originless iframe. Some browser functionalities are restored by <https://social.wiki/init.js> but others are unavailable.
 
 - You MAY use the following when available; some require user permission or interaction:
+  - `<title>` and `document.title`
+  - `<link rel="icon">` with an absolute HTTPS URL or an image `data:` URL
   - Camera and microphone via `navigator.mediaDevices.getUserMedia()`
   - Device location via `navigator.geolocation`
   - Clipboard via `navigator.clipboard`

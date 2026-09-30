@@ -58,6 +58,7 @@ function setup() {
     const { name: nextSiteName, query: nextSiteQuery } = parseAddress(
       window.address,
     );
+    document.title = `History: ${nextSiteName || "Social.Wiki"}`;
     const nextVersionUrl = window.params.get("version");
 
     siteName.value = nextSiteName;

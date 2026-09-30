@@ -17,6 +17,10 @@ import { isProtectionObject } from "../utils/schemas";
 import { useTrustContext } from "../utils/use-trust-context";
 import { siteChannels } from "../utils/site-channel";
 import {
+  applyDocumentMetadata,
+  isDocumentMetadata,
+} from "../../../kernel/src/bridges/document-metadata/shared";
+import {
   ErrorPage,
   LoadingPage,
   NoSiteSelected,
@@ -52,6 +56,12 @@ function setup() {
     displayed.value = { html, id };
   }
 
+  function onChildMetadata(event: CustomEvent<unknown>) {
+    if (!isDocumentMetadata(event.detail)) return;
+    event.preventDefault();
+    applyDocumentMetadata(event.detail, siteName.value || "Social.Wiki");
+  }
+
   onMounted(() => {
     const child = transclude.value;
     if (!child) throw new Error("Missing transclusion");
@@ -80,6 +90,7 @@ function setup() {
     const address = requestedAddress.value;
     if (!address?.length) {
       if (currentContentKey !== "no-site") {
+        applyDocumentMetadata({ title: "", icon: null }, "Social.Wiki");
         activeRenderVersion++;
         currentContentKey = "no-site";
         renderedAddress = "";
@@ -99,6 +110,9 @@ function setup() {
     const contentKey = requestedVersion
       ? `version:${requestedVersion}`
       : `site:${name}`;
+    if (force || contentKey !== currentContentKey) {
+      applyDocumentMetadata({ title: "", icon: null }, name || "Social.Wiki");
+    }
     displayedSiteName.value = name;
     const editors = trustedEditors.value;
     // A site lookup needs both its first discovery and the trust list.
@@ -230,7 +244,7 @@ function setup() {
     { immediate: true, flush: "post" },
   );
 
-  return { transclude, displayedSiteName, siteQuery, displayed };
+  return { transclude, displayedSiteName, siteQuery, displayed, onChildMetadata };
 }
 
 createApp({ template: "#app-template", setup })

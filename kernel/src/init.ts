@@ -8,6 +8,11 @@ import { serializeRouteUrl } from "./bridges/navigation/route-serialization";
 import { handleNavigation } from "./bridges/navigation/shared";
 import { createParentBridgeEndpointInstaller } from "./bridges/parent";
 import { createPeripheralsHost } from "./bridges/peripherals/host";
+import {
+  applyDocumentMetadata,
+  isDocumentMetadata,
+  DOCUMENT_METADATA_EVENT,
+} from "./bridges/document-metadata/shared";
 import { createPeripheralPermissions } from "./bridges/peripherals/permissions";
 import { createDefaultResolver } from "./bridges/resolution/default";
 import { serializeDocument } from "./bridges/resolution/document";
@@ -57,7 +62,10 @@ if (window.top !== window) {
     const html = serializeDocument(document, documentUrl);
 
     // Replace the document with a clean host for the root transclude below.
-    document.documentElement.replaceChildren(document.createElement("body"));
+    document.documentElement.replaceChildren(
+      document.createElement("head"),
+      document.createElement("body"),
+    );
 
     // Install top-level services: Graffiti, peripherals, resolution, and navigation
     const graffitiGuarded = TEST_GRAFFITI ? undefined : new GraffitiGuarded();
@@ -148,6 +156,15 @@ if (window.top !== window) {
       documentTitle || new URL(documentUrl).hostname,
     );
     transclude.setAttribute("srcdoc", html);
+    transclude.addEventListener(DOCUMENT_METADATA_EVENT, (event) => {
+      const metadata = (event as CustomEvent<unknown>).detail;
+      if (!isDocumentMetadata(metadata)) return;
+      event.preventDefault();
+      applyDocumentMetadata(
+        metadata,
+        documentTitle || new URL(documentUrl).hostname,
+      );
+    });
 
     // Forward any changes to the route to the top-level document
     const syncRoute = () => {
