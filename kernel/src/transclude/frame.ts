@@ -211,8 +211,12 @@ function createIframe() {
     "allow-pointer-lock",
     "allow-downloads",
     "allow-forms",
-    // Permit user-initiated new tabs without letting them escape the sandbox.
+    // Permit user-initiated new tabs
     "allow-popups",
+    // External sites need unsandboxed tabs for normal operation.
+    // A new blank tab inherits the document's opaque origin, not the host's origin,
+    // so there is no risk to it accessing top-level social.wiki or graffiti credentials.
+    "allow-popups-to-escape-sandbox",
   );
   iframe.allow = [
     "fullscreen *",
