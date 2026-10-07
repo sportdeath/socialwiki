@@ -8,7 +8,7 @@ import {
 } from "../../utils/site-versions";
 import DialogFrame from "../../utils/DialogFrame/main";
 import { siteChannels } from "../../utils/site-channel";
-type Props = { modelValue: boolean; siteName: string; publishing: boolean };
+type Props = { modelValue: boolean; siteName: string; sourceSiteName: string; publishing: boolean };
 type Emit = {
     (event: "publish", siteName: string, summary: string,
         versions: SiteVersionObject[]): void;
@@ -23,8 +23,11 @@ function setupPublishDialog(props: Props, { emit }: { emit: Emit }) {
         "publishSummaryInput",
     );
     const publishDialogSiteName = ref(props.siteName);
-    const publishDialogSummary = ref("");
+    const publishDialogSummary = ref(
+        props.sourceSiteName ? `Duplicated from ${props.sourceSiteName}` : "",
+    );
     const publishAudienceConfirmed = ref(false);
+    const publishRequested = ref(false);
     const normalizedPublishSiteName = computed(() =>
         publishDialogSiteName.value.trim(),
     );
@@ -37,18 +40,34 @@ function setupPublishDialog(props: Props, { emit }: { emit: Emit }) {
                 ? siteChannels(normalizedPublishSiteName.value) : [],
             () => siteVersionsSchema(normalizedPublishSiteName.value),
         );
+    const previewSiteName = ref(normalizedPublishSiteName.value);
+    const previewStatus = ref<"loading" | "ok" | "not-found" | "error">("loading");
+    watch(normalizedPublishSiteName, (name, _previousName, onCleanup) => {
+        previewSiteName.value = "";
+        previewStatus.value = "loading";
+        if (!name) return;
+        const timeout = window.setTimeout(() => { previewSiteName.value = name; }, 250);
+        onCleanup(() => window.clearTimeout(timeout));
+    });
+    const previewShowsSite = computed(() =>
+        previewSiteName.value === normalizedPublishSiteName.value && previewStatus.value === "ok",
+    );
+    watch(previewShowsSite, () => { publishAudienceConfirmed.value = false; });
     const publishSiteHref = computed(
         () => `#/v?/${normalizedPublishSiteName.value}`,
     );
-    const isPublishDialogValid = computed(
-        () =>
-            normalizedPublishSiteName.value.length > 0 &&
-            normalizedPublishSummary.value.length > 0 &&
-            publishAudienceConfirmed.value,
-    );
     watch(publishDialogSiteName, (nextSiteName, previousSiteName) => {
-        if (nextSiteName !== previousSiteName && publishAudienceConfirmed.value) {
+        if (nextSiteName !== previousSiteName) {
             publishAudienceConfirmed.value = false;
+        }
+    });
+    watch([publishDialogSiteName, publishDialogSummary, publishAudienceConfirmed], () => {
+        publishRequested.value = false;
+    }, { flush: "sync" });
+    watch(isFirstPoll, (loading) => {
+        if (!loading && publishRequested.value && open.value) {
+            publishRequested.value = false;
+            publish();
         }
     });
 
@@ -66,12 +85,18 @@ function setupPublishDialog(props: Props, { emit }: { emit: Emit }) {
         target.setSelectionRange(0, target.value.length);
     }
 
-    function submitPublishDialog() {
-        if (
-            props.publishing || isFirstPoll.value ||
-            !isPublishDialogValid.value
-        ) return;
+    function onPreviewOutput(event: CustomEvent<unknown>) {
+        event.preventDefault();
+        if ((event.currentTarget as HTMLElement).getAttribute("src") !== previewSiteName.value) return;
+        if (typeof event.detail !== "object" || event.detail === null) return;
+        const status = (event.detail as { status?: unknown }).status;
+        if (status === "loading" || status === "ok" || status === "not-found" || status === "error") {
+            previewStatus.value = status;
+        }
+    }
 
+    function publish() {
+        if (props.publishing) return;
         const name = normalizedPublishSiteName.value;
         // Use the versions found by the initial discovery, including partial results.
         const versions = sortSiteVersions(
@@ -79,18 +104,30 @@ function setupPublishDialog(props: Props, { emit }: { emit: Emit }) {
         );
         emit("publish", name, normalizedPublishSummary.value, versions);
     }
+    function submitPublishDialog() {
+        if (props.publishing) return;
+        if (isFirstPoll.value) {
+            publishRequested.value = true;
+            return;
+        }
+        publish();
+    }
     return {
         open,
         publishDialogSiteName,
         publishDialogSummary,
         publishAudienceConfirmed,
+        publishRequested,
         normalizedPublishSiteName,
         publishSiteHref,
-        isPublishDialogValid,
+        previewShowsSite,
+        previewSiteName,
+        previewStatus,
         isFirstPoll,
         discoveryError,
         cancelPublishDialog,
         selectAllPublishSiteName,
+        onPreviewOutput,
         submitPublishDialog,
     };
 }
@@ -101,6 +138,7 @@ export default defineComponent({
     props: {
         modelValue: { type: Boolean, required: true },
         siteName: { type: String, required: true },
+        sourceSiteName: { type: String, default: "" },
         publishing: { type: Boolean, required: true },
     },
     emits: ["publish", "update:modelValue"],

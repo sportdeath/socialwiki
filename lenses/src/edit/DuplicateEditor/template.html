@@ -1,0 +1,10 @@
+<template id="edit-duplicate-template">
+    <div class="workflow-steps">
+        <h1>Duplicate {{ siteName }}</h1>
+        <form class="workflow-step" @submit.prevent="publish">
+            <h2 id="duplicate-name-question">Which site name should this copy use?</h2>
+            <input v-model="newName" class="duplicate-site-name" type="text" aria-labelledby="duplicate-name-question" autocomplete="off" />
+            <button type="submit" class="publish-button" :disabled="!canPublish || publishing">Publish</button>
+        </form>
+    </div>
+</template>

@@ -6,6 +6,10 @@
                 <svg viewBox="-1.5 -1.5 27 27" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="miter" aria-hidden="true"><path d="m11 2 1.8 6.2L19 10l-6.2 1.8L11 18l-1.8-6.2L3 10l6.2-1.8L11 2Z"/><path d="m18 16 .7 2.3L21 19l-2.3.7L18 22l-.7-2.3L15 19l2.3-.7L18 16Z"/></svg>
                 <span><strong>{{ mode === 'create' ? 'Create' : 'Edit' }} with AI</strong><small>No programming experience required.</small></span>
             </button>
+            <button v-if="mode === 'edit'" type="button" class="path-choice" @click="$emit('select', 'duplicate')">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>
+                <span><strong>Duplicate</strong><small>Copy the site at "{{ siteName }}" to a different name.</small></span>
+            </button>
             <button type="button" class="path-choice" @click="$emit('select', 'local')">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="3" width="16" height="13" rx="1.5"/><path d="M2 20h20l-2-4H4l-2 4Z"/><path d="M10 18h4"/></svg>
                 <span><strong>Use a local editor</strong><small>Build with your favorite IDE. AGENTS.md included.</small></span>

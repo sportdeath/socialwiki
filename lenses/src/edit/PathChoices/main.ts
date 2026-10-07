@@ -1,6 +1,6 @@
 import { defineComponent, type PropType } from "vue";
 
-export type EditPath = "ai" | "local" | "code";
+export type EditPath = "ai" | "duplicate" | "local" | "code";
 
 export default defineComponent({
     template: "#edit-path-choices-template",

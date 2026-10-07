@@ -11,6 +11,7 @@ import {
 import SourceEditor, { type SourceEditorHandle } from "./SourceEditor/main";
 import PathChoices, { type EditPath } from "./PathChoices/main";
 import AiEditor from "./AiEditor/main";
+import DuplicateEditor from "./DuplicateEditor/main";
 import LocalEditor from "./LocalEditor/main";
 import PublishDialog from "./PublishDialog/main";
 import ProtectedDialog from "./ProtectedDialog/main";
@@ -189,7 +190,7 @@ function setup() {
         siteQuery.value = nextSiteQuery;
         editParams.value = lensParams;
         const routePath = lensParams.get("path");
-        selectedPath.value = routePath === "ai" || routePath === "local" || routePath === "code"
+        selectedPath.value = routePath === "ai" || routePath === "duplicate" || routePath === "local" || routePath === "code"
             ? routePath : null;
 
         const searchDraft = lensParams.get("draft");
@@ -223,6 +224,7 @@ function setup() {
             cancelDraftUpdate();
             loadDraft(searchDraft);
         }
+        if (selectedPath.value === "duplicate" && siteMode.value !== "edit") selectedPath.value = null;
 
         // Local edits reach this point after the draft navigation debounce.
         window.emit("sw-lens-output", { status: "ok", srcdoc: editorHtml.value });
@@ -286,6 +288,7 @@ function setup() {
     }
 
     const showPublishDialog = ref(false);
+    const duplicatePublishName = ref("");
     // --- Draft and preview updates -----------------------------
 
     // Manually refresh the preview
@@ -391,6 +394,11 @@ function setup() {
         showPublishDialog.value = true;
     }
 
+    function openDuplicatePublishDialog(name: string) {
+        duplicatePublishName.value = name;
+        void openPublishDialog();
+    }
+
     async function ensurePublishSession() {
         if (session.value) return session.value;
         bypassBeforeUnload.value = true;
@@ -431,7 +439,10 @@ function setup() {
                     "v",
                     composeQuery(
                         undefined,
-                        composeAddress(publishName, siteQuery.value),
+                        composeAddress(
+                            publishName,
+                            selectedPath.value === "duplicate" ? "" : siteQuery.value,
+                        ),
                     ),
                 )}`,
             );
@@ -458,6 +469,7 @@ function setup() {
         choosePath,
         debouncing,
         download,
+        duplicatePublishName,
         editorHtml,
         guideError,
         guideText,
@@ -469,6 +481,7 @@ function setup() {
         loadGuide,
         localPreviewReady,
         openPublishDialog,
+        openDuplicatePublishDialog,
         pasteAiResult,
         previewHtml,
         previewRoute,
@@ -492,6 +505,6 @@ function setup() {
 
 createApp({
     template: "#edit-template",
-    components: { SourceEditor, PathChoices, AiEditor, LocalEditor, PublishDialog, ProtectedDialog },
+    components: { SourceEditor, PathChoices, AiEditor, DuplicateEditor, LocalEditor, PublishDialog, ProtectedDialog },
     setup,
 }).use(GraffitiPlugin, { graffiti: new window.Graffiti() }).mount("#app");

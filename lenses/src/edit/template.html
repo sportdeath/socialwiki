@@ -44,7 +44,7 @@
                     ></path-choices>
                     <ai-editor
                         v-else-if="selectedPath === 'ai'"
-                        :key="siteName"
+                        :key="`ai:${siteName}`"
                         :mode="siteMode"
                         :site-name="siteName"
                         :html="editorHtml"
@@ -57,9 +57,16 @@
                         @publish="openPublishDialog"
                         @retry-guide="loadGuide"
                     ></ai-editor>
+                    <duplicate-editor
+                        v-else-if="selectedPath === 'duplicate'"
+                        :key="`duplicate:${siteName}`"
+                        :site-name="siteName"
+                        :publishing="publishing"
+                        @publish="openDuplicatePublishDialog"
+                    ></duplicate-editor>
                     <local-editor
                         v-else-if="selectedPath === 'local'"
-                        :key="siteName"
+                        :key="`local:${siteName}`"
                         :site-name="siteName"
                         :html="editorHtml"
                         :guide-text="guideText"
@@ -89,7 +96,8 @@
         <publish-dialog
             v-if="showPublishDialog"
             v-model="showPublishDialog"
-            :site-name="siteName"
+            :site-name="selectedPath === 'duplicate' ? duplicatePublishName : siteName"
+            :source-site-name="selectedPath === 'duplicate' ? siteName : ''"
             :publishing="publishing"
             @publish="submitPublishDialog"
         ></publish-dialog>

@@ -106,10 +106,8 @@
 .workflow-step h3 { margin: 0; font-size: 1.15rem; }
 .workflow-step p { line-height: 1.45; }
 .workflow-action { display: flex; align-items: center; flex-wrap: wrap; gap: 0.7rem; }
-.workflow-steps textarea {
+.workflow-steps :is(textarea, input[type="text"]) {
     width: 100%;
-    resize: vertical;
-    min-height: 8rem;
     padding: 0.7rem;
     border: 1px solid var(--border-color);
     border-radius: 0.5rem;
@@ -117,6 +115,7 @@
     color: var(--text-color);
     font: inherit;
 }
+.workflow-steps textarea { resize: vertical; min-height: 8rem; }
 
 .workflow-steps button,
 .sw-two-pane-controls > button {

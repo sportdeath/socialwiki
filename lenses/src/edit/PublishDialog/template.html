@@ -15,6 +15,7 @@
                     v-model="publishDialogSiteName"
                     type="text"
                     required
+                    pattern=".*\S.*"
                     autocomplete="off"
                     @focus="selectAllPublishSiteName"
                     @click="selectAllPublishSiteName"
@@ -29,10 +30,23 @@
                     v-model="publishDialogSummary"
                     type="text"
                     required
+                    pattern=".*\S.*"
                     autocomplete="off"
                     :disabled="publishing"
                 />
             </label>
+
+            <section v-if="previewSiteName" v-show="previewShowsSite" class="publish-preview-section" aria-label="Current site preview">
+                <h3>What’s currently shown at "<a class="publish-site-name-link" :href="publishSiteHref">{{ previewSiteName }}</a>"</h3>
+                <div class="publish-site-preview">
+                    <sw-transclude
+                        :key="previewSiteName"
+                        :src="previewSiteName"
+                        :name="`Current site: ${previewSiteName}`"
+                        @sw-lens-output="onPreviewOutput"
+                    ></sw-transclude>
+                </div>
+            </section>
 
             <div class="publish-audience-checkbox">
                 <input
@@ -51,7 +65,7 @@
                         class="publish-site-name-link"
                         :href="publishSiteHref"
                         >{{ normalizedPublishSiteName || "this site" }}</a
-                    >".
+                    >"{{ previewShowsSite ? ' and will replace the content above' : '' }}.
                 </label>
             </div>
 
@@ -69,6 +83,9 @@
             <p v-if="discoveryError" role="alert">
                 Could not check existing versions: {{ discoveryError.message }}. Retrying…
             </p>
+            <p v-if="publishRequested && isFirstPoll" role="status">
+                Checking existing versions before publishing…
+            </p>
             <footer>
                 <button
                     type="button"
@@ -81,10 +98,9 @@
                 <button
                     type="submit"
                     class="allow-button"
-                    :disabled="publishing || isFirstPoll || !isPublishDialogValid"
+                    :disabled="publishing"
                 >
-                    {{ isFirstPoll && discoveryError ? "Retrying..." : normalizedPublishSiteName && isFirstPoll
-                        ? "Checking existing versions..." : "Publish" }}
+                    Publish
                 </button>
             </footer>
         </form>
