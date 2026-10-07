@@ -136,7 +136,18 @@
 .workflow-steps button:active,
 .sw-two-pane-controls > button:active { transform: translateY(1px); }
 
-.workflow-action [role="status"] { animation: workflow-appear 0.18s ease-out both; }
+.workflow-step [role="status"] { animation: workflow-appear 0.18s ease-out both; }
+
+.ai-paste-target {
+    width: 100%;
+    min-height: 4rem;
+    padding: 0.7rem;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    background: var(--background-color);
+    color: var(--text-color);
+}
+.ai-paste-target:empty::before { content: attr(data-placeholder); opacity: 0.65; }
 
 .workflow-steps button:disabled { opacity: 0.6; cursor: not-allowed; }
 
@@ -179,7 +190,7 @@
 
 @media (prefers-reduced-motion: reduce) {
     .workflow-step,
-    .workflow-action [role="status"] { animation: none; }
+    .workflow-step [role="status"] { animation: none; }
     .path-choice,
     .workflow-steps button,
     .sw-two-pane-controls > button { transition: none; }

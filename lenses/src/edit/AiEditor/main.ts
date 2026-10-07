@@ -37,6 +37,8 @@ export default defineComponent({
         const copied = ref(false);
         const copyFeedback = ref("");
         const pasteFeedback = ref("");
+        const clipboardReadFailed = ref(false);
+        const showPasteTarget = ref(false);
         let feedbackTimer: number | undefined;
         function showCopyFeedback(message: string) {
             copyFeedback.value = message;
@@ -68,17 +70,37 @@ export default defineComponent({
             }
         }
 
-        async function pasteResult() {
-            pasteFeedback.value = "";
+        async function usePastedResult(text: string) {
             try {
-                emit("paste", extractHtmlFromClipboard(await navigator.clipboard.readText()));
+                emit("paste", extractHtmlFromClipboard(text));
                 pasteFeedback.value = "Pasted";
+                clipboardReadFailed.value = false;
+                showPasteTarget.value = false;
                 await scrollToStep(publishStep);
             } catch (error) {
                 pasteFeedback.value = error instanceof Error ? error.message : String(error);
             }
         }
 
-        return { aiSites, request, copied, copyFeedback, pasteFeedback, copyInstructions, pasteResult };
+        async function pasteResult() {
+            pasteFeedback.value = "";
+            clipboardReadFailed.value = false;
+            showPasteTarget.value = false;
+            try {
+                await usePastedResult(await navigator.clipboard.readText());
+            } catch {
+                clipboardReadFailed.value = true;
+                pasteFeedback.value = "Could not read the clipboard.";
+            }
+        }
+
+        function pasteFromEvent(event: ClipboardEvent) {
+            event.preventDefault();
+            const text = event.clipboardData?.getData("text/plain");
+            if (text) void usePastedResult(text);
+            else pasteFeedback.value = "Copy the chatbot's full response, then try again.";
+        }
+
+        return { aiSites, request, copied, copyFeedback, pasteFeedback, clipboardReadFailed, showPasteTarget, copyInstructions, pasteResult, pasteFromEvent };
     },
 });

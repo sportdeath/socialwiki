@@ -28,14 +28,17 @@
                 <h2>4. Paste the result</h2>
                 <div class="workflow-action">
                     <button type="button" @click="pasteResult">Paste result from clipboard</button>
-                    <span v-if="pasteFeedback" role="status">{{ pasteFeedback }}</span>
                 </div>
-                <p v-if="resultPasted">You can paste another result or describe a further change.</p>
+                <p v-if="pasteFeedback" role="status">{{ pasteFeedback }}</p>
+                <button v-if="clipboardReadFailed" type="button" @click="showPasteTarget = true">Paste another way</button>
+                <div v-if="showPasteTarget" class="ai-paste-target" contenteditable="true" role="textbox"
+                    aria-label="Paste the chatbot's response" data-placeholder="Paste the chatbot's response here"
+                    @paste="pasteFromEvent"></div>
             </section>
         </template>
         <section v-if="resultPasted && hasWorkingDocument" ref="publishStep" class="workflow-step">
             <h2>5. Preview and publish</h2>
-            <p>Check the preview, then publish when you are ready.</p>
+            <p>Check the preview. If you want to make additional changes, ask your chatbot and paste the new result. Then publish when you are ready.</p>
             <button type="button" class="publish-button" :disabled="publishing" @click="$emit('publish')">Publish</button>
         </section>
     </div>
