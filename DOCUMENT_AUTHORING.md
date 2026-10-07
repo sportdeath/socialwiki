@@ -409,11 +409,12 @@ Transclusion is including one Social.Wiki document within another.
 - A site does NOT know its own name or full address, only its query (`window.query`). `window.address` is a subaddress that is part of the document's query.
 - Sites can be linked to through one of three built-in root "lenses": View (`v`), Edit (`e`), and History (`h`).
   - View simply displays the site, Edit opens the site up for editing, and History displays past site versions
-  - `lensAddress = window.route.composeAddress("v", window.route.composeQuery(undefined, siteAddress))`
+  - `viewAddress = window.route.composeAddress("v", window.route.composeQuery(undefined, siteAddress))`
+  - `editAddress = window.route.composeAddress("e", window.route.composeQuery(new URLSearchParams({ draft: " <!DOCTYPE html>...", redirect_route: "#/v?/mysite" }), siteAddress))`
   - For an absolute location, the lens address must be prepended with the root symbol `"#/"`. This symbol refers to a top-level "browser" document that typically provides an address bar and selects View/Edit/History based on its provided address.
-  - Navigation on-click: ``<a :href="`#/${lensAddress}`">``
-  - Programmatic navigation: ``window.navigate(`#/${lensAddress}`)``
-  - Copy absolute link: ``window.copyLink(`#/${lensAddress}`)``
+  - Navigation on-click: ``<a :href="`#/${viewAddress}`">``
+  - Programmatic navigation: ``window.navigate(`#/${viewAddress}`)``
+  - Copy absolute link: ``window.copyLink(`#/${viewAddress}`)``
 - A site can be transcluded by reference via its address. The `src` attribute supersedes `srcdoc`; when `src` is set, its embedded query is used and the separate `query` attribute is ignored.
   - `<sw-transclude :src="siteAddress"></sw-transclude>`
 

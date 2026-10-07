@@ -130,6 +130,13 @@ function setup() {
         () =>
             `#/${composeAddress("v", composeQuery(undefined, siteAddress.value))}`,
     );
+    // A caller can return to a page or external URL after editing. A relative
+    // query would navigate within the Edit lens instead of leaving it.
+    const redirectRoute = computed(() => {
+        const route = editParams.value.get("redirect_route")?.trim();
+        return route && !route.startsWith("?") ? route : null;
+    });
+    const protectionCancelRoute = computed(() => redirectRoute.value ?? viewRoute.value);
     const { session, trustByActor, trustedEditors } = useTrustContext();
     const graffiti = useGraffiti();
     const { objects: protectionAnnotations, isFirstPoll: protectionLoading } =
@@ -435,7 +442,7 @@ function setup() {
             baselineHtml.value = nextPublishedHtml;
             resetPublishReminderState();
             window.navigate(
-                `#/${composeAddress(
+                redirectRoute.value ?? `#/${composeAddress(
                     "v",
                     composeQuery(
                         undefined,
@@ -486,6 +493,7 @@ function setup() {
         previewHtml,
         previewRoute,
         previewTranscludeId,
+        protectionCancelRoute,
         publishing,
         refreshKey,
         refreshPreview,

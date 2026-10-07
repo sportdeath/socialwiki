@@ -8,7 +8,7 @@ type Props = {
     isProtectionBySessionActor: boolean;
     activeProtectionTrustSource: "default" | "trusted" | null;
     historyRoute: string;
-    viewRoute: string;
+    cancelRoute: string;
 };
 function setupProtectedDialog(props: Props, { emit }: { emit: (event: "update:modelValue", value: boolean) => void }) {
     const open = computed({
@@ -16,7 +16,11 @@ function setupProtectedDialog(props: Props, { emit }: { emit: (event: "update:mo
         set: (value: boolean) => emit("update:modelValue", value),
     });
     const trustedEditorsRoute = "#/v?/trusted-editors";
-    return { open, trustedEditorsRoute };
+    function cancel() {
+        open.value = false;
+        window.navigate(props.cancelRoute);
+    }
+    return { open, trustedEditorsRoute, cancel };
 }
 
 export default defineComponent({
@@ -28,7 +32,7 @@ export default defineComponent({
         isProtectionBySessionActor: { type: Boolean, required: true },
         activeProtectionTrustSource: { type: String as PropType<Props["activeProtectionTrustSource"]>, default: null },
         historyRoute: { type: String, required: true },
-        viewRoute: { type: String, required: true },
+        cancelRoute: { type: String, required: true },
     },
     emits: ["update:modelValue"],
     setup: setupProtectedDialog,
