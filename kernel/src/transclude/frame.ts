@@ -53,8 +53,9 @@ export class TranscludeFrame {
         position: relative;
         display: block;
         width: 100%;
-        height: 100%;
-        min-height: 150px;
+        height: 150px;
+        /* Let autosize make a flex item shorter than its default height. */
+        min-height: 0;
         overflow: clip;
       }
     `;

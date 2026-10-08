@@ -65,6 +65,10 @@
     overflow-y: auto;
 }
 
+.sw-two-pane-body > sw-transclude {
+    height: 100%;
+}
+
 .sw-two-pane-divider {
     width: 4px;
     cursor: col-resize;

@@ -4,6 +4,10 @@ main:has(> .status) {
     place-items: center;
 }
 
+main > sw-transclude {
+    height: 100%;
+}
+
 header {
     display: flex;
     align-items: center;

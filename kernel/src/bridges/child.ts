@@ -14,7 +14,7 @@ export function installChildBridgeEndpoints() : BridgedServices {
   const createGraffiti = installGraffitiChild();
   const resolve = installResolutionChild(events);
   const documentRoute = installNavigationChild(events);
-  installAutosizeChild(events);
+  const autosize = installAutosizeChild(events);
   const peripherals = installPeripheralsChild();
-  return { createGraffiti, resolve, documentRoute, peripherals };
+  return { createGraffiti, resolve, documentRoute, peripherals, autosize };
 }

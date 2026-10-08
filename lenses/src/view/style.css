@@ -1,17 +1,17 @@
-/* The rendered site supplies its own styles; the View lens only fills its frame. */
-html,
-body,
-#app,
-sw-transclude {
-    height: 100%;
-    width: 100%;
-}
-
 body {
+    /* Remove outside spacing. */
     margin: 0;
+    /* Let this wrapper become as narrow as its page;
+       otherwise it stays as wide as the window. */
+    width: max-content;
+    /* Let the containing page scroll; don't add scrollbars here. */
     overflow: hidden;
 }
 
 sw-transclude {
     display: block;
+    /* Fill the window at first. Once the page loads, Social.Wiki replaces
+       these sizes on the axes that have autosizing enabled. */
+    width: 100vw;
+    height: 100vh;
 }

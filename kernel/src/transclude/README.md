@@ -45,23 +45,66 @@ The element supports:
   When no `route` attribute is present, the child is a "side transclusion":
   it can still navigate internally but has no containing route for serializing
   relative links into browser URLs.
-- `autosize`: `width`, `height`, `both`, or a bare attribute for both axes. Makes the containing element resize to fit the child document.
+- `autosize`: `width`, `height`, `both`, `inherit`, or a bare attribute for both axes. Makes the containing element resize to fit the child document. `inherit` follows the containing document's autosize mode, which is useful inside a lens.
 - `id` and `name`: these identify a document within the Graffiti guard. A document's ID hierarchy is used to identify that document for permissions purposes. The name should be human-readable.
 - `permission-scope="inherit"`: omits this boundary from Graffiti's source hierarchy, giving the child the containing document's permission scope. Because this delegates the parent's authority to the child, it must only be set by a parent that trusts the transcluded document. Unknown values retain the normal isolated scope.
 
 ## Sizing and scrolling
 
 A transclusion is a separate document with its own scrolling, like an iframe.
-By default, it is a block with `width: 100%`, `height: 100%`, and
-`min-height: 150px`. Percentage height needs a parent with a definite height;
-otherwise the frame can end up only 150px tall. It does not automatically grow
-to fit its contents.
+By default, it is a block with `width: 100%` and `height: 150px`. It does not
+automatically grow to fit its contents. Set `height: 100%` when it should fill
+a parent with a definite height, or use `autosize="height"` to fit its content.
+Height autosizing can make the frame shorter or taller than the default.
+An author's `min-height` on `<sw-transclude>` still applies.
+
+To fill the viewport below a header and still grow for long content, let the
+containing page distribute space with flexbox:
+
+```html
+<style>
+  .layout { min-height: 100dvh; display: flex; flex-direction: column; }
+  .layout main { flex: 1 0 auto; display: flex; flex-direction: column; }
+  .layout sw-transclude { flex: 1 0 auto; }
+</style>
+<div class="layout">
+  <header>...</header>
+  <main><sw-transclude src="my-page" autosize="height"></sw-transclude></main>
+</div>
+```
+
+The header's actual height determines the remaining space; the child can
+still make the frame taller than the viewport.
 
 For content embedded in a longer page, use `autosize="height"` so the containing
 page handles scrolling:
 
 ```html
 <sw-transclude src="my-page" autosize="height"></sw-transclude>
+```
+
+The containing page should usually choose the width. A responsive child can
+then lay out at that width and report the height it needs. Use `autosize="width"`
+or `"both"` only when the child's width comes from its content rather than its
+viewport. For example, a child with `width: 90vw` reports a smaller width each
+time the frame shrinks; there is no useful intrinsic width for the bridge to
+find. Viewport-relative height plus overflow can cause the same feedback on
+the height axis. The bridge stops nonconverging growth, but that safety stop
+cannot make later content changes reliable in a self-referential layout.
+
+A lens can set `autosize="inherit"` on its displayed transclusion. The bridge
+then passes the containing document's autosize mode inward and measures the
+lens's own layout, including a header or other content around the child. View
+uses a viewport-sized CSS fallback for its child; when the bridge applies an
+intrinsic width or height, that dimension replaces the fallback. A lens with
+custom sizing behavior can also listen for the local `sw-autosize-mode` event.
+
+```html
+<style>
+  body { margin: 0; width: max-content; }
+  sw-transclude { display: block; width: 100vw; height: 100vh; }
+</style>
+<sw-transclude src="my-page" autosize="inherit"></sw-transclude>
 ```
 
 For a full-page app, give the frame a definite height and remove the wrapping

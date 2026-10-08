@@ -13,7 +13,7 @@ import { installPeripheralsParent } from "./peripherals/parent";
 export function createParentBridgeEndpointInstaller(
   bridgedServices: BridgedServices,
 ) {
-  const { resolve, createGraffiti, documentRoute, peripherals } = bridgedServices;
+  const { resolve, createGraffiti, documentRoute, peripherals, autosize } = bridgedServices;
   const install = (
     host: NavigableTransclude,
     iframe: HTMLIFrameElement,
@@ -26,7 +26,7 @@ export function createParentBridgeEndpointInstaller(
       events,
       documentRoute,
     );
-    const autosize = installAutosizeParent(host, events);
+    const autosizeBridge = installAutosizeParent(host, events, autosize);
     const resolution = installResolutionParent(events, resolve);
     const graffitiBridge = installGraffitiParent(iframe, host, createGraffiti());
     const peripheralsBridge = installPeripheralsParent(iframe, host, peripherals);
@@ -35,7 +35,7 @@ export function createParentBridgeEndpointInstaller(
       destroy() {
         navigationBridge.destroy();
         metadataBridge.destroy();
-        autosize.destroy();
+        autosizeBridge.destroy();
         resolution.destroy();
         events.destroy();
         void graffitiBridge.destroy();

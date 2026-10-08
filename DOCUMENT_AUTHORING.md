@@ -391,7 +391,7 @@ Transclusion is including one Social.Wiki document within another.
 - Attributes:
   - `srcdoc` supplies the child's HTML; `query` supplies the state available as the child's `window.query`.
   - `id` identifies the child for permissions; `name` is a human-readable label for permission prompts. `permission-scope="inherit"` shares the parent's permission scope; use it only for trusted children.
-  - `autosize="height"`, `"width"`, or `"both"` resizes container to fit child content; bare `autosize` means both.
+  - `autosize="height"`, `"width"`, `"both"`, or `"inherit"` resizes the selected axes to fit child content; bare `autosize` means both. `"inherit"` passes on the parent's settings in nested transclusions. Used by some lenses (see below)
   - `route` controls how navigation from the embedded document affects the browser URL. Relative links start from the child's assigned location. It does not choose what loads.
     - Usually, if a transclude is selectively displayed at a given query (e.g. `"?/profile"`), use that query as the child's route: `<sw-transclude ... route="?/profile"></sw-transclude>`
     - Without `route`, query navigation updates only the embedded document, leaving the browser URL unchanged. Rooted and external navigation are ignored by default.
@@ -427,7 +427,7 @@ Transclusion is including one Social.Wiki document within another.
   - `channels: ["site:" + siteName]`
   - `value: { action: "Publish site", "site name": siteName, changes: string, document: mediaUrl, time: number, "previous versions"?: string[] }`
   - `allowed` is omitted (public).
-- A custom View lens selects which versions and publishers to trust. It transcludes the selected HTML with the site's query and `route=""`.
+- A custom View lens selects which versions and publishers to trust. It transcludes the selected HTML with the site's query, `route=""`, and `autosize="inherit"`.
 - Every lens reports `window.emit("sw-lens-output", { status, srcdoc })`, where `status` is `"loading"`, `"ok"`, `"not-found"`, or `"error"`. On `"ok"`, `srcdoc` is the source HTML displayed or edited. For asynchronous resolution, emit `"loading"` first and ignore stale results. If forwarding child events, consume their `sw-lens-output` rather than reporting it as the lens's own.
 
 #### Custom navigation
