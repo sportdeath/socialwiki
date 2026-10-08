@@ -1,5 +1,11 @@
 import type { EventsChild } from "../events/child";
-import { AUTOSIZE_SIZE_EVENT } from "./shared";
+import {
+  AUTOSIZE_MODE_EVENT,
+  AUTOSIZE_SIZE_EVENT,
+  autosizesHeight,
+  autosizesWidth,
+  parseAutosizeMode,
+} from "./shared";
 
 export function installAutosizeChild(events: EventsChild) {
   let resizeObserver: ResizeObserver | null = null;
@@ -63,13 +69,38 @@ export function installAutosizeChild(events: EventsChild) {
         child.offsetHeight,
         child.clientHeight,
       );
-      width = Math.max(width, child.offsetLeft + childWidth);
+      width = Math.max(width, child.offsetLeft + childWidth + parsePx(childStyle.marginRight));
       height = Math.max(height, child.offsetTop + childHeight);
+    }
+
+    // A nested element's bottom margin may collapse through its ancestors.
+    // It then contributes to document overflow without appearing in their
+    // scrollHeight or the range bounds. Measure it in document coordinates so
+    // the result can still shrink when the content changes.
+    const docTop = doc.getBoundingClientRect().top;
+    let documentHeight = height + marginY;
+    for (const element of body.querySelectorAll("*")) {
+      if (!(element instanceof HTMLElement)) continue;
+      const elementStyle = window.getComputedStyle(element);
+      const bottomMargin = parsePx(elementStyle.marginBottom);
+      if (bottomMargin <= 0 || elementStyle.position === "fixed") continue;
+      if (element.getClientRects().length === 0) continue;
+      const candidate = element.getBoundingClientRect().bottom - docTop +
+        bottomMargin + parsePx(style.marginBottom);
+      if (candidate <= documentHeight) continue;
+
+      // Descendants of a scroll/clip container do not extend the outer page.
+      let ancestor = element.parentElement;
+      while (ancestor && ancestor !== body) {
+        if (window.getComputedStyle(ancestor).overflowY !== "visible") break;
+        ancestor = ancestor.parentElement;
+      }
+      if (!ancestor || ancestor === body) documentHeight = candidate;
     }
 
     return {
       width: Math.max(1, Math.ceil(width + marginX)),
-      height: Math.max(1, Math.ceil(height + marginY)),
+      height: Math.max(1, Math.ceil(documentHeight)),
     };
   };
 
@@ -77,6 +108,14 @@ export function installAutosizeChild(events: EventsChild) {
     // Keep this guard: without it, autosize="width" can enter a responsive
     // feedback loop and repeatedly shrink toward zero.
     if (lastWidth < 0 || width >= lastWidth) {
+      pendingWidthShrink = null;
+      return width;
+    }
+
+    // A max-content body can become smaller while its iframe keeps the old
+    // width. In that case shrinking is independent of the iframe viewport.
+    if (document.body &&
+      document.body.getBoundingClientRect().width < document.documentElement.clientWidth - 1) {
       pendingWidthShrink = null;
       return width;
     }
@@ -116,6 +155,29 @@ export function installAutosizeChild(events: EventsChild) {
       emitSize();
     });
   };
+
+  const rootStyle = document.documentElement.style;
+  const originalOverflow = (["x", "y"] as const).map((axis) => {
+    const property = `overflow-${axis}`;
+    return {
+      property,
+      value: rootStyle.getPropertyValue(property),
+      priority: rootStyle.getPropertyPriority(property),
+    };
+  });
+  events.listen(AUTOSIZE_MODE_EVENT, (event) => {
+    const mode = parseAutosizeMode(event.detail);
+    for (const { property, value, priority } of originalOverflow) {
+      const autosized = property === "overflow-x"
+        ? autosizesWidth(mode)
+        : autosizesHeight(mode);
+      if (autosized) rootStyle.setProperty(property, "hidden", "important");
+      else if (value) rootStyle.setProperty(property, value, priority);
+      else rootStyle.removeProperty(property);
+    }
+    // Removing a scrollbar changes the viewport and can change line wrapping.
+    scheduleEmit();
+  });
 
   const startAutosize = () => {
     if (!resizeObserver) {

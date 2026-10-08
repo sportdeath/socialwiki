@@ -1,5 +1,6 @@
 import type { EventsParent } from "../events/parent";
 import {
+  AUTOSIZE_MODE_EVENT,
   AUTOSIZE_SIZE_EVENT,
   type AutosizeMode,
   autosizesHeight,
@@ -30,8 +31,12 @@ export function installAutosizeParent(
       return;
     }
 
+    const firstSize = lastSize === null;
     lastSize = { width: p.width, height: p.height };
     applyLastSize();
+    // The first size report confirms the child bridge is ready to receive its
+    // mode, including when a cached child script ran before this listener.
+    if (firstSize) events.send(AUTOSIZE_MODE_EVENT, mode);
   };
 
   const applyLastSize = () => {
@@ -77,6 +82,7 @@ export function installAutosizeParent(
       }
     }
     applyLastSize();
+    if (lastSize) events.send(AUTOSIZE_MODE_EVENT, mode);
   };
 
   const observer = new MutationObserver(setAutosizeMode);

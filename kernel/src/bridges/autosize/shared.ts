@@ -1,4 +1,5 @@
 export const AUTOSIZE_SIZE_EVENT = "sw-autosize-size";
+export const AUTOSIZE_MODE_EVENT = "sw-autosize-mode";
 
 export type AutosizeMode = "off" | "height" | "width" | "both";
 
