@@ -223,6 +223,7 @@ function createIframe() {
     "fullscreen *",
     "clipboard-read *",
     "clipboard-write *",
+    "web-share *",
   ].join("; ");
   return iframe;
 }

@@ -59,6 +59,7 @@ The document runs in a sandboxed originless iframe. Some browser functionalities
   - Camera and microphone via `navigator.mediaDevices.getUserMedia()`
   - Device location via `navigator.geolocation`
   - Clipboard via `navigator.clipboard`
+  - Native sharing via `navigator.share`
   - Notifications via `Notification`
   - `crypto.randomUUID()`, `crypto.getRandomValues()` and `crypto.subtle`
   - Local files via `<input type="file">` or `showOpenFilePicker()`, `showSaveFilePicker()`, and `showDirectoryPicker()`
@@ -83,7 +84,7 @@ The document runs in a sandboxed originless iframe. Some browser functionalities
     - `window.route.parseQuery(query: string): { params?: URLSearchParams; address?: string }`
 - Route state may arrive after load; listen for changes.
 - For query navigation on-click, use normal anchors: `<a :href="query">`. Clicks will not refresh the page.
-- Avoid exposing users to raw query strings. For a non-empty `query`, `<a :href="query">` automatically translates queries into absolute links on New Tab / Copy Link actions. For programmatic copying, use `await window.copyLink(query)` in response to a user action to copy an absolute link to the clipboard.
+- Avoid exposing users to raw query strings. For a non-empty `query`, `<a :href="query">` automatically translates queries into absolute links on New Tab / Copy Link actions. For programmatic copying/sharing, call `window.urlFor(query)` to get a shareable HTTP(S) URL before passing to `navigator`.
 
 ### Navigation
 
@@ -414,7 +415,7 @@ Transclusion is including one Social.Wiki document within another.
   - For an absolute location, the lens address must be prepended with the root symbol `"#/"`. This symbol refers to a top-level "browser" document that typically provides an address bar and selects View/Edit/History based on its provided address.
   - Navigation on-click: ``<a :href="`#/${viewAddress}`">``
   - Programmatic navigation: ``window.navigate(`#/${viewAddress}`)``
-  - Copy absolute link: ``window.copyLink(`#/${viewAddress}`)``
+  - Get a shareable URL: ``window.urlFor(`#/${viewAddress}`)``
 - A site can be transcluded by reference via its address. The `src` attribute supersedes `srcdoc`; when `src` is set, its embedded query is used and the separate `query` attribute is ignored.
   - `<sw-transclude :src="siteAddress"></sw-transclude>`
 

@@ -22,13 +22,13 @@ export function installNavigationChild(events: EventsChild) {
   let currentParamsSerialized: string | undefined;
   const documentRoute = createDocumentRouteState();
 
-  window.copyLink = async (to: string) => {
+  window.urlFor = (to: string) => {
     const isRoute = to.startsWith("?") || to.startsWith("#/") || to.startsWith("#?");
     let url: URL | null;
     if (isRoute) {
       const currentRoute = documentRoute.getDocumentRoute();
       if (!currentRoute) {
-        throw new Error("Cannot copy a route without a public document route");
+        throw new Error("Cannot make an absolute URL for a route without document context");
       }
       url = serializeRouteUrl(to, currentRoute);
       if (!url) throw new Error("Cannot resolve this route to an HTTP(S) URL");
@@ -36,12 +36,8 @@ export function installNavigationChild(events: EventsChild) {
       url = new URL(to);
     }
     if (url.protocol !== "http:" && url.protocol !== "https:") {
-      throw new TypeError("Only HTTP(S) links can be copied");
+      throw new TypeError("Only HTTP(S) links can be converted to absolute URLs");
     }
-    if (!navigator.clipboard?.writeText) {
-      throw new Error("Clipboard access is unavailable");
-    }
-    await navigator.clipboard.writeText(url.href);
     return url.href;
   };
 
