@@ -177,21 +177,6 @@ if (window.top !== window) {
     window.addEventListener("hashchange", syncRoute);
 
     document.body.appendChild(transclude);
-
-    // The keyboard can shrink and move the visible viewport without changing
-    // 100dvh. Keep the root frame in the visible area so its descendants can
-    // use ordinary viewport-sized CSS for full-screen layouts. Do not follow
-    // viewport scroll events: iOS also fires those during elastic overscroll.
-    const fitToVisualViewport = () => {
-      const viewport = window.visualViewport;
-      if (!viewport) return;
-      transclude.style.top = `${viewport.offsetTop}px`;
-      transclude.style.left = `${viewport.offsetLeft}px`;
-      transclude.style.width = `${viewport.width}px`;
-      transclude.style.height = `${viewport.height}px`;
-    };
-    window.visualViewport?.addEventListener("resize", fitToVisualViewport);
-    fitToVisualViewport();
   };
 
   if (document.readyState === "loading") {
