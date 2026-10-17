@@ -140,8 +140,9 @@ export function wikify(options: WikifyOptions): void {
       editError.value = "";
       try {
         const params = new URLSearchParams();
-        if (displayed.value?.versionUrl === selectedVersion.value?.url) {
-          params.set("draft", displayed.value!.html);
+        if (displayed.value &&
+            displayed.value.versionUrl === selectedVersion.value?.url) {
+          params.set("draft", displayed.value.html);
         }
         params.set("redirect_route", window.urlFor(siteQuery.value || "?/"));
         const address = window.route.composeAddress(
