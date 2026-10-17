@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Social.Wiki</title>
+    <script id="socialwiki-init" src="https://social.wiki/init.js" data-document-route="./"></script>
+    <style>
+      :root { --wikify-accent: #1769d1; }
+    </style>
+    <script type="module">
+      if (window.top !== window) {
+        const initUrl = document.getElementById("socialwiki-init").src;
+        const { wikify } = await import(new URL("wikify.js", initUrl).href);
+
+        wikify({
+          siteName: "Social.Wiki",
+          admins: ["did:plc:numtqzbw74lmrguyvpzq6uf5"],
+        });
+      }
+    </script>
+  </head>
+  <body>
+    <div id="wikify">Loading…</div>
+  </body>
+</html>

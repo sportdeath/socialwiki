@@ -1,0 +1,72 @@
+<header v-if="headerVisible">
+  <h1><a href="?/">{{ title }}</a></h1>
+  <div class="wikify-actions">
+    <button ref="editButton" class="wikify-primary-action" type="button"
+      aria-label="Edit this site"
+      :disabled="isFirstPoll || (selectedVersion && displayed?.versionUrl !== selectedVersion.url)"
+      @click="openEditDialog">
+      Edit<span class="wikify-wide-label">this site</span>
+    </button>
+    <details v-if="session" ref="accountMenu">
+      <summary>
+        <graffiti-actor-to-handle :actor="session.actor" v-slot="{ handle }">
+          <span :title="handle || 'Signed in'">
+            {{ handle === undefined ? 'Loading account…' : handle || 'Account' }}
+          </span>
+        </graffiti-actor-to-handle>
+      </summary>
+      <div class="wikify-menu-panel">
+        <button type="button" :disabled="accountBusy" @click="openPermissions">Permissions</button>
+        <button class="wikify-danger" type="button" :disabled="accountBusy" @click="changeAccount">
+          {{ accountBusy ? 'Logging out…' : 'Log out' }}
+        </button>
+      </div>
+    </details>
+    <button v-else type="button" :disabled="accountBusy || session === undefined"
+      @click="changeAccount">
+      {{ session === undefined ? 'Checking account…' : accountBusy ? 'Logging in…' : 'Log in' }}
+    </button>
+  </div>
+  <p v-if="accountError" role="alert">{{ accountError }}</p>
+  <p v-if="newerAdminVersion || (viewingAdminVersion && adminVersion && myVersion)">
+    <template v-if="viewingAdminVersion && adminVersion && myVersion">
+      <span>Viewing an admin's version.</span>
+      <button type="button" @click="viewingAdminVersion = false">Return to my version</button>
+    </template>
+    <template v-else>
+      <span>A newer version is available.</span>
+      <button type="button" @click="viewingAdminVersion = true">View newer version</button>
+    </template>
+  </p>
+</header>
+
+<main>
+  <p v-if="session === undefined || isFirstPoll" role="status">
+    <template v-if="discoveryError">Could not check site versions. Retrying…</template>
+    <template v-else>Loading<span aria-hidden="true"></span></template>
+  </p>
+  <p v-else-if="!selectedVersion">No version from an admin is available yet.</p>
+  <p v-else-if="mediaError" role="alert">Could not load this version: {{ mediaError }}</p>
+  <p v-else-if="!displayed || displayed.versionUrl !== selectedVersion.url" role="status">
+    Loading<span aria-hidden="true"></span>
+  </p>
+  <sw-transclude v-else :name="siteName" permission-scope="inherit"
+    :srcdoc="displayed.html" :query="siteQuery" route=""
+    @sw-document-metadata="onChildMetadata">
+  </sw-transclude>
+</main>
+
+<dialog ref="editDialog" aria-labelledby="wikify-edit-title" @close="restoreFocus"
+  @click="closeEditDialogOnBackdrop">
+  <form method="dialog">
+    <h2 id="wikify-edit-title">Edit this site</h2>
+    <p>You can change this site's styling, add a feature, or fix a bug; no programming experience required!</p>
+    <p v-if="!isAdmin">Only you will see the changes you make until they are approved by one of the admins.</p>
+    <p v-else>You're an admin so your edits will appear here for everyone.</p>
+    <p v-if="editError" role="alert">{{ editError }}</p>
+    <footer>
+      <button type="submit">Cancel</button>
+      <a v-if="editUrl" class="wikify-primary-action" :href="editUrl">Continue to editor</a>
+    </footer>
+  </form>
+</dialog>

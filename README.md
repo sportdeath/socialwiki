@@ -12,18 +12,18 @@ What follows describes Social.Wiki's implementation and developement.
 
 ## Project Structure
 
-This repository is divided into two main subfolders: [kernel](./kernel/) and [lenses](./lenses/).
+This repository is divided into three workspaces: [kernel](./kernel/) [lenses](./lenses/), and [wikify](./wikify/). 
 
-The **kernel** provides a minimal set of abstract primitives that Social.Wiki is built out of,
+- The **kernel** provides a minimal set of abstract primitives that Social.Wiki is built out of,
 most importantly the ability to securely "transclude" one HTML document within another,
 the ability for those transcluded documents to access [Graffiti](https://github.com/graffiti-garden/graffiti), a social database and identity system.
-
-The **lenses** are a series of documents that build upon the Social.Wiki kernel to create a browser-like experience.
+- The **lenses** are a series of documents that build upon the Social.Wiki kernel to create a browser-like experience.
 These lenses include the top-level [browser](./lenses/src/browser),
 and documents for its three tabs: [view](./lenses/src/view), [edit](./lenses/src/edit), and
 [history](./lenses/src/history).
 All of these lenses can be modified within Social.Wiki itself, changing the browser UI or changing
 how collaborative editing of pages is governed.
+- **Wikify** is a JavaScript module that can make an external website editable via Social.Wiki. Wikified sites have a set of "admins" that can approve edits. See the [Wikify guide](./wikify/README.md) for an example host page.
 
 To function properly, all Social.Wiki documents must include the kernel via a line like this at the top of their document:
 
@@ -42,6 +42,7 @@ npm run dev
 ```
 
 Then open <http://localhost:5173> in your browser where you will see the Social.Wiki browser.
+You can also open <http://localhost:5173/wikify-example.html> for the Wikify example.
 
 Building will automatically happen when you push changes to GitHub, but you can also build locally with:
 

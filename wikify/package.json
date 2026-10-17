@@ -1,0 +1,20 @@
+{
+  "name": "@socialwiki/wikify",
+  "private": true,
+  "scripts": {
+    "build": "node --import tsx build.mts",
+    "check": "tsc --noEmit",
+    "dev": "node --import tsx build.mts --watch --dev-example",
+    "test": "node --import tsx --test test/*.test.mts"
+  },
+  "dependencies": {
+    "@graffiti-garden/api": "^1.3.0",
+    "@graffiti-garden/wrapper-vue": "^1.4.1",
+    "vue": "^3.5.42"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2"
+  }
+}
