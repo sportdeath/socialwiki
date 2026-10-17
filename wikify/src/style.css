@@ -68,6 +68,7 @@ body.wikify-page { max-width: none; margin: 0; padding: 0; overflow: hidden; }
   }
 }
 @media (hover: hover) and (pointer: fine) {
+  .wikify h1 a:hover { text-decoration: underline; }
   .wikify :where(button:not(:disabled), summary, footer a):hover {
     border-color: var(--wikify-accent, #1769d1);
   }
