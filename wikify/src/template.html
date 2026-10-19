@@ -50,7 +50,7 @@
   <p v-else-if="!displayed || displayed.versionUrl !== selectedVersion.url" role="status">
     Loading<span aria-hidden="true"></span>
   </p>
-  <sw-transclude v-else :name="siteName" permission-scope="inherit"
+  <sw-transclude v-else :name="siteName" :aria-label="`${title} content`" permission-scope="inherit"
     :srcdoc="displayed.html" :query="siteQuery" route=""
     @sw-document-metadata="onChildMetadata">
   </sw-transclude>

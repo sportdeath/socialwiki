@@ -104,6 +104,9 @@ export class TranscludeFrame {
     this.showLoading();
 
     const iframe = createIframe();
+    iframe.title = this.#host.getAttribute("aria-label") ||
+      this.#host.getAttribute("name") ||
+      this.#host.getAttribute("src") || iframe.title;
     const generation = this.#generation;
     try {
       const preparation = this.#installParentBridgeEndpoints.prepareFrame?.(iframe, this.#host);
