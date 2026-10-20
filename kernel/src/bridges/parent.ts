@@ -3,6 +3,7 @@ import { installAutosizeParent } from "./autosize/parent";
 import { installEventsParent } from "./events/parent";
 import { installDocumentMetadataParent } from "./document-metadata/parent";
 import { installGraffitiParent } from "./graffiti/parent";
+import { installHistoryParent } from "./history/parent";
 import { installNavigationParent } from "./navigation/parent";
 import type { NavigableTransclude } from "./navigation/shared";
 import { installResolutionParent } from "./resolution/parent";
@@ -26,6 +27,7 @@ export function createParentBridgeEndpointInstaller(
       events,
       documentRoute,
     );
+    const stopHistoryBridge = installHistoryParent(host, events, documentRoute);
     const autosizeBridge = installAutosizeParent(host, events, autosize);
     const resolution = installResolutionParent(events, resolve);
     const graffitiBridge = installGraffitiParent(iframe, host, createGraffiti());
@@ -34,6 +36,7 @@ export function createParentBridgeEndpointInstaller(
     return {
       destroy() {
         navigationBridge.destroy();
+        stopHistoryBridge();
         metadataBridge.destroy();
         autosizeBridge.destroy();
         resolution.destroy();

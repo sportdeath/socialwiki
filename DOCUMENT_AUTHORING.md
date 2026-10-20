@@ -92,6 +92,7 @@ The document runs in a sandboxed originless iframe. Some browser functionalities
 - For navigation-on-click, use normal anchors: `<a href="https://example.com">`
 - For programmatic navigation: `window.navigate("https://example.com")`
 - Also works for relative navigation: `window.navigate("?/profile")`
+- You may use `history.back()`, `history.forward()`, or `history.go(n)` with nonzero `n`. Listen for `querychange` to observe route changes.
 
 ## Graffiti
 
@@ -393,7 +394,7 @@ Transclusion is including one Social.Wiki document within another.
   - `srcdoc` supplies the child's HTML; `query` supplies the state available as the child's `window.query`.
   - `id` identifies the child for permissions; `name` is a human-readable label for permission prompts. `permission-scope="inherit"` shares the parent's permission scope; use it only for trusted children.
   - `autosize="height"`, `"width"`, `"both"`, or `"inherit"` resizes the selected axes to fit child content; bare `autosize` means both. `"inherit"` passes on the parent's settings in nested transclusions. Used by some lenses (see below)
-  - `route` controls how navigation from the embedded document affects the browser URL. Relative links start from the child's assigned location. It does not choose what loads.
+  - `route` controls how navigation from the embedded document affects the browser URL and whether Back/Forward traverses the tab. Relative links start from the child's assigned location. It does not choose what loads.
     - Usually, if a transclude is selectively displayed at a given query (e.g. `"?/profile"`), use that query as the child's route: `<sw-transclude ... route="?/profile"></sw-transclude>`
     - Without `route`, query navigation updates only the embedded document, leaving the browser URL unchanged. Rooted and external navigation are ignored by default.
     - Use `route=""` when the child occupies the parent’s route, as in a transparent wrapper.

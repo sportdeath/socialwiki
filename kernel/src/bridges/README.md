@@ -29,6 +29,9 @@ helpers, and future guarded bridges should use the same identity logic.
   native link affordances such as
   hover, copying, and opening a new tab. Fragment-only links (`#` or `#section`,
   but not a Social.Wiki route beginning `#/`) scroll within their own document.
+- `history`: forwards `back()`, `forward()`, and nonzero `go()` through publicly
+  routed transclusions to the tab's History object. The bridge ignores traversal
+  requests from unrouted side transclusions; state mutation methods are not bridged.
 - `resolution`: the ability for a document to be resolved according to Social.Wiki's lenses.
   Its default root policy displays every address through Social.Wiki's View lens.
 - `autosize`: reports a document's content extent to its container. A lens can

@@ -3,6 +3,7 @@ import { installAutosizeChild } from "./autosize/child";
 import { installEventsChild } from "./events/child";
 import { installDocumentMetadataChild } from "./document-metadata/child";
 import { installGraffitiChild } from "./graffiti/child";
+import { installHistoryChild } from "./history/child";
 import { installNavigationChild } from "./navigation/child";
 import { installResolutionChild } from "./resolution/child";
 import { installPeripheralsChild } from "./peripherals/child";
@@ -14,6 +15,7 @@ export function installChildBridgeEndpoints() : BridgedServices {
   const createGraffiti = installGraffitiChild();
   const resolve = installResolutionChild(events);
   const documentRoute = installNavigationChild(events);
+  installHistoryChild(events, documentRoute);
   const autosize = installAutosizeChild(events);
   const peripherals = installPeripheralsChild();
   return { createGraffiti, resolve, documentRoute, peripherals, autosize };
