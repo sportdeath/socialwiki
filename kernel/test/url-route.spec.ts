@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { composeAddress, composeQuery } from "../src/route";
 import {
+  canReplaceRouteHistory,
   decodeUrlAddress,
   decodeUrlQuery,
   encodeUrlAddress,
@@ -49,5 +50,45 @@ describe("top-level URL routes", () => {
     );
     expect(decodeUrlQuery("#section")).toBeUndefined();
     expect(decodeUrlQuery("#")).toBeUndefined();
+  });
+
+  it("replaces history for parameter changes at any route depth", () => {
+    const base = "https://social.wiki/";
+    const replaces = (from: string, to: string) =>
+      canReplaceRouteHistory(new URL(from, base), new URL(to, base));
+
+    expect(replaces("#/v?/site", "#?mode=compact/v?/site")).toBe(true);
+    expect(replaces("#/e?draft=old/site", "#/e?draft=new/site")).toBe(true);
+    expect(replaces("#/v?/site?sort=old/inbox", "#/v?/site?sort=new/inbox")).toBe(true);
+    expect(replaces("#/v?/site?sort=old", "#/v?/site?sort=new")).toBe(true);
+
+    expect(replaces("#/v?/site?/inbox", "#/v?/site?/message")).toBe(false);
+    expect(replaces("#/v?/site", "#/v?/other-site")).toBe(false);
+    expect(replaces("#/v?/site", "#/e?/site")).toBe(false);
+    expect(replaces("#/v?/site", "#/v?/site?/inbox")).toBe(false);
+  });
+
+  it("only replaces routes within the current page", () => {
+    const current = new URL("https://example.com/wiki?theme=dark#/v?/site");
+    expect(canReplaceRouteHistory(
+      current,
+      new URL("https://example.com/wiki?theme=dark#/v?version=2/site"),
+    )).toBe(true);
+    expect(canReplaceRouteHistory(
+      current,
+      new URL("https://example.com/other?theme=dark#/v?version=2/site"),
+    )).toBe(false);
+    expect(canReplaceRouteHistory(
+      current,
+      new URL("https://example.com/wiki?theme=light#/v?version=2/site"),
+    )).toBe(false);
+    expect(canReplaceRouteHistory(
+      current,
+      new URL("https://other.example/wiki?theme=dark#/v?version=2/site"),
+    )).toBe(false);
+    expect(canReplaceRouteHistory(
+      current,
+      new URL("https://example.com/wiki?theme=dark#section"),
+    )).toBe(false);
   });
 });

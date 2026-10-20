@@ -44,6 +44,10 @@ Social.Wiki documents receive:
 - `window.route.parseAddress`, `window.route.parseQuery`, `window.route.composeAddress`, and `window.route.composeQuery` for parsing and composing routes.
 - `window.handleDocumentResolution(documentResolver)` for intercepting document resolution requests.
 
+For routes within the same page, changes to an address at any nesting level add
+a browser history entry. Changes only to parameters replace the current entry,
+including changes requested through links or `window.navigate()`.
+
 ## Sandboxing
 
 Transcluded documents have opaque origins. They cannot depend on the embedding

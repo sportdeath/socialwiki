@@ -20,7 +20,7 @@ import {
   handleDocumentResolution,
   resolveDocument,
 } from "./bridges/resolution/shared";
-import { decodeUrlQuery } from "./url-route";
+import { canReplaceRouteHistory, decodeUrlQuery } from "./url-route";
 
 declare const KERNEL_IMPORT_MAP: { imports: Record<string, string> };
 declare const TEST_GRAFFITI: boolean;
@@ -105,19 +105,6 @@ if (window.top !== window) {
       "file:",
       "about:",
     ]);
-    handleNavigation((to) => {
-      try {
-        const url =
-          serializeRouteUrl(to, rootRoute) ??
-          new URL(to, rootRoute.rootUrl);
-        if (BLOCKED_NAVIGATION_PROTOCOLS.has(url.protocol)) return;
-        // Otherwise, do a top-level redirect
-        window.location.href = url.href;
-      } catch {
-        // Ignore malformed requests.
-      }
-    });
-
     // Make an installer that allows those services to be
     // bridged to sub-documents.
     const bridgedServices = {
@@ -175,6 +162,32 @@ if (window.top !== window) {
     };
     syncRoute();
     window.addEventListener("hashchange", syncRoute);
+
+    handleNavigation((to) => {
+      try {
+        const url =
+          serializeRouteUrl(to, rootRoute) ??
+          new URL(to, rootRoute.rootUrl);
+        if (BLOCKED_NAVIGATION_PROTOCOLS.has(url.protocol)) return;
+        if (canReplaceRouteHistory(new URL(window.location.href), url)) {
+          // History API updates do not fire hashchange, so deliver the new
+          // query to the root transclusion directly.
+          try {
+            window.history.replaceState(window.history.state, "", url.href);
+          } catch {
+            // Preserve navigation if the browser rejects a history update.
+            window.location.href = url.href;
+            return;
+          }
+          syncRoute();
+        } else {
+          // A new address (or external URL) is ordinary browser navigation.
+          window.location.href = url.href;
+        }
+      } catch {
+        // Ignore malformed requests.
+      }
+    });
 
     document.body.appendChild(transclude);
   };

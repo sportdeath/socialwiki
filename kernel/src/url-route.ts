@@ -68,3 +68,27 @@ export function decodeUrlQuery(hash: string): string | undefined {
   if (hash.startsWith("#?")) return decodeUrlAddress(hash.slice(1));
   return undefined;
 }
+
+/** Whether a same-page Social.Wiki route changes only parameters. */
+export function canReplaceRouteHistory(currentUrl: URL, nextUrl: URL): boolean {
+  if (
+    currentUrl.origin !== nextUrl.origin ||
+    currentUrl.pathname !== nextUrl.pathname ||
+    currentUrl.search !== nextUrl.search
+  ) return false;
+
+  const currentQuery = decodeUrlQuery(currentUrl.hash);
+  const nextQuery = decodeUrlQuery(nextUrl.hash);
+  if (currentQuery === undefined || nextQuery === undefined) return false;
+
+  let currentAddress = parseQuery(currentQuery).address;
+  let nextAddress = parseQuery(nextQuery).address;
+  while (currentAddress !== undefined && nextAddress !== undefined) {
+    const current = parseAddress(currentAddress);
+    const next = parseAddress(nextAddress);
+    if (current.name !== next.name) return false;
+    currentAddress = parseQuery(current.query).address;
+    nextAddress = parseQuery(next.query).address;
+  }
+  return currentAddress === nextAddress;
+}
