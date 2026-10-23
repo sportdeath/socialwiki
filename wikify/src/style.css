@@ -99,6 +99,7 @@ body.wikify-page { max-width: none; margin: 0; padding: 0; overflow: hidden; }
   width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis;
   cursor: pointer; user-select: none; -webkit-user-select: none;
 }
+.wikify-account-icon { display: none; width: 1.2rem; height: 1.2rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
 .wikify details[open] summary {
   position: relative; z-index: 2; margin-bottom: 0;
   border-bottom-color: transparent; border-radius: .35rem .35rem 0 0;
@@ -150,6 +151,7 @@ body.wikify-page { max-width: none; margin: 0; padding: 0; overflow: hidden; }
 .wikify-update-actions { display: grid; gap: .4rem; }
 .wikify details .wikify-update-actions button { white-space: normal; }
 .wikify-account-actions { display: grid; gap: .3rem; padding: .15rem .25rem .25rem; }
+.wikify-account-identity { display: none; margin: 0 .5rem .3rem; font-size: .85rem; overflow-wrap: anywhere; }
 .wikify-update + .wikify-account-actions {
   border-top: 1px solid var(--wikify-border, var(--border, #888));
   padding-top: .7rem;
@@ -209,4 +211,10 @@ body.wikify-page { max-width: none; margin: 0; padding: 0; overflow: hidden; }
   .wikify dialog { padding: .75rem; }
   .wikify dialog footer { flex-direction: column-reverse; align-items: stretch; }
   .wikify dialog footer :is(button, a) { width: 100%; }
+}
+
+@media (max-width: 26rem) {
+  .wikify details summary { display: grid; place-items: center; width: 2.5rem; height: 2.5rem; padding: 0; list-style: none; }
+  .wikify details summary::-webkit-details-marker, .wikify-account-name { display: none; }
+  .wikify-account-icon, .wikify-account-identity { display: block; }
 }

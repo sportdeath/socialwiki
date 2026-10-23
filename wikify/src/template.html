@@ -7,13 +7,16 @@
       @click="openEditDialog">
       Edit<span class="wikify-wide-label">this site</span>
     </button>
-    <details v-if="session" ref="accountMenu" :class="{ 'wikify-has-update': showVersionNotice }">
+    <graffiti-actor-to-handle v-if="session" :actor="session.actor" v-slot="{ handle }">
+    <details ref="accountMenu" :class="{ 'wikify-has-update': showVersionNotice }">
       <summary :aria-label="showVersionNotice ? 'Account menu. New site version available' : 'Account menu'">
-        <graffiti-actor-to-handle :actor="session.actor" v-slot="{ handle }">
-          <span :title="handle || 'Signed in'">
-            {{ handle === undefined ? 'Loading account…' : handle || 'Account' }}
-          </span>
-        </graffiti-actor-to-handle>
+        <span class="wikify-account-name" :title="handle || 'Signed in'">
+          {{ handle === undefined ? 'Loading account…' : handle || 'Account' }}
+        </span>
+        <svg class="wikify-account-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="8" r="3.25" />
+          <path d="M4.75 20c.5-3.6 3.3-5.5 7.25-5.5s6.75 1.9 7.25 5.5" />
+        </svg>
       </summary>
       <div class="wikify-menu-panel">
         <section v-if="showVersionNotice && adminVersion" class="wikify-update"
@@ -58,6 +61,7 @@
         </section>
         <div class="wikify-account-actions" role="group" aria-labelledby="wikify-account-actions-title">
           <h2 id="wikify-account-actions-title">Account</h2>
+          <p class="wikify-account-identity">Signed in as <strong>{{ handle === undefined ? 'Loading account…' : handle || session.actor }}</strong></p>
           <button type="button" :disabled="accountBusy" @click="openPermissions">Permissions</button>
           <button class="wikify-danger" type="button" :disabled="accountBusy" @click="changeAccount">
             {{ accountBusy ? 'Logging out…' : 'Log out' }}
@@ -65,6 +69,7 @@
         </div>
       </div>
     </details>
+    </graffiti-actor-to-handle>
     <button v-else type="button" :disabled="accountBusy || session === undefined"
       @click="changeAccount">
       {{ session === undefined ? 'Checking account…' : accountBusy ? 'Logging in…' : 'Log in' }}
