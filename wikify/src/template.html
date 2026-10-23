@@ -7,8 +7,8 @@
       @click="openEditDialog">
       Edit<span class="wikify-wide-label">this site</span>
     </button>
-    <details v-if="session" ref="accountMenu">
-      <summary>
+    <details v-if="session" ref="accountMenu" :class="{ 'wikify-has-update': showVersionNotice }">
+      <summary :aria-label="showVersionNotice ? 'Account menu. New site version available' : 'Account menu'">
         <graffiti-actor-to-handle :actor="session.actor" v-slot="{ handle }">
           <span :title="handle || 'Signed in'">
             {{ handle === undefined ? 'Loading account…' : handle || 'Account' }}
@@ -16,10 +16,53 @@
         </graffiti-actor-to-handle>
       </summary>
       <div class="wikify-menu-panel">
-        <button type="button" :disabled="accountBusy" @click="openPermissions">Permissions</button>
-        <button class="wikify-danger" type="button" :disabled="accountBusy" @click="changeAccount">
-          {{ accountBusy ? 'Logging out…' : 'Log out' }}
-        </button>
+        <section v-if="showVersionNotice && adminVersion" class="wikify-update"
+          aria-labelledby="wikify-update-title">
+          <div class="wikify-update-heading">
+            <h2 id="wikify-update-title"><span class="wikify-upgrade-icon" aria-hidden="true">↑</span>New version available</h2>
+            <p>Published by admin
+              <graffiti-actor-to-handle :actor="adminVersion.actor" v-slot="{ handle }">
+                <strong>{{ handle ? (handle.startsWith('@') ? handle : '@' + handle) : adminVersion.actor }}</strong>
+              </graffiti-actor-to-handle>
+            </p>
+          </div>
+          <div class="wikify-update-summary">
+            <p class="wikify-update-summary-label">Summary</p>
+            <p>{{ adminVersion.value.changes || 'No summary provided.' }}</p>
+          </div>
+          <p v-if="isPreviewingAdmin" class="wikify-preview-state">You’re previewing the new version.</p>
+          <div class="wikify-update-actions">
+            <template v-if="isPreviewingAdmin">
+              <button type="button" :disabled="versionBusy" @click="stopPreview">Return to my version</button>
+              <button class="wikify-primary-action" type="button" :disabled="versionBusy"
+                @click="upgradeToAdminVersions">Upgrade to this new version</button>
+            </template>
+            <template v-else>
+              <button type="button" :disabled="versionBusy" @click="previewAdminVersion">
+                Preview new version
+              </button>
+              <button class="wikify-primary-action" type="button" :disabled="versionBusy"
+                @click="upgradeToAdminVersions">Upgrade to new version</button>
+            </template>
+          </div>
+          <p v-if="versionError" role="alert">Could not upgrade: {{ versionError }}</p>
+        </section>
+        <section v-else-if="isFollowingAdminVersions && adminVersion && selectedVersion?.url === adminVersion.url"
+          class="wikify-update" aria-labelledby="wikify-current-version-title">
+          <h2 id="wikify-current-version-title">Following admin versions</h2>
+          <p>You’re using the latest version published by
+            <graffiti-actor-to-handle :actor="adminVersion.actor" v-slot="{ handle }">
+              <strong>{{ handle ? (handle.startsWith('@') ? handle : '@' + handle) : adminVersion.actor }}</strong>
+            </graffiti-actor-to-handle>. New admin versions will appear automatically until you publish your own.
+          </p>
+        </section>
+        <div class="wikify-account-actions" role="group" aria-labelledby="wikify-account-actions-title">
+          <h2 id="wikify-account-actions-title">Account</h2>
+          <button type="button" :disabled="accountBusy" @click="openPermissions">Permissions</button>
+          <button class="wikify-danger" type="button" :disabled="accountBusy" @click="changeAccount">
+            {{ accountBusy ? 'Logging out…' : 'Log out' }}
+          </button>
+        </div>
       </div>
     </details>
     <button v-else type="button" :disabled="accountBusy || session === undefined"
@@ -28,16 +71,7 @@
     </button>
   </div>
   <p v-if="accountError" role="alert">{{ accountError }}</p>
-  <p v-if="newerAdminVersion || (viewingAdminVersion && adminVersion && myVersion)">
-    <template v-if="viewingAdminVersion && adminVersion && myVersion">
-      <span>Viewing an admin's version.</span>
-      <button type="button" @click="viewingAdminVersion = false">Return to my version</button>
-    </template>
-    <template v-else>
-      <span>A newer version is available.</span>
-      <button type="button" @click="viewingAdminVersion = true">View newer version</button>
-    </template>
-  </p>
+  <p v-if="versionError && !showVersionNotice" role="alert">Could not upgrade: {{ versionError }}</p>
 </header>
 
 <main>

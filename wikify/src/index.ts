@@ -8,7 +8,10 @@ import {
 import type { Graffiti } from "@graffiti-garden/api";
 import template from "./template.html";
 import css from "./style.css";
-import { newestFirst, versionSchema } from "./versions";
+import {
+  followsOwnVersion, isSiteVersion, newestFirst,
+  versionFollowSchema, versionSchema,
+} from "./versions";
 
 declare global {
   interface Window {
@@ -79,24 +82,76 @@ export function wikify(options: WikifyOptions): void {
     ])]);
     const { objects, isFirstPoll, error: discoveryError } = useGraffitiDiscover(
       () => session.value !== undefined ? ["site:" + siteName] : [],
-      () => versionSchema(siteName, publishers.value),
+      () => ({ anyOf: [
+        versionSchema(siteName, publishers.value),
+        versionFollowSchema(session.value?.actor ?? ""),
+      ] }) as const,
+      () => session.value,
     );
 
-    const versions = computed(() => newestFirst(objects.value));
+    const versions = computed(() => newestFirst(objects.value.filter(isSiteVersion)));
     const myVersion = computed(() => versions.value.find((version) =>
       version.actor === session.value?.actor,
     ));
     const adminVersion = computed(() => versions.value.find((version) =>
       admins.includes(version.actor),
     ));
-    const viewingAdminVersion = ref(false);
-    const selectedVersion = computed(() => viewingAdminVersion.value
-      ? adminVersion.value || myVersion.value
-      : myVersion.value || adminVersion.value,
-    );
+    const previewVersionUrl = ref<string | null>(null);
+    const versionError = ref("");
+    watch(session, () => {
+      previewVersionUrl.value = null;
+      versionError.value = "";
+    });
+    const isFollowingAdminVersions = computed(() => followsOwnVersion(
+      objects.value, myVersion.value?.url,
+    ));
     const newerAdminVersion = computed(() => !!myVersion.value && !!adminVersion.value &&
       versions.value.indexOf(adminVersion.value) < versions.value.indexOf(myVersion.value),
     );
+    const isPreviewingAdmin = computed(() => newerAdminVersion.value &&
+      previewVersionUrl.value === adminVersion.value?.url);
+    const viewingAdminVersion = computed(() => isPreviewingAdmin.value || isFollowingAdminVersions.value);
+    const selectedVersion = computed(() => viewingAdminVersion.value && newerAdminVersion.value
+      ? adminVersion.value || myVersion.value
+      : myVersion.value || adminVersion.value,
+    );
+    const showVersionNotice = computed(() => newerAdminVersion.value && !isFollowingAdminVersions.value);
+    const versionBusy = ref(false);
+    function previewAdminVersion() {
+      if (!showVersionNotice.value || !adminVersion.value || versionBusy.value) return;
+      previewVersionUrl.value = adminVersion.value.url;
+      versionError.value = "";
+      closeAccountMenu();
+    }
+    function stopPreview() {
+      previewVersionUrl.value = null;
+      closeAccountMenu();
+    }
+    async function upgradeToAdminVersions() {
+      const currentSession = session.value;
+      const ownVersion = myVersion.value;
+      if (!currentSession || !ownVersion || !showVersionNotice.value || versionBusy.value) return;
+      versionBusy.value = true;
+      versionError.value = "";
+      try {
+        await graffiti.post<ReturnType<typeof versionFollowSchema>>({
+          allowed: [],
+          channels: ["site:" + siteName],
+          value: {
+            action: "Follow site admin versions",
+            "my version": ownVersion.url,
+          },
+        }, currentSession);
+        if (session.value?.actor === currentSession.actor) {
+          previewVersionUrl.value = null;
+          closeAccountMenu();
+        }
+      } catch (error) {
+        if (session.value?.actor === currentSession.actor) versionError.value = errorText(error);
+      } finally {
+        versionBusy.value = false;
+      }
+    }
 
     // Clear the old page while fetching a selection; the counter keeps a slow
     // fetch from replacing a newer selection or reporting its stale error.
@@ -121,8 +176,6 @@ export function wikify(options: WikifyOptions): void {
         if (currentLoad === load) mediaError.value = errorText(error);
       }
     }, { immediate: true });
-    // An account change returns the viewer to the default version choice.
-    watch(session, () => { viewingAdminVersion.value = false; });
 
     const siteQuery = ref(window.query);
     function onQueryChange() { siteQuery.value = window.query; }
@@ -208,8 +261,10 @@ export function wikify(options: WikifyOptions): void {
 
     return {
       title, siteName, session, isAdmin, isFirstPoll, discoveryError,
-      selectedVersion, displayed, mediaError, newerAdminVersion,
-      viewingAdminVersion, adminVersion, myVersion, siteQuery, headerVisible,
+      selectedVersion, displayed, mediaError, showVersionNotice, adminVersion,
+      isPreviewingAdmin, isFollowingAdminVersions,
+      versionBusy, versionError, previewAdminVersion, stopPreview, upgradeToAdminVersions,
+      siteQuery, headerVisible,
       editUrl, editError, editButton, editDialog, openEditDialog,
       restoreFocus, closeEditDialogOnBackdrop, accountMenu, accountBusy,
       accountError, openPermissions, changeAccount, onChildMetadata,

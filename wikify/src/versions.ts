@@ -1,4 +1,4 @@
-import type { GraffitiObject, JSONSchema } from "@graffiti-garden/api";
+import type { GraffitiObject, GraffitiObjectBase, JSONSchema } from "@graffiti-garden/api";
 
 export function versionSchema(siteName: string, actors: string[]) {
   return {
@@ -22,6 +22,43 @@ export function versionSchema(siteName: string, actors: string[]) {
 }
 
 export type SiteVersion = GraffitiObject<ReturnType<typeof versionSchema>>;
+
+export function versionFollowSchema(actor: string) {
+  return {
+    properties: {
+      actor: { const: actor },
+      allowed: { type: "array", maxItems: 0 },
+      value: {
+        type: "object",
+        properties: {
+          action: { const: "Follow site admin versions" },
+          "my version": { type: "string" },
+        },
+        required: ["action", "my version"],
+      },
+    },
+    required: ["actor", "allowed", "value"],
+  } as const satisfies JSONSchema;
+}
+
+export type VersionFollow = GraffitiObject<ReturnType<typeof versionFollowSchema>>;
+
+export function isSiteVersion(object: GraffitiObjectBase): object is SiteVersion {
+  return (object.value as { action?: unknown }).action === "Publish site";
+}
+
+export function isVersionFollow(object: GraffitiObjectBase): object is VersionFollow {
+  return (object.value as { action?: unknown }).action === "Follow site admin versions";
+}
+
+export function followsOwnVersion(
+  records: readonly GraffitiObjectBase[],
+  myVersionUrl: string | undefined,
+): boolean {
+  return myVersionUrl !== undefined && records.some(
+    (record) => isVersionFollow(record) && record.value["my version"] === myVersionUrl,
+  );
+}
 
 // Respect publication history first, then order independent branches by time.
 export function newestFirst(versions: SiteVersion[]): SiteVersion[] {
