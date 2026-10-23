@@ -8,7 +8,7 @@ import {
 } from "../src/utils/site-versions.ts";
 import { protectionSchema, trustSchema } from "../src/utils/schemas.ts";
 import { sortProtectionHistory, updateSiteProtection } from "../src/utils/protection.ts";
-import { computeTrustAnnotationsByActor, trustedActors, trustActor } from "../src/utils/trust.ts";
+import { computeTrustAnnotationsByActor, trustedActors, trustActor, untrustActor } from "../src/utils/trust.ts";
 import { browserHistorySchema } from "../src/browser/browser-history.ts";
 import { siteChannel, siteChannels } from "../src/utils/site-channel.ts";
 
@@ -144,19 +144,54 @@ test("protection removal links to the specific protection and wins at equal time
   );
 });
 
-test("trust decisions use the editor field, enforce authorship, and resolve equal-time untrust", async () => {
+test("trust records match the homepage format and enforce authorship", async () => {
   const { graffiti, posts } = publisher();
   await trustActor(graffiti, "did:example:bob", session);
-  await trustActor(graffiti, "did:example:bob", session, { untrust: true });
-  const trust = record("trust", { ...posts[0].value, time: 100 });
-  const untrust = record("untrust", { ...posts[1].value, time: 100 });
+  assert.deepEqual(posts[0], {
+    channels: [session.actor],
+    value: { activity: "Trust", account: "did:example:bob", time: posts[0].value.time },
+  });
+  const trust = record("trust", { ...posts[0].value, time: 100 }, { channels: [session.actor] });
   const matches = await compileGraffitiObjectSchema(trustSchema(session.actor));
-  assert(matches(trust) && matches(untrust));
+  assert(matches(trust));
   assert(!matches({ ...trust, actor: "did:example:mallory" }));
-  assert(!matches(record("old", { activity: "Trust", object: "did:example:bob", published: 100 })));
-  for (const decisions of [[trust, untrust], [untrust, trust]]) {
-    assert.deepEqual(trustedActors(computeTrustAnnotationsByActor(decisions, ["did:example:bob"]), session.actor), [session.actor]);
-  }
+  assert(!matches(record("old", { action: "Trust editor", editor: "did:example:bob", time: 100 })));
+  assert(!matches(record("incomplete", { activity: "Trust", account: "did:example:bob" })));
+});
+
+test("trust stays active while records remain and untrust deletes duplicates", async () => {
+  const bob = record("bob-1", { activity: "Trust", account: "did:example:bob", time: 100 });
+  const duplicate = record("bob-2", { activity: "Trust", account: "did:example:bob", time: 101 });
+  const carol = record("carol", { activity: "Trust", account: "did:example:carol", time: 102 });
+  const trusts = computeTrustAnnotationsByActor([bob, duplicate, carol], []);
+  assert.deepEqual(trusts.get("did:example:bob"), [bob, duplicate]);
+  assert.deepEqual(trustedActors(trusts, session.actor), ["did:example:bob", "did:example:carol", session.actor]);
+  const bobProtection = { ...protection, actor: "did:example:bob" };
+  assert.deepEqual(
+    sortProtectionHistory([bobProtection], trustedActors(trusts, session.actor)),
+    [bobProtection],
+  );
+  const deleted = [];
+  await untrustActor({ async delete(object, author) {
+    assert.equal(author, session);
+    deleted.push(object.url);
+  } }, trusts.get("did:example:bob"), session);
+  assert.deepEqual(deleted, ["bob-1", "bob-2"]);
+  assert.deepEqual(
+    trustedActors(computeTrustAnnotationsByActor([carol], []), session.actor),
+    ["did:example:carol", session.actor],
+  );
+  assert.deepEqual(
+    sortProtectionHistory(
+      [bobProtection],
+      trustedActors(computeTrustAnnotationsByActor([carol], []), session.actor),
+    ),
+    [],
+  );
+  assert.deepEqual(
+    trustedActors(computeTrustAnnotationsByActor([], ["did:example:bob"]), session.actor),
+    ["did:example:bob", session.actor],
+  );
 });
 
 test("browser history requires private, recent visits in the new format", async () => {

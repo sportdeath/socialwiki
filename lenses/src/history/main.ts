@@ -31,6 +31,7 @@ import {
   computeTrustAnnotationsByActor,
   trustedActors,
   trustActor,
+  untrustActor,
 } from "../utils/trust";
 import { defaultTrustedEditors } from "../utils/default-trusted-editors";
 import {
@@ -414,9 +415,7 @@ function setup() {
     const byActor = trustAnnotationsByActor.value;
     if (!byActor) return "loading";
     const trustValue = byActor.get(actor);
-    return trustValue === true || trustValue?.value.action === "Trust editor"
-      ? "trusted"
-      : "untrusted";
+    return trustValue !== undefined ? "trusted" : "untrusted";
   };
   const isActorInDefaultTrustedList = (actor: string) =>
     defaultTrustedEditorSet.has(actor);
@@ -426,7 +425,7 @@ function setup() {
   const activeProtectionTrustSource = computed(() => {
     const actor = activeProtection.value?.actor;
     if (!actor || isProtectionBySessionActor.value) return null;
-    return trustAnnotationsByActor.value?.get(actor) === true
+    return defaultTrustedEditorSet.has(actor)
       ? "default"
       : "trusted";
   });
@@ -451,17 +450,15 @@ function setup() {
   const isUpdatingTrust = (actor: string) => trustMutationActor.value === actor;
 
   async function toggleActorTrust(actor: string, session: GraffitiSession) {
-    if (actor === session.actor) return;
+    if (actor === session.actor || defaultTrustedEditorSet.has(actor)) return;
     trustMutationActor.value = actor;
     try {
       const trustValue = trustAnnotationsByActor.value?.get(actor);
 
-      if (typeof trustValue === "object") {
-        await graffiti.delete(trustValue, session);
+      if (Array.isArray(trustValue)) {
+        await untrustActor(graffiti, trustValue, session);
       } else {
-        await trustActor(graffiti, actor, session, {
-          untrust: trustValue === true,
-        });
+        await trustActor(graffiti, actor, session);
       }
     } catch (error) {
       reportError("Updating editor trust", error);

@@ -218,6 +218,7 @@
                                                 type="button"
                                                 v-if="
                                                     $graffitiSession.value &&
+                                                    !isActorInDefaultTrustedList(version.actor) &&
                                                     !isUpdatingTrust(
                                                         version.actor,
                                                     )

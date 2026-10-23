@@ -23,6 +23,7 @@ import {
     type ProtectionObject,
 } from "../utils/schemas";
 import { useTrustContext } from "../utils/use-trust-context";
+import { defaultTrustedEditors } from "../utils/default-trusted-editors";
 import { sortProtectionHistory } from "../utils/protection";
 import starterHtml from "./starter.html?raw";
 import { siteChannels } from "../utils/site-channel";
@@ -137,7 +138,7 @@ function setup() {
         return route && !route.startsWith("?") ? route : null;
     });
     const protectionCancelRoute = computed(() => redirectRoute.value ?? viewRoute.value);
-    const { session, trustByActor, trustedEditors } = useTrustContext();
+    const { session, trustedEditors } = useTrustContext();
     const graffiti = useGraffiti();
     const { objects: protectionAnnotations, isFirstPoll: protectionLoading } =
         useGraffitiDiscover(
@@ -160,7 +161,7 @@ function setup() {
             const protection = activeProtection.value;
             if (!protection || protection.actor === session.value?.actor)
                 return null;
-            return trustByActor.value?.get(protection.actor) === true
+            return defaultTrustedEditors.includes(protection.actor)
                 ? "default"
                 : "trusted";
         },

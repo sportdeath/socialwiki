@@ -38,11 +38,11 @@ export function trustSchema(actor?: string) {
       value: {
         type: "object",
         properties: {
-          action: { enum: ["Trust editor", "Stop trusting editor"] },
-          editor: { type: "string" },
+          activity: { const: "Trust" },
+          account: { type: "string" },
           time: { type: "number" },
         },
-        required: ["action", "editor", "time"],
+        required: ["activity", "account", "time"],
       },
       ...(actor !== undefined ? { actor: { const: actor } } : {}),
     },

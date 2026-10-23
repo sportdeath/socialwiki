@@ -5,17 +5,13 @@ export async function trustActor(
   graffiti: Graffiti,
   actor: string,
   session: GraffitiSession,
-  options?: {
-    untrust?: boolean;
-  },
 ) {
-  const action = options?.untrust ? "Stop trusting editor" : "Trust editor";
   return await graffiti.post<TrustSchema>(
     {
       channels: [session.actor],
       value: {
-        action,
-        editor: actor,
+        activity: "Trust",
+        account: actor,
         time: Date.now(),
       },
     },
@@ -23,50 +19,43 @@ export async function trustActor(
   );
 }
 
+export async function untrustActor(
+  graffiti: Graffiti,
+  trusts: TrustObject[],
+  session: GraffitiSession,
+) {
+  const deletions = await Promise.allSettled(
+    trusts.map((trust) => graffiti.delete(trust, session)),
+  );
+  const failed = deletions.find((result) => result.status === "rejected");
+  if (failed?.status === "rejected") throw failed.reason;
+}
+
 export function computeTrustAnnotationsByActor(
   trustAnnotations: TrustObject[],
   defaultActors: string[],
 ) {
-  // Keep only the latest trust/untrust decision per actor.
-  const latestByActor = new Map<string, TrustObject | true>(
+  // Keep every record so removing trust can delete duplicates too.
+  const byActor = new Map<string, TrustObject[] | true>(
     defaultActors.map((actor) => [actor, true]),
   );
   for (const object of trustAnnotations) {
-    const actor = object.value.editor;
-    const existing = latestByActor.get(actor);
-
-    // A simultaneous Untrust wins; URLs break ties between matching actions.
-    if (
-      !existing ||
-      existing === true ||
-      object.value.time > existing.value.time ||
-      (object.value.time === existing.value.time &&
-        (object.value.action === "Stop trusting editor" &&
-          existing.value.action !== "Stop trusting editor")) ||
-      (object.value.time === existing.value.time &&
-        object.value.action === existing.value.action &&
-        object.url > existing.url)
-    ) {
-      latestByActor.set(actor, object);
-    }
+    const actor = object.value.account;
+    const existing = byActor.get(actor);
+    byActor.set(
+      actor,
+      existing && existing !== true ? [...existing, object] : [object],
+    );
   }
-
-  // Trusted actors are those whose latest decision is Trust.
-  return latestByActor;
+  return byActor;
 }
 
-/** Return the actors whose latest decision is to trust them. */
+/** Return actors with a current trust record or a built-in trust entry. */
 export function trustedActors(
-  annotations: Map<string, TrustObject | true>,
+  annotations: Map<string, TrustObject[] | true>,
   actor?: string,
 ) {
-  const trusted = new Set(
-    [...annotations]
-      .filter(
-        ([, value]) => value === true || value.value.action === "Trust editor",
-      )
-      .map(([actor]) => actor),
-  );
+  const trusted = new Set(annotations.keys());
   if (actor) trusted.add(actor);
   return [...trusted];
 }

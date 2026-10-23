@@ -67,16 +67,16 @@ Only decisions by trusted editors affect the viewer's protection state.
 
 ```json
 {
-  "action": "Trust editor",
-  "editor": "<identity link>",
+  "activity": "Trust",
+  "account": "<identity link>",
   "time": 1790000000000
 }
 ```
 
-Stopping trust uses `"action": "Stop trusting editor"` with the same fields.
-Public, in the publishing editor's identity channel. Readers require the record's
-creator to match that editor. The latest decision per target editor wins; stopping
-trust wins when timestamps are equal.
+Stopping trust deletes every matching Trust record. Public, in the trusting
+account's identity channel. Readers require the record's creator to match that
+account. An account is trusted while at least one matching record exists.
+Built-in trusted editors are separate from personal Trust records.
 
 ## Browsing history
 
