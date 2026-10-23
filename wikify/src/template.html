@@ -93,10 +93,16 @@
 <dialog ref="editDialog" aria-labelledby="wikify-edit-title" @close="restoreFocus"
   @click="closeEditDialogOnBackdrop">
   <form method="dialog">
-    <h2 id="wikify-edit-title">Edit this site</h2>
+    <h2 id="wikify-edit-title" tabindex="-1">Edit this site</h2>
     <p>You can change this site's styling, add a feature, or fix a bug; no programming experience required!</p>
     <p v-if="!isAdmin">Only you will see the changes you make until they are approved by one of the admins.</p>
     <p v-else>You're an admin so your edits will appear here for everyone.</p>
+    <section v-if="editingGuidelines.length" class="wikify-editing-guidelines" aria-labelledby="wikify-editing-guidelines-title">
+      <h3 id="wikify-editing-guidelines-title">Editing guidelines</h3>
+      <ul>
+        <li v-for="guideline in editingGuidelines">{{ guideline }}</li>
+      </ul>
+    </section>
     <p v-if="editError" role="alert">{{ editError }}</p>
     <footer>
       <button type="submit">Cancel</button>

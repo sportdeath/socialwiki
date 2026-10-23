@@ -187,6 +187,15 @@ body.wikify-page { max-width: none; margin: 0; padding: 0; overflow: hidden; }
 }
 .wikify dialog h2 { margin: 0; }
 .wikify dialog p { margin: .9rem 0 0; }
+.wikify-editing-guidelines {
+  margin-top: 1rem; padding: .75rem 1rem;
+  border-left: 3px solid var(--wikify-interactive-color);
+  border-radius: .25rem .35rem .35rem .25rem;
+  background: var(--wikify-control-bg);
+}
+.wikify-editing-guidelines h3 { margin: 0; font-size: 1rem; }
+.wikify-editing-guidelines ul { margin: .5rem 0 0; padding-left: 1.25rem; }
+.wikify-editing-guidelines li + li { margin-top: .5rem; }
 .wikify dialog footer { margin-top: 1.25rem; }
 .wikify dialog::backdrop { background: rgb(15 23 42 / .45); backdrop-filter: blur(4px); }
 .wikify footer { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }

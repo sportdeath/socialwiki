@@ -32,6 +32,8 @@ export interface WikifyOptions {
   admins: string[];
   title?: string;
   mount?: string | HTMLElement;
+  /** Optional guidelines shown before opening the editor. */
+  editingGuidelines?: readonly string[];
   /** Receives the complete query, including parameters and address. */
   showHeader?: (query: string) => boolean;
 }
@@ -63,6 +65,7 @@ export function wikify(options: WikifyOptions): void {
   const siteName = options.siteName;
   const admins = [...new Set(options.admins)];
   const title = options.title || document.title || siteName;
+  const editingGuidelines = options.editingGuidelines ?? [];
   document.title = title;
   document.body.classList.add("wikify-page");
   mount.classList.add("wikify");
@@ -206,6 +209,7 @@ export function wikify(options: WikifyOptions): void {
         editError.value = "Could not prepare the editor link. Please try again.";
       }
       editDialog.value?.showModal();
+      editDialog.value?.querySelector<HTMLElement>("#wikify-edit-title")?.focus();
     }
     function restoreFocus() { editButton.value?.focus(); }
     function closeEditDialogOnBackdrop(event: MouseEvent) {
@@ -260,7 +264,7 @@ export function wikify(options: WikifyOptions): void {
     }
 
     return {
-      title, siteName, session, isAdmin, isFirstPoll, discoveryError,
+      title, siteName, editingGuidelines, session, isAdmin, isFirstPoll, discoveryError,
       selectedVersion, displayed, mediaError, showVersionNotice, adminVersion,
       isPreviewingAdmin, isFollowingAdminVersions,
       versionBusy, versionError, previewAdminVersion, stopPreview, upgradeToAdminVersions,
