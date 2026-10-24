@@ -9,6 +9,10 @@ import type { Graffiti } from "@graffiti-garden/api";
 import template from "./template.html";
 import css from "./style.css";
 import {
+  applyDocumentMetadata,
+  isDocumentMetadata,
+} from "../../kernel/src/bridges/document-metadata/shared";
+import {
   followsOwnVersion, isSiteVersion, newestFirst,
   versionFollowSchema, versionSchema,
 } from "./versions";
@@ -165,7 +169,7 @@ export function wikify(options: WikifyOptions): void {
       const currentLoad = ++load;
       displayed.value = null;
       mediaError.value = "";
-      document.title = title;
+      applyDocumentMetadata({ title, icon: null }, title);
       const version = selectedVersion.value;
       if (!version) return;
       try {
@@ -257,10 +261,10 @@ export function wikify(options: WikifyOptions): void {
       }
     }
 
-    function onChildMetadata(event: CustomEvent<{ title?: unknown }>) {
-      if (typeof event.detail?.title !== "string") return;
+    function onChildMetadata(event: CustomEvent<unknown>) {
+      if (!isDocumentMetadata(event.detail)) return;
       event.preventDefault();
-      document.title = event.detail.title.trim() || title;
+      applyDocumentMetadata(event.detail, title);
     }
 
     return {
