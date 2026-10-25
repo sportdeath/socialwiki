@@ -12,9 +12,8 @@ import {
 } from "./shared";
 
 // A child can change its content in response to its own size indefinitely.
-// Bound both the distance and count of host adjustments with one budget.
+// Bound the total distance of host adjustments, while allowing small content updates.
 const AUTOSIZE_BUDGET = 4096;
-const MIN_CHANGE_COST = 128;
 
 export function installAutosizeParent(
   element: HTMLElement,
@@ -81,7 +80,6 @@ export function installAutosizeParent(
 
     if (appliedSize) {
       const movement = Math.max(
-        MIN_CHANGE_COST,
         height === null ? 0 : Math.abs(size.height - appliedSize.height),
         width === null ? 0 : Math.abs(size.width - appliedSize.width),
       );

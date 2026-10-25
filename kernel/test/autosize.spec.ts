@@ -303,7 +303,7 @@ it("applies measured height without changing an author's minimum", async () => {
   parent.destroy();
 });
 
-it("bounds repeated host growth and restarts after a host-controlled mode change", async () => {
+it("allows small content updates while bounding total growth", async () => {
   const events = createEventBridge();
   const element = document.createElement("sw-transclude");
   element.setAttribute("autosize", "height");
@@ -313,12 +313,15 @@ it("bounds repeated host growth and restarts after a host-controlled mode change
   for (let height = 120; height <= 900; height += 20) {
     events.child.emit(AUTOSIZE_SIZE_EVENT, { width: 200, height });
   }
-  expect(element.style.height).toBe("760px");
+  expect(element.style.height).toBe("900px");
+
+  events.child.emit(AUTOSIZE_SIZE_EVENT, { width: 200, height: 10000 });
+  expect(element.style.height).toBe("4196px");
 
   element.removeAttribute("autosize");
   await vi.waitFor(() => expect(element.style.height).toBe(""));
   element.setAttribute("autosize", "height");
-  await vi.waitFor(() => expect(element.style.height).toBe("900px"));
+  await vi.waitFor(() => expect(element.style.height).toBe("10000px"));
 
   parent.destroy();
 });
