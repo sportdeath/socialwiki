@@ -1,5 +1,6 @@
 import type { EventsChild } from "../events/child";
 import {
+  AUTOSIZE_FALLBACK_EVENT,
   AUTOSIZE_MODE_EVENT,
   AUTOSIZE_SIZE_EVENT,
   type AutosizeContext,
@@ -17,6 +18,8 @@ export function installAutosizeChild(events: EventsChild): AutosizeContext {
   let timerId: number | null = null;
   let lastWidth = -1;
   let lastHeight = -1;
+  let lastBodyScrollHeight = -1;
+  let fallback = { x: false, y: false };
 
   const observeBody = () => {
     // body may appear after the bridge is installed; observe lazily.
@@ -96,7 +99,7 @@ export function installAutosizeChild(events: EventsChild): AutosizeContext {
     // inside nested scroll containers. Unlike root scrollHeight, it can shrink
     // below the current iframe viewport.
     const docTop = doc.getBoundingClientRect().top;
-    let documentHeight = Math.max(body.scrollHeight, body.offsetHeight) + marginY;
+    let documentHeight = Math.max(body.scrollHeight, body.offsetHeight, bodyRect.height) + marginY;
     // Collapsed bottom margins escape body scrollHeight. Include those that
     // remain outside any nested scroll or clip container.
     for (const element of body.querySelectorAll("*")) {
@@ -130,6 +133,7 @@ export function installAutosizeChild(events: EventsChild): AutosizeContext {
     if (document.readyState === "loading") return;
     observeBody();
     const { width, height } = measureIntrinsicBodySize();
+    lastBodyScrollHeight = document.body?.scrollHeight ?? -1;
 
     if (width === lastWidth && height === lastHeight) return;
 
@@ -156,34 +160,79 @@ export function installAutosizeChild(events: EventsChild): AutosizeContext {
   document.addEventListener("transitionend", scheduleEmit, true);
   document.fonts?.addEventListener("loadingdone", scheduleEmit);
 
+  // CSSOM rule edits have no mutation event. Check for body overflow changes
+  // when the user tries to scroll, without remeasuring on every wheel.
+  const checkUnobservedGrowth = () => {
+    if (autosizesHeight(mode) && document.body &&
+      document.body.scrollHeight !== lastBodyScrollHeight) {
+      scheduleEmit();
+    }
+  };
+  document.addEventListener("wheel", checkUnobservedGrowth, { capture: true, passive: true });
+  document.addEventListener("touchstart", checkUnobservedGrowth, { capture: true, passive: true });
+  document.addEventListener("keydown", (event) => {
+    if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(event.key)) {
+      checkUnobservedGrowth();
+    }
+  }, true);
+
   const rootStyle = document.documentElement.style;
-  // Keep the child scrollable if its host is constrained or sizing cannot
-  // converge. Take ownership only when an axis is enabled:
-  // saving at bridge installation or restoring an untouched axis would erase
-  // inline overflow that the page set later in its own startup code.
-  const savedOverflow = new Map<string, { value: string; priority: string }>();
+  // Saving at bridge installation or restoring an untouched property would
+  // erase styles that the page set later in its own startup code.
+  const savedStyles = new Map<string, { value: string; priority: string; owned: string }>();
+  const ownStyle = (property: string, value: string | null) => {
+    const saved = savedStyles.get(property);
+    const current = rootStyle.getPropertyValue(property);
+    const priority = rootStyle.getPropertyPriority(property);
+    // A page may update its inline style after autosize takes ownership.
+    // Remember that author value for restoration, then reassert the fitted mode.
+    if (saved && (current !== saved.owned || priority !== "important")) {
+      saved.value = current;
+      saved.priority = priority;
+    }
+    if (value === null) {
+      if (!saved) return;
+      if (saved.value) rootStyle.setProperty(property, saved.value, saved.priority);
+      else rootStyle.removeProperty(property);
+      savedStyles.delete(property);
+    } else {
+      if (!saved) {
+        savedStyles.set(property, {
+          value: current,
+          priority,
+          owned: value,
+        });
+      } else saved.owned = value;
+      if (current !== value || priority !== "important") {
+        rootStyle.setProperty(property, value, "important");
+      }
+    }
+  };
+  const setOverflow = () => {
+    for (const axis of ["x", "y"] as const) {
+      const autosized = axis === "x" ? autosizesWidth(mode) : autosizesHeight(mode);
+      const overflow = autosized ? (fallback[axis] ? "auto" : "hidden") : null;
+      ownStyle(`overflow-${axis}`, overflow);
+    }
+    // A horizontal scrollbar steals height from an otherwise fitted iframe.
+    // Hide its track while fitted, without disabling horizontal panning.
+    ownStyle("scrollbar-width", autosizesHeight(mode) && !fallback.y
+      ? "none" : null);
+  };
+  events.listen(AUTOSIZE_FALLBACK_EVENT, (event) => {
+    event.preventDefault();
+    const value = event.detail;
+    if (typeof value !== "object" || value === null) return;
+    const axes = value as Record<string, unknown>;
+    if (typeof axes.x !== "boolean" || typeof axes.y !== "boolean") return;
+    fallback = { x: axes.x, y: axes.y };
+    setOverflow();
+    scheduleEmit();
+  });
   events.listen(AUTOSIZE_MODE_EVENT, (event) => {
     event.preventDefault();
     mode = parseAutosizeMode(event.detail);
-    for (const axis of ["x", "y"] as const) {
-      const property = `overflow-${axis}`;
-      const autosized = axis === "x" ? autosizesWidth(mode) : autosizesHeight(mode);
-      if (autosized) {
-        if (!savedOverflow.has(property)) {
-          savedOverflow.set(property, {
-            value: rootStyle.getPropertyValue(property),
-            priority: rootStyle.getPropertyPriority(property),
-          });
-        }
-        rootStyle.setProperty(property, "auto", "important");
-      } else {
-        const saved = savedOverflow.get(property);
-        if (!saved) continue;
-        if (saved.value) rootStyle.setProperty(property, saved.value, saved.priority);
-        else rootStyle.removeProperty(property);
-        savedOverflow.delete(property);
-      }
-    }
+    setOverflow();
     for (const listener of modeListeners) listener(mode);
     // The bridged mode is local to this document. Lenses with custom sizing
     // can observe it without accidentally forwarding it to a nested page.
@@ -198,7 +247,11 @@ export function installAutosizeChild(events: EventsChild): AutosizeContext {
       resizeObserver.observe(document.documentElement);
       // Head styles can change visible overflow without resizing the body.
       // Observing the whole document also catches body replacement.
-      new MutationObserver(scheduleEmit).observe(document.documentElement, {
+      new MutationObserver((mutations) => {
+        if (mutations.some((mutation) => mutation.target === document.documentElement &&
+          mutation.attributeName === "style")) setOverflow();
+        scheduleEmit();
+      }).observe(document.documentElement, {
         attributes: true,
         childList: true,
         characterData: true,

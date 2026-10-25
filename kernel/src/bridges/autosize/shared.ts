@@ -1,5 +1,6 @@
 export const AUTOSIZE_SIZE_EVENT = "sw-autosize-size";
 export const AUTOSIZE_MODE_EVENT = "sw-autosize-mode";
+export const AUTOSIZE_FALLBACK_EVENT = "sw-autosize-fallback";
 
 export type AutosizeMode = "off" | "height" | "width" | "both";
 // A size report always includes both axes. The immediate parent chooses which

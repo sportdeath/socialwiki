@@ -89,6 +89,24 @@
         }, 100);`,
       },
       {
+        id: "cssom-only-growth",
+        css: 'body{height:100px;overflow:visible}#box{height:100px}',
+        markup: '<div id="box">Stylesheet rule change</div>',
+        run: `setTimeout(() => {
+          document.styleSheets[0].insertRule('#box{height:500px!important}');
+          document.dispatchEvent(new Event('wheel', { bubbles:true }));
+        }, 100);`,
+      },
+      {
+        id: "cssom-growth-with-margins",
+        css: 'body{height:100px;overflow:visible;margin:100px 0}#box{height:100px}',
+        markup: '<div id="box">Stylesheet rule change below a body margin</div>',
+        run: `setTimeout(() => {
+          document.styleSheets[0].insertRule('#box{height:150px!important}');
+          document.dispatchEvent(new Event('wheel', { bubbles:true }));
+        }, 100);`,
+      },
+      {
         id: "animation-overflow",
         css: 'html{height:100%}body{height:100px;position:relative;overflow:visible;margin:0}#box{position:absolute;top:0;height:100px;width:100px;animation:drop .5s forwards}@keyframes drop{to{top:500px}}',
         markup: '<div id="box">Animated overflow</div>',
@@ -112,6 +130,23 @@
         css: 'body{min-height:100vh;margin:8px}',
         markup: '<div>Short page with viewport-sized body</div>',
         loop: true,
+      },
+      {
+        id: "horizontal-overflow",
+        css: 'body{min-height:100vh;margin:0}',
+        markup: '<div style="width:calc(100vw + 40px);height:calc(100vh - 40px)">Wide page with a bottom marker</div>',
+      },
+      {
+        id: "fractional-height",
+        markup: '<div style="height:260.5px">Fractional content height</div>',
+      },
+      {
+        id: "fixed-overlay-child",
+        markup: '<div style="height:100px">Page content</div><div style="position:fixed;top:1000px"><span style="display:block;height:50px">Fixed overlay child</span></div>',
+      },
+      {
+        id: "paint-contained-child",
+        markup: '<div style="height:100px;contain:paint"><div style="height:500px">Clipped child</div></div>',
       },
       {
         id: "late-large-page",
@@ -310,6 +345,7 @@
           autosizeCase: caseId,
           height: document.documentElement.scrollHeight,
           width: document.documentElement.scrollWidth,
+          clientHeight: document.documentElement.clientHeight,
           viewportHeight: innerHeight,
           viewportWidth: innerWidth,
           overflowY: getComputedStyle(document.documentElement).overflowY,
@@ -359,6 +395,9 @@
         const status = !data ? 'waiting' : spec.loop
           ? size < 5000 && (contentSize <= size || overflow === 'auto' && reached > 0)
             ? 'bounded and scrollable' : 'RUNAWAY'
+          : spec.id === 'horizontal-overflow'
+            ? data.clientHeight === data.viewportHeight && data.reachedY === 0
+              ? 'pass' : 'GUTTER OR NESTED SCROLL'
           : spec.constrained || spec.fallback
             ? spec.fallback && Math.abs(difference) <= 2 ? 'pass'
               : viewportSize >= (spec.fallback ? 200 : 1) && overflow === 'auto' && reached > 0

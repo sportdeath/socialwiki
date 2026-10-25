@@ -1,5 +1,6 @@
 import type { EventsParent } from "../events/parent";
 import {
+  AUTOSIZE_FALLBACK_EVENT,
   AUTOSIZE_MODE_EVENT,
   AUTOSIZE_SIZE_EVENT,
   type AutosizeContext,
@@ -27,6 +28,18 @@ export function installAutosizeParent(
   let firstAppliedSize: { width: number; height: number } | null = null;
   let remainingBudget = AUTOSIZE_BUDGET;
   let stopped = false;
+  let lastFallback: { x: boolean; y: boolean } | null = null;
+
+  const updateFallback = () => {
+    if (!lastSize) return;
+    const next = {
+      x: autosizesWidth(mode) && element.clientWidth < lastSize.width,
+      y: autosizesHeight(mode) && element.clientHeight < lastSize.height,
+    };
+    if (next.x === lastFallback?.x && next.y === lastFallback?.y) return;
+    lastFallback = next;
+    events.send(AUTOSIZE_FALLBACK_EVENT, next);
+  };
 
   const applySize = (payload: unknown) => {
     // Size payload comes from an iframe; treat it as untrusted.
@@ -38,6 +51,7 @@ export function installAutosizeParent(
     // The first size report confirms the child bridge is ready to receive its
     // mode, including when a cached child script ran before this listener.
     if (firstSize) events.send(AUTOSIZE_MODE_EVENT, mode);
+    updateFallback();
   };
 
   const applyLastSize = () => {
@@ -142,7 +156,11 @@ export function installAutosizeParent(
     }
     applyLastSize();
     if (lastSize) events.send(AUTOSIZE_MODE_EVENT, mode);
+    updateFallback();
   };
+
+  const resizeObserver = new ResizeObserver(updateFallback);
+  resizeObserver.observe(element);
 
   const observer = new MutationObserver(setAutosizeMode);
   observer.observe(element, {
@@ -162,6 +180,7 @@ export function installAutosizeParent(
       stopListening();
       stopInheriting?.();
       observer.disconnect();
+      resizeObserver.disconnect();
       for (const axis of savedStyles.keys()) restoreStyle(axis);
     },
   };
