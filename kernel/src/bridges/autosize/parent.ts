@@ -10,6 +10,11 @@ import {
   parseAutosizeMode,
 } from "./shared";
 
+// A child can change its content in response to its own size indefinitely.
+// Bound both the distance and count of host adjustments with one budget.
+const AUTOSIZE_BUDGET = 4096;
+const MIN_CHANGE_COST = 128;
+
 export function installAutosizeParent(
   element: HTMLElement,
   events: EventsParent,
@@ -18,6 +23,10 @@ export function installAutosizeParent(
   let mode: AutosizeMode = "off";
   const savedStyles = new Map<string, { value: string; priority: string }>();
   let lastSize: { width: number; height: number } | null = null;
+  let appliedSize: { width: number; height: number } | null = null;
+  let firstAppliedSize: { width: number; height: number } | null = null;
+  let remainingBudget = AUTOSIZE_BUDGET;
+  let stopped = false;
 
   const applySize = (payload: unknown) => {
     // Size payload comes from an iframe; treat it as untrusted.
@@ -32,7 +41,8 @@ export function installAutosizeParent(
   };
 
   const applyLastSize = () => {
-    if (mode === "off" || !lastSize) return;
+    if (mode === "off" || !lastSize || stopped) return;
+    let size = lastSize;
 
     // The child reports the space its document needs. The iframe fills the
     // host's padding box, while CSS width/height refer to its content box or
@@ -50,12 +60,37 @@ export function installAutosizeParent(
       return Math.max(0, size + (style.boxSizing === "border-box" ? border : -first - last));
     };
 
-    if (autosizesHeight(mode)) {
-      element.style.height = `${cssSize(lastSize.height, "top", "bottom")}px`;
+    let height = autosizesHeight(mode) ? `${cssSize(size.height, "top", "bottom")}px` : null;
+    let width = autosizesWidth(mode) ? `${cssSize(size.width, "left", "right")}px` : null;
+    if ((height === null || element.style.height === height) &&
+      (width === null || element.style.width === width)) return;
+
+    if (appliedSize) {
+      const movement = Math.max(
+        MIN_CHANGE_COST,
+        height === null ? 0 : Math.abs(size.height - appliedSize.height),
+        width === null ? 0 : Math.abs(size.width - appliedSize.width),
+      );
+      if (movement > remainingBudget) {
+        // Finish at a bounded, usable viewport. A 1px skeleton followed by a
+        // large page must not leave a 1px frame that is impossible to touch.
+        // Holding the larger size also stops two-state media-query loops.
+        const first = firstAppliedSize!;
+        size = {
+          width: Math.max(appliedSize.width, Math.min(size.width, first.width + AUTOSIZE_BUDGET)),
+          height: Math.max(appliedSize.height, Math.min(size.height, first.height + AUTOSIZE_BUDGET)),
+        };
+        height = autosizesHeight(mode) ? `${cssSize(size.height, "top", "bottom")}px` : null;
+        width = autosizesWidth(mode) ? `${cssSize(size.width, "left", "right")}px` : null;
+        stopped = true;
+      } else {
+        remainingBudget -= movement;
+      }
     }
-    if (autosizesWidth(mode)) {
-      element.style.width = `${cssSize(lastSize.width, "left", "right")}px`;
-    }
+    if (height !== null) element.style.height = height;
+    if (width !== null) element.style.width = width;
+    firstAppliedSize ??= size;
+    appliedSize = size;
   };
 
   const stopListening = events.listen((event) => {
@@ -85,11 +120,18 @@ export function installAutosizeParent(
   const setAutosizeMode = () => {
     const value = element.getAttribute("autosize");
     const inherited = value?.trim().toLowerCase() === "inherit";
+    const previousMode = mode;
     // A bare `autosize` attribute (`autosize=""`) follows HTML boolean-style
     // usage and enables both axes.
     mode = value === "" ? "both" : inherited
       ? documentAutosize?.mode ?? "off"
       : parseAutosizeMode(value);
+    if (mode !== previousMode) {
+      // A host-controlled mode change starts a new sizing session.
+      appliedSize = firstAppliedSize = null;
+      remainingBudget = AUTOSIZE_BUDGET;
+      stopped = false;
+    }
 
     // Own only the axes being autosized. Save each inline value and priority
     // before changing it, or switching modes would discard author sizing.

@@ -1,0 +1,375 @@
+<!doctype html>
+<!-- Build the kernel, copy this file into the repository's dist/, then serve dist/. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Autosize browser cases</title>
+  <script src="/init-test.js"></script>
+  <style>
+    body { font: 14px system-ui, sans-serif; margin: 12px; }
+    h1 { font-size: 1.2rem; }
+    .case { border: 1px solid #888; margin: 12px 0; padding: 8px; }
+    .case p { margin: 4px 0; }
+    sw-transclude { display: block; width: min(480px, 100%); }
+    pre { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>Autosize browser cases</h1>
+  <p>Each case runs in a sandboxed Social.Wiki transclusion. Compare its iframe size with its document's scroll size.</p>
+  <div id="cases"></div>
+  <script>
+    if (window.top !== window) {
+    const closeScript = "</" + "script>";
+    const cases = [
+      {
+        id: "static",
+        markup: '<div style="height:260px;background:#def">Static block</div>',
+      },
+      {
+        id: "staged-dom",
+        markup: '<div id="stack" style="height:100px;background:#def">First stage</div>',
+        run: `setTimeout(() => {
+          const part = document.createElement('div');
+          part.style.cssText = 'height:120px;background:#fed';
+          part.textContent = 'Second stage';
+          stack.append(part);
+        }, 80);
+        setTimeout(() => {
+          const part = document.createElement('div');
+          part.style.cssText = 'height:380px;background:#dfd';
+          part.textContent = 'Third stage';
+          stack.append(part);
+        }, 180);`,
+      },
+      {
+        id: "many-stages",
+        markup: '<div id="stack" style="height:100px;background:#def">First stage</div>',
+        run: `[250, 500, 750, 1000, 1250].forEach((delay) => setTimeout(() => {
+          const part = document.createElement('div');
+          part.style.height = '100px';
+          stack.append(part);
+        }, delay));`,
+      },
+      {
+        id: "forty-stages",
+        markup: '<div id="box" style="height:100px;background:#def">Many late updates</div>',
+        run: `let stage = 0;
+          const timer = setInterval(() => {
+            box.style.height = (100 + (++stage * 20)) + 'px';
+            if (stage === 40) clearInterval(timer);
+          }, 60);`,
+        fallback: true,
+      },
+      {
+        id: "text-growth",
+        markup: '<div id="text" style="width:220px">Short text</div>',
+        run: `setTimeout(() => { text.textContent = ('A longer line that wraps. ').repeat(100); }, 100);`,
+      },
+      {
+        id: "style-growth",
+        markup: '<div id="box" style="height:100px;background:#def">Inline style</div>',
+        run: `setTimeout(() => { box.style.height = '520px'; }, 100);`,
+      },
+      {
+        id: "class-growth",
+        css: '.tall { height: 460px !important; }',
+        markup: '<div id="box" style="height:100px;background:#def">Class change</div>',
+        run: `setTimeout(() => { box.classList.add('tall'); }, 100);`,
+      },
+      {
+        id: "late-head-style",
+        css: 'body { height:120px; overflow:visible; }',
+        markup: '<div id="box" style="height:100px;background:#def">Late head style</div>',
+        run: `setTimeout(() => {
+          const style = document.createElement('style');
+          style.textContent = '#box { height: 500px !important; }';
+          document.head.append(style);
+        }, 100);`,
+      },
+      {
+        id: "animation-overflow",
+        css: 'html{height:100%}body{height:100px;position:relative;overflow:visible;margin:0}#box{position:absolute;top:0;height:100px;width:100px;animation:drop .5s forwards}@keyframes drop{to{top:500px}}',
+        markup: '<div id="box">Animated overflow</div>',
+      },
+      {
+        id: "display-contents",
+        css: '#wrapper{display:contents}',
+        markup: '<div id="wrapper"><div style="height:600px">Display contents descendant</div></div>',
+      },
+      {
+        id: "direct-svg",
+        markup: '<svg width="200" height="600" xmlns="http://www.w3.org/2000/svg"><rect width="200" height="600" fill="skyblue"/></svg>',
+      },
+      {
+        id: "body-pseudo",
+        css: 'body::after{content:"";display:block;height:600px;background:#def}',
+        markup: '<div>Pseudo content follows</div>',
+      },
+      {
+        id: "body-min-vh",
+        css: 'body{min-height:100vh;margin:8px}',
+        markup: '<div>Short page with viewport-sized body</div>',
+        loop: true,
+      },
+      {
+        id: "late-large-page",
+        markup: '<div id="box" style="height:1px"></div>',
+        run: `setTimeout(() => { box.style.height = '10000px'; }, 100);`,
+        fallback: true,
+      },
+      {
+        id: "host-padding-content-box",
+        markup: '<div style="height:600px">Padded content-box host</div>',
+        hostStyle: 'padding:15px;border:3px solid #888;box-sizing:content-box',
+      },
+      {
+        id: "host-padding-border-box",
+        markup: '<div style="height:600px">Padded border-box host</div>',
+        hostStyle: 'padding:15px;border:3px solid #888;box-sizing:border-box',
+      },
+      {
+        id: "constrained-host",
+        markup: '<div style="height:600px;background:#def">Constrained host</div>',
+        hostStyle: 'max-height:400px',
+        constrained: true,
+      },
+      {
+        id: "details-open",
+        markup: '<details id="details"><summary>Expand</summary><div style="height:420px">Details content</div></details>',
+        run: `setTimeout(() => { details.open = true; }, 100);`,
+      },
+      {
+        id: "details-close",
+        markup: '<details id="details" open><summary>Collapse</summary><div style="height:420px">Details content</div></details>',
+        run: `setTimeout(() => { details.open = false; }, 100);`,
+      },
+      {
+        id: "image-load",
+        markup: '<img id="photo" alt="Delayed image" style="display:block;width:200px;height:auto">',
+        run: `setTimeout(() => {
+          photo.src = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="200" height="430"><rect width="200" height="430" fill="skyblue"/></svg>');
+        }, 100);`,
+      },
+      {
+        id: "clipped-container",
+        markup: '<div style="height:120px;overflow:auto"><div style="height:800px">Internal scrolling</div></div>',
+      },
+      {
+        id: "collapsed-margin",
+        markup: '<section><div style="height:80px;margin-bottom:140px">Trailing margin</div></section>',
+      },
+      {
+        id: "content-shrink",
+        markup: '<div id="box" style="height:450px;background:#def">Removed later</div>',
+        run: `setTimeout(() => { box.remove(); }, 100);`,
+      },
+      {
+        id: "fixed-body-overflow",
+        css: 'body { height: 120px; overflow: visible; }',
+        markup: '<div style="height:400px;background:#def">Overflowing a fixed body</div>',
+      },
+      {
+        id: "absolute-overflow",
+        markup: '<div style="position:relative;height:100px"><div style="position:absolute;top:200px;height:200px;background:#def">Absolute content</div></div>',
+      },
+      {
+        id: "width-growth",
+        mode: "both",
+        axis: "width",
+        markup: '<div id="box" style="width:100px;height:70px;background:#def">Width growth</div>',
+        run: `setTimeout(() => { box.style.width = '520px'; }, 100);`,
+      },
+      {
+        id: "width-display-contents",
+        mode: "both",
+        axis: "width",
+        css: '#wrapper{display:contents}',
+        markup: '<div id="wrapper"><div style="width:600px;height:70px">Wide descendant</div></div>',
+      },
+      {
+        id: "width-direct-svg",
+        mode: "both",
+        axis: "width",
+        markup: '<svg width="600" height="70" xmlns="http://www.w3.org/2000/svg"><rect width="600" height="70" fill="skyblue"/></svg>',
+      },
+      {
+        id: "width-body-pseudo",
+        mode: "both",
+        axis: "width",
+        css: 'body::after{content:"";display:block;width:600px;height:70px;background:#def}',
+        markup: '<div>Pseudo content follows</div>',
+      },
+      {
+        id: "width-rtl",
+        mode: "both",
+        axis: "width",
+        css: 'body{direction:rtl;width:100px}',
+        markup: '<div style="width:500px;height:70px">Wide RTL block</div>',
+      },
+      {
+        id: "viewport-width-loop",
+        mode: "both",
+        axis: "width",
+        markup: '<div style="width:calc(100vw + 20px);height:70px;background:#fed">Viewport width plus padding</div>',
+        loop: true,
+      },
+      {
+        id: "viewport-loop",
+        markup: '<div style="height:calc(100vh + 20px);background:#fed">Viewport plus padding</div>',
+        loop: true,
+      },
+      {
+        id: "viewport-loop-with-mutation",
+        markup: '<div style="height:calc(100vh + 20px);background:#fed">Viewport plus padding <span id="counter">0</span></div>',
+        run: `let count = 0;
+          window.addEventListener('resize', () => { counter.textContent = String(++count); });`,
+        loop: true,
+      },
+      {
+        id: "viewport-loop-with-async-mutation",
+        markup: '<div style="height:calc(100vh + 20px);background:#fed">Viewport plus padding <span id="counter">0</span></div>',
+        run: `let count = 0;
+          window.addEventListener('resize', () => {
+            setTimeout(() => { counter.textContent = String(++count); }, 0);
+          });`,
+        loop: true,
+      },
+      {
+        id: "viewport-loop-with-delayed-mutation",
+        markup: '<div style="height:calc(100vh + 20px);background:#fed">Viewport plus padding <span id="counter">0</span></div>',
+        run: `let count = 0;
+          window.addEventListener('resize', () => {
+            setTimeout(() => { counter.textContent = String(++count); }, 50);
+          });`,
+        loop: true,
+      },
+      {
+        id: "viewport-loop-with-growing-mutation",
+        markup: '<div style="height:calc(100vh + 20px);background:#fed">Viewport plus padding</div><div id="extras"></div>',
+        run: `window.addEventListener('resize', () => {
+          setTimeout(() => {
+            const extra = document.createElement('div');
+            extra.style.height = '20px';
+            extras.append(extra);
+          }, 50);
+        });`,
+        loop: true,
+      },
+      {
+        id: "viewport-loop-alternating",
+        markup: '<div id="sizer" style="height:calc(100vh + 20px);background:#fed">Alternating excess</div>',
+        run: `let next = 23;
+          window.addEventListener('resize', () => {
+            setTimeout(() => {
+              sizer.style.height = 'calc(100vh + ' + next + 'px)';
+              next = next === 23 ? 20 : 23;
+            }, 50);
+          });`,
+        loop: true,
+      },
+      {
+        id: "viewport-loop-exponential",
+        markup: '<div style="height:calc(200vh + 20px);background:#fed">Twice the viewport</div>',
+        loop: true,
+      },
+      {
+        id: "viewport-oscillation",
+        css: '#box{height:50px}@media(max-height:100px){#box{height:200px}}',
+        markup: '<div id="box">Height media query</div>',
+        loop: true,
+      },
+      {
+        id: "tiny-oscillation",
+        css: '#box{height:1px}@media(max-height:100px){#box{height:1000px}}',
+        markup: '<div id="box">Tiny height media query</div>',
+        loop: true,
+      },
+    ];
+
+    const latest = new Map();
+    window.addEventListener('message', (event) => {
+      if (!event.data || event.data.autosizeCase === undefined) return;
+      latest.set(event.data.autosizeCase, event.data);
+    });
+
+    function childSource(spec) {
+      const boot = '<script src="https://social.wiki/init.js">' + closeScript;
+      const script = `
+        const caseId = ${JSON.stringify(spec.id)};
+        ${spec.run || ''}
+        const report = () => {
+          const previousX = scrollX;
+          const previousY = scrollY;
+          scrollTo(document.documentElement.scrollWidth, document.documentElement.scrollHeight);
+          const reachedX = scrollX;
+          const reachedY = scrollY;
+          scrollTo(previousX, previousY);
+          window.parent.postMessage({
+          autosizeCase: caseId,
+          height: document.documentElement.scrollHeight,
+          width: document.documentElement.scrollWidth,
+          viewportHeight: innerHeight,
+          viewportWidth: innerWidth,
+          overflowY: getComputedStyle(document.documentElement).overflowY,
+          overflowX: getComputedStyle(document.documentElement).overflowX,
+          reachedX,
+          reachedY,
+        }, '*');
+        };
+        setInterval(report, 250);
+      `;
+      return '<!doctype html><html><head><meta charset="utf-8">' + boot +
+        '<style>body{margin:0}' + (spec.css || '') + '</style></head><body>' +
+        spec.markup + '<script>' + script + closeScript + '</body></html>';
+    }
+
+    for (const spec of cases) {
+      const section = document.createElement('section');
+      section.className = 'case';
+      section.innerHTML = '<strong></strong><p class="metrics">Loading…</p>';
+      section.querySelector('strong').textContent = spec.id;
+      const host = document.createElement('sw-transclude');
+      host.id = spec.id;
+      host.setAttribute('autosize', spec.mode || 'height');
+      if (spec.hostStyle) host.style.cssText = spec.hostStyle;
+      host.setAttribute('srcdoc', childSource(spec));
+      section.append(host);
+      document.querySelector('#cases').append(section);
+      spec.section = section;
+      spec.host = host;
+    }
+
+    setInterval(() => {
+      for (const spec of cases) {
+        const data = latest.get(spec.id);
+        const height = spec.stoppedAt || Math.round(spec.host.getBoundingClientRect().height);
+        const width = spec.stoppedAt || Math.round(spec.host.getBoundingClientRect().width);
+        const size = spec.axis === 'width' ? width : height;
+        const viewportSize = spec.axis === 'width' ? data?.viewportWidth : data?.viewportHeight;
+        const contentSize = spec.axis === 'width' ? data?.width : data?.height;
+        const overflow = spec.axis === 'width' ? data?.overflowX : data?.overflowY;
+        const reached = spec.axis === 'width' ? data?.reachedX : data?.reachedY;
+        if (spec.loop && size > 5000 && !spec.stoppedAt) {
+          spec.stoppedAt = size;
+          spec.host.remove();
+        }
+        const difference = data ? contentSize - viewportSize : null;
+        const status = !data ? 'waiting' : spec.loop
+          ? size < 5000 && (contentSize <= size || overflow === 'auto' && reached > 0)
+            ? 'bounded and scrollable' : 'RUNAWAY'
+          : spec.constrained || spec.fallback
+            ? spec.fallback && Math.abs(difference) <= 2 ? 'pass'
+              : viewportSize >= (spec.fallback ? 200 : 1) && overflow === 'auto' && reached > 0
+                ? 'scrollable fallback' : 'CLIPPED'
+          : Math.abs(difference) <= 2 ? 'pass'
+          : `MISMATCH ${difference}px`;
+        spec.section.querySelector('.metrics').textContent =
+          `host ${size}px; content ${contentSize ?? '?'}px; viewport ${spec.axis === 'width' ? data?.viewportWidth ?? '?' : data?.viewportHeight ?? '?'}px; ${status}`;
+      }
+    }, 250);
+    }
+  </script>
+</body>
+</html>

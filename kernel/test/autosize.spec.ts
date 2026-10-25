@@ -74,10 +74,10 @@ it("preserves root overflow on axes the child bridge does not own", () => {
 
     events.parent.send(AUTOSIZE_MODE_EVENT, "height");
     expect(rootStyle.overflowX).toBe("scroll");
-    expect(rootStyle.overflowY).toBe("hidden");
+    expect(rootStyle.overflowY).toBe("auto");
 
     events.parent.send(AUTOSIZE_MODE_EVENT, "both");
-    expect(rootStyle.overflowX).toBe("hidden");
+    expect(rootStyle.overflowX).toBe("auto");
     events.parent.send(AUTOSIZE_MODE_EVENT, "off");
     expect(rootStyle.overflowX).toBe("scroll");
   } finally {
@@ -170,4 +170,121 @@ it("applies measured height without changing an author's minimum", async () => {
   await vi.waitFor(() => expect(element.style.height).toBe(""));
   expect(element.style.minHeight).toBe("180px");
   parent.destroy();
+});
+
+it("bounds repeated host growth and restarts after a host-controlled mode change", async () => {
+  const events = createEventBridge();
+  const element = document.createElement("sw-transclude");
+  element.setAttribute("autosize", "height");
+  const parent = installAutosizeParent(element, events.parent);
+
+  events.child.emit(AUTOSIZE_SIZE_EVENT, { width: 200, height: 100 });
+  for (let height = 120; height <= 900; height += 20) {
+    events.child.emit(AUTOSIZE_SIZE_EVENT, { width: 200, height });
+  }
+  expect(element.style.height).toBe("760px");
+
+  element.removeAttribute("autosize");
+  await vi.waitFor(() => expect(element.style.height).toBe(""));
+  element.setAttribute("autosize", "height");
+  await vi.waitFor(() => expect(element.style.height).toBe("900px"));
+
+  parent.destroy();
+});
+
+it("bounds exponentially growing reports by total movement", () => {
+  const events = createEventBridge();
+  const element = document.createElement("sw-transclude");
+  element.setAttribute("autosize", "height");
+  const parent = installAutosizeParent(element, events.parent);
+
+  for (const height of [100, 220, 460, 940, 1900, 3820, 7660]) {
+    events.child.emit(AUTOSIZE_SIZE_EVENT, { width: 200, height });
+  }
+  expect(element.style.height).toBe("4196px");
+
+  parent.destroy();
+});
+
+it("leaves a large late page with a usable bounded viewport", () => {
+  const events = createEventBridge();
+  const element = document.createElement("sw-transclude");
+  element.setAttribute("autosize", "height");
+  const parent = installAutosizeParent(element, events.parent);
+
+  events.child.emit(AUTOSIZE_SIZE_EVENT, { width: 200, height: 1 });
+  events.child.emit(AUTOSIZE_SIZE_EVENT, { width: 200, height: 10000 });
+  expect(element.style.height).toBe("4097px");
+  events.child.emit(AUTOSIZE_SIZE_EVENT, { width: 200, height: 12000 });
+  expect(element.style.height).toBe("4097px");
+
+  parent.destroy();
+});
+
+it("remeasures body content after resize, DOM changes, and shrinkage", async () => {
+  const events = createEventBridge();
+  const heights: number[] = [];
+  events.parent.listen((event) => {
+    if (event.type === AUTOSIZE_SIZE_EVENT) {
+      heights.push((event.detail as { height: number }).height);
+    }
+  });
+
+  let viewport = 300;
+  let contentHeight = 400;
+  const doc = document.documentElement;
+  const originalStyle = doc.style.cssText;
+  const oldClientHeight = Object.getOwnPropertyDescriptor(doc, "clientHeight");
+  const oldScrollHeight = Object.getOwnPropertyDescriptor(document.body, "scrollHeight");
+  Object.defineProperty(doc, "clientHeight", { configurable: true, get: () => viewport });
+  Object.defineProperty(document.body, "scrollHeight", { configurable: true, get: () => contentHeight });
+  const content = document.createElement("div");
+  document.body.append(content);
+
+  let notifyResize = () => {};
+  vi.stubGlobal("ResizeObserver", class {
+    constructor(callback: () => void) { notifyResize = callback; }
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  });
+
+  try {
+    installAutosizeChild(events.child);
+    events.parent.send(AUTOSIZE_MODE_EVENT, "height");
+    await vi.waitFor(() => expect(heights.at(-1)).toBe(400));
+
+    viewport = 400;
+    contentHeight = 450;
+    notifyResize();
+    await vi.waitFor(() => expect(heights.at(-1)).toBe(450));
+
+    viewport = 450;
+    contentHeight = 900;
+    window.dispatchEvent(new Event("resize"));
+    content.append("Unrelated resize-handler text");
+    notifyResize();
+    await vi.waitFor(() => expect(heights.at(-1)).toBe(900));
+    expect(doc.style.overflowY).toBe("auto");
+
+    content.append("Late content");
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    expect(heights.at(-1)).toBe(900);
+
+    contentHeight = 200;
+    notifyResize();
+    await vi.waitFor(() => expect(heights.at(-1)).toBe(200));
+    contentHeight = 900;
+    content.append("Growth after a shrink");
+    await vi.waitFor(() => expect(heights.at(-1)).toBe(900));
+  } finally {
+    content.remove();
+    doc.style.cssText = originalStyle;
+    if (oldClientHeight) Object.defineProperty(doc, "clientHeight", oldClientHeight);
+    else Reflect.deleteProperty(doc, "clientHeight");
+    if (oldScrollHeight) Object.defineProperty(document.body, "scrollHeight", oldScrollHeight);
+    else Reflect.deleteProperty(document.body, "scrollHeight");
+    vi.unstubAllGlobals();
+    events.parent.destroy();
+  }
 });

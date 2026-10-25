@@ -13,20 +13,17 @@ export function installAutosizeChild(events: EventsChild): AutosizeContext {
   let mode: AutosizeMode = "off";
   const modeListeners = new Set<(mode: AutosizeMode) => void>();
   let resizeObserver: ResizeObserver | null = null;
+  let observedBody: HTMLElement | null = null;
   let timerId: number | null = null;
   let lastWidth = -1;
   let lastHeight = -1;
-  // The same feedback check applies to either axis: 100vw plus padding and
-  // 100vh plus padding can both grow every time their iframe grows.
-  const growthOrigin: Record<"width" | "height", { viewport: number; excess: number } | null> = {
-    width: null,
-    height: null,
-  };
 
   const observeBody = () => {
     // body may appear after the bridge is installed; observe lazily.
-    if (!resizeObserver || !document.body) return;
-    resizeObserver.observe(document.body);
+    if (!resizeObserver || !document.body || observedBody === document.body) return;
+    if (observedBody) resizeObserver.unobserve(observedBody);
+    observedBody = document.body;
+    resizeObserver.observe(observedBody);
   };
 
   const parsePx = (value: string) => {
@@ -54,7 +51,6 @@ export function installAutosizeChild(events: EventsChild): AutosizeContext {
     const paddingRight = parsePx(style.paddingRight);
     const paddingBottom = parsePx(style.paddingBottom);
     let width = parsePx(style.paddingLeft);
-    let height = parsePx(style.paddingTop);
 
     // Element boxes below handle their own text. Only range-measure direct
     // text nodes: a range over the whole body includes closed <details> text.
@@ -65,46 +61,44 @@ export function installAutosizeChild(events: EventsChild): AutosizeContext {
       const rect = range.getBoundingClientRect();
       // Range width alone omits the body's left padding before direct text.
       width = Math.max(width, rect.right - bodyRect.left);
-      height = Math.max(height, rect.bottom - bodyRect.top);
     }
 
-    for (const child of Array.from(body.children)) {
-      if (!(child instanceof HTMLElement)) continue;
+    const measureChildWidth = (child: Element) => {
       const childStyle = window.getComputedStyle(child);
-      if (childStyle.position === "fixed") continue;
-
-      // Offset boxes omit visible overflow. Scroll sizes include it, but also
-      // include content deliberately hidden inside a scroll/clip container.
-      const childWidth = Math.max(
-        childStyle.overflowX === "visible" ? child.scrollWidth : 0,
-        child.offsetWidth,
-        child.clientWidth,
-      );
-      const childHeight = Math.max(
-        childStyle.overflowY === "visible" ? child.scrollHeight : 0,
-        child.offsetHeight,
-        child.clientHeight,
-      );
-      // Keep overflow and the trailing margin separate: auto margins already
-      // fill the viewport, so adding internal overflow to them causes growth.
+      if (childStyle.position === "fixed") return;
+      if (childStyle.display === "contents") {
+        for (const descendant of child.children) measureChildWidth(descendant);
+        return;
+      }
+      const rect = child.getBoundingClientRect();
+      const boxWidth = child instanceof HTMLElement
+        ? Math.max(
+          childStyle.overflowX === "visible" ? child.scrollWidth : 0,
+          child.offsetWidth,
+          child.clientWidth,
+        )
+        : rect.width;
+      // Keep the box's own width for RTL content extending left of the body.
+      // A nested clip container contributes only its visible box.
       width = Math.max(
         width,
-        child.offsetLeft + childWidth,
-        child.offsetLeft + child.offsetWidth + parsePx(childStyle.marginRight),
+        boxWidth,
+        rect.left - bodyRect.left + boxWidth + parsePx(childStyle.marginRight),
       );
-      // Bottom margins can collapse through ancestors, so the scan below
-      // handles them in document coordinates rather than adding one here.
-      height = Math.max(height, child.offsetTop + childHeight);
-    }
+    };
+    for (const child of body.children) measureChildWidth(child);
+    // Generated content has no DOM box to visit. Use scrollWidth only when it
+    // exceeds the stretched body's viewport width, so narrow pages can shrink.
+    if (body.scrollWidth > body.clientWidth) width = Math.max(width, body.scrollWidth);
 
-    // A nested element's bottom margin may collapse through its ancestors.
-    // It then contributes to document overflow without appearing in their
-    // scrollHeight or the range bounds. Measure it in document coordinates so
-    // a margin-only change can grow or shrink the frame.
+    // Body scrollHeight follows rendered overflow, including SVG, generated
+    // content, and display:contents descendants, while excluding overflow
+    // inside nested scroll containers. Unlike root scrollHeight, it can shrink
+    // below the current iframe viewport.
     const docTop = doc.getBoundingClientRect().top;
-    // Child offsets include leading body padding, but not trailing padding.
-    // Without the latter, a padded lens clips the right and bottom of its page.
-    let documentHeight = height + paddingBottom + marginY;
+    let documentHeight = Math.max(body.scrollHeight, body.offsetHeight) + marginY;
+    // Collapsed bottom margins escape body scrollHeight. Include those that
+    // remain outside any nested scroll or clip container.
     for (const element of body.querySelectorAll("*")) {
       if (!(element instanceof HTMLElement)) continue;
       const elementStyle = window.getComputedStyle(element);
@@ -130,46 +124,12 @@ export function installAutosizeChild(events: EventsChild): AutosizeContext {
     };
   };
 
-  const stabilizeGrowth = (axis: "width" | "height", size: number, previous: number) => {
-    const viewport = axis === "width"
-      ? document.documentElement.clientWidth
-      : document.documentElement.clientHeight;
-    if (size <= previous) {
-      growthOrigin[axis] = null;
-      return size;
-    }
-    const excess = size - viewport;
-    // Compare with the start of this growth run. A viewport-relative layout
-    // cannot converge if its excess never falls as the viewport grows. Freeze
-    // at the last accepted size rather than chasing 100vw/100vh plus spacing
-    // forever. This is a safety stop, not intrinsic sizing for a page whose
-    // content depends on the very viewport we are trying to size. Using the
-    // start avoids mistaking one rounded pixel for a loop.
-    const origin = growthOrigin[axis];
-    // After applying a size, the new iframe viewport equals that size. If it
-    // differs, an outside resize or box constraint changed the viewport;
-    // that is not evidence of a self-sustaining autosize loop.
-    if (origin && viewport === previous && viewport > origin.viewport &&
-      excess >= origin.excess) return previous;
-    // Growth without a larger viewport came from content or late styles;
-    // start a new run instead of comparing it with the old layout.
-    if (!origin || viewport !== previous || viewport <= origin.viewport) {
-      growthOrigin[axis] = { viewport, excess };
-    }
-    return size;
-  };
-
   const emitSize = () => {
     // Before parsing finishes, the body can be absent or incomplete. Its
     // viewport-sized fallback is not a meaningful content measurement.
     if (document.readyState === "loading") return;
     observeBody();
-    const measured = measureIntrinsicBodySize();
-    // Shrinks are applied immediately on both axes. Delaying a width shrink
-    // until another observer notification can strand a real content change;
-    // it also cannot give viewport-relative content an intrinsic width.
-    const width = stabilizeGrowth("width", measured.width, lastWidth);
-    const height = stabilizeGrowth("height", measured.height, lastHeight);
+    const { width, height } = measureIntrinsicBodySize();
 
     if (width === lastWidth && height === lastHeight) return;
 
@@ -189,9 +149,16 @@ export function installAutosizeChild(events: EventsChild): AutosizeContext {
     }, 0);
   };
 
+  // ResizeObserver does not report overflow outside a fixed-size body.
+  // These events also cover late resources and motion that changes position.
+  document.addEventListener("load", scheduleEmit, true);
+  document.addEventListener("animationend", scheduleEmit, true);
+  document.addEventListener("transitionend", scheduleEmit, true);
+  document.fonts?.addEventListener("loadingdone", scheduleEmit);
+
   const rootStyle = document.documentElement.style;
-  // Autosized axes must not acquire a scrollbar: its width or height changes
-  // the viewport being measured. Take ownership only when an axis is enabled:
+  // Keep the child scrollable if its host is constrained or sizing cannot
+  // converge. Take ownership only when an axis is enabled:
   // saving at bridge installation or restoring an untouched axis would erase
   // inline overflow that the page set later in its own startup code.
   const savedOverflow = new Map<string, { value: string; priority: string }>();
@@ -208,7 +175,7 @@ export function installAutosizeChild(events: EventsChild): AutosizeContext {
             priority: rootStyle.getPropertyPriority(property),
           });
         }
-        rootStyle.setProperty(property, "hidden", "important");
+        rootStyle.setProperty(property, "auto", "important");
       } else {
         const saved = savedOverflow.get(property);
         if (!saved) continue;
@@ -229,6 +196,14 @@ export function installAutosizeChild(events: EventsChild): AutosizeContext {
     if (!resizeObserver) {
       resizeObserver = new ResizeObserver(scheduleEmit);
       resizeObserver.observe(document.documentElement);
+      // Head styles can change visible overflow without resizing the body.
+      // Observing the whole document also catches body replacement.
+      new MutationObserver(scheduleEmit).observe(document.documentElement, {
+        attributes: true,
+        childList: true,
+        characterData: true,
+        subtree: true,
+      });
       observeBody();
       window.addEventListener("resize", scheduleEmit);
     }
