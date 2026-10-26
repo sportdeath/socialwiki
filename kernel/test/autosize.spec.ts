@@ -75,6 +75,8 @@ it("returns a viewport-driven page to the containing layout", () => {
   expect(iframe.getAttribute("scrolling")).toBe("auto");
   report(480, host.clientHeight + 20);
   expect(host.style.height).toBe("320px");
+  report(480, 100);
+  expect(iframe.getAttribute("scrolling")).toBe("auto");
   bridge.destroy();
 });
 
@@ -94,9 +96,10 @@ it("can autosize again after a fallback is disabled and re-enabled", async () =>
 });
 
 it("returns a shrinking viewport-driven page to the containing layout", () => {
-  const { host, bridge, report } = setup("height", "height: 320px");
+  const { host, iframe, bridge, report } = setup("height", "height: 320px");
   for (let i = 0; i < 7; i++) report(480, host.clientHeight * 0.9);
   expect(host.style.height).toBe("320px");
+  expect(iframe.getAttribute("scrolling")).toBe("auto");
   bridge.destroy();
 });
 

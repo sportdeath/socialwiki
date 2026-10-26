@@ -45,11 +45,12 @@ export function installAutosizeParent(
   };
 
   const updateFallback = () => {
+    // A stopped axis stays scrollable even if a later measurement fits.
     const next = {
-      x: autosizesWidth(mode) && !!lastSize &&
-        Math.floor(lastSize.width) > element.clientWidth,
-      y: autosizesHeight(mode) && !!lastSize &&
-        Math.floor(lastSize.height) > element.clientHeight,
+      x: autosizesWidth(mode) && (stopped.x || !!lastSize &&
+        Math.floor(lastSize.width) > element.clientWidth),
+      y: autosizesHeight(mode) && (stopped.y || !!lastSize &&
+        Math.floor(lastSize.height) > element.clientHeight),
     };
     // Keep an unmeasured frame scrollable if the library never connects.
     const scrollable = mode === "off" || !lastSize || next.x || next.y;

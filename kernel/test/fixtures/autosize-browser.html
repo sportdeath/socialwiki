@@ -445,7 +445,8 @@
             overflow === 'auto' && reached > 0
               ? 'bounded panel' : 'PANEL OVERFLOW'
           : spec.expectedHost
-          ? Math.abs(size - spec.expectedHost) <= 2 && contentSize <= size
+          ? Math.abs(size - spec.expectedHost) <= 2 && contentSize <= size &&
+            frame?.getAttribute('scrolling') === 'auto' && overflow === 'auto'
             ? 'bounded viewport' : 'BAD VIEWPORT'
           : spec.loop
           ? size <= maxSize && (contentSize <= size || overflow === 'auto' && reached > 0)
