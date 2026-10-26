@@ -129,7 +129,7 @@ export class TranscludeFrame {
     // frames. Other browsers can use srcdoc, including embedded previews that
     // cannot load sandboxed blob frames.
     const useBlob = window.top === window && window.origin !== "null" &&
-      isWebKit(navigator.userAgent);
+      useBlobForRootFrame(navigator.userAgent);
     const blobUrl = useBlob
       ? URL.createObjectURL(new Blob([srcdoc], { type: "text/html" }))
       : null;
@@ -192,6 +192,13 @@ export class TranscludeFrame {
 export function useDataUrlForNestedFrame(parentUrl: string, userAgent: string): boolean {
   return /^(about:srcdoc|data:)/.test(parentUrl) &&
     isWebKit(userAgent);
+}
+
+export function useBlobForRootFrame(userAgent: string): boolean {
+  // These iOS browser shells can download a blob iframe instead of loading it.
+  const iosBrowserWithBlobDownload = /\b(?:iPhone|iPad|iPod)\b/.test(userAgent) &&
+    /\b(?:FxiOS|DuckDuckGo|Ddg)\//i.test(userAgent);
+  return isWebKit(userAgent) && !iosBrowserWithBlobDownload;
 }
 
 function isWebKit(userAgent: string): boolean {

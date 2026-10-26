@@ -2,9 +2,12 @@ import type { PeripheralsService } from "../../shared";
 import { permissionNames } from "./shared";
 
 export function installPermissionsAdapter(service: PeripheralsService) {
-  const permissions = navigator.permissions ?? {};
-  const nativeQuery = permissions.query?.bind(permissions);
+  const nativePermissions = navigator.permissions;
+  const nativeQuery = nativePermissions?.query?.bind(nativePermissions);
   const query = createPermissionQuery(service);
+  // Privacy browsers may install a nonconfigurable query on the native object.
+  // Shadow it on a facade rather than redefining browser-owned properties.
+  const permissions = Object.create(nativePermissions ?? null);
   Object.defineProperty(permissions, "query", { configurable: true, writable: true,
     value: (descriptor: PermissionDescriptor) => permissionNames.includes(descriptor?.name) ? query(descriptor)
       : nativeQuery ? nativeQuery(descriptor) : Promise.reject(new TypeError("Unsupported permission name.")) });

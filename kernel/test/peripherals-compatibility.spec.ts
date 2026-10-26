@@ -2,9 +2,10 @@ import { afterEach, expect, it, vi } from "vitest";
 import { createPeripheralsHost } from "../src/bridges/peripherals/host";
 import { createPeripheralPermissions } from "../src/bridges/peripherals/permissions";
 import { createPermissionsAdapter } from "../src/bridges/peripherals/adapters/permissions/host";
-import { createPermissionQuery } from "../src/bridges/peripherals/adapters/permissions/child";
+import { createPermissionQuery, installPermissionsAdapter } from "../src/bridges/peripherals/adapters/permissions/child";
 import { createMediaAdapter } from "../src/bridges/peripherals/adapters/media/host";
 import { installMediaAdapter } from "../src/bridges/peripherals/adapters/media/child";
+import { installGeolocationAdapter } from "../src/bridges/peripherals/adapters/geolocation/child";
 import { createDeviceListing } from "../src/bridges/peripherals/adapters/media/devices";
 
 const flush = async () => { for (let i = 0; i < 50; i++) await Promise.resolve(); };
@@ -14,6 +15,44 @@ function permissionState(state: PermissionState) {
   return { status, native: { query: vi.fn(async () => status) } as unknown as Permissions,
     change(state: PermissionState) { status.state = state; status.dispatchEvent(new Event("change")); } };
 }
+
+it("installs a permission bridge when the browser locks its native query method", async () => {
+  const nativeQuery = vi.fn(async () => ({ state: "granted" }));
+  const nativePermissions = {} as Permissions;
+  Object.defineProperty(nativePermissions, "query", { value: nativeQuery, configurable: false });
+  const original = Object.getOwnPropertyDescriptor(navigator, "permissions");
+  Object.defineProperty(navigator, "permissions", { configurable: true, value: nativePermissions });
+  const start = vi.fn((_request, update) => {
+    update({ type: "data", value: "prompt" });
+    return { stop() {} };
+  });
+  try {
+    installPermissionsAdapter({ start } as unknown as Parameters<typeof installPermissionsAdapter>[0]);
+    expect(navigator.permissions).not.toBe(nativePermissions);
+    expect(Object.getOwnPropertyDescriptor(nativePermissions, "query")?.value).toBe(nativeQuery);
+    expect((await navigator.permissions.query({ name: "geolocation" })).state).toBe("prompt");
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(nativeQuery).not.toHaveBeenCalled();
+    await navigator.permissions.query({ name: "clipboard-read" as PermissionName });
+    expect(nativeQuery).toHaveBeenCalledTimes(1);
+  } finally {
+    if (original) Object.defineProperty(navigator, "permissions", original);
+    else delete (navigator as unknown as { permissions?: Permissions }).permissions;
+  }
+});
+
+it("keeps starting when a privacy browser locks geolocation", () => {
+  const locked = { getCurrentPosition: vi.fn() };
+  const browserNavigator = Object.create(navigator);
+  Object.defineProperty(browserNavigator, "geolocation", { value: locked, configurable: false });
+  vi.stubGlobal("navigator", browserNavigator);
+  try {
+    expect(() => installGeolocationAdapter({} as Parameters<typeof installGeolocationAdapter>[0])).not.toThrow();
+    expect(browserNavigator.geolocation).toBe(locked);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
 
 it("exposes the effective site/browser permission and change events without prompting", async () => {
   const native = permissionState("granted");

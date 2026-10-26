@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { TranscludeFrame, useDataUrlForNestedFrame } from "../src/transclude/frame";
+import { TranscludeFrame, useBlobForRootFrame, useDataUrlForNestedFrame } from "../src/transclude/frame";
 import type { NavigableTransclude } from "../src/bridges/navigation/shared";
 
 afterEach(() => { document.body.replaceChildren(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
@@ -16,6 +16,16 @@ it("uses data URLs only for nested WebKit frames", () => {
   expect(useDataUrlForNestedFrame("data:text/html,hello", safari)).toBe(true);
   expect(useDataUrlForNestedFrame("about:srcdoc", iosChrome)).toBe(true);
   expect(useDataUrlForNestedFrame("blob:null/123", safari)).toBe(false);
+});
+
+it("starts iOS Firefox and DuckDuckGo roots with srcdoc", () => {
+  const prefix = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) ";
+  expect(useBlobForRootFrame(prefix + "FxiOS/158.1 Mobile/15E148 Safari/604.1")).toBe(false);
+  expect(useBlobForRootFrame(
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.6 Mobile/15E148 Safari/604.1 Ddg/26.6",
+  )).toBe(false);
+  expect(useBlobForRootFrame(prefix + "Version/18.7 Mobile/15E148 Safari/604.1")).toBe(true);
+  expect(useBlobForRootFrame("Mozilla/5.0 Gecko/20100101 Firefox/158.0")).toBe(false);
 });
 
 it("uses srcdoc in Chromium previews and preserves WebKit's top-level blob frame", () => {

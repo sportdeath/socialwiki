@@ -2,6 +2,15 @@ import type { PeripheralsService } from "../../shared";
 import { normalizeOptions, type LocationUpdate } from "./shared";
 
 export function installGeolocationAdapter(service: PeripheralsService) {
+  const existing = Object.getOwnPropertyDescriptor(navigator, "geolocation");
+  if (existing && !existing.configurable) {
+    // Privacy browsers can lock geolocation on the navigator instance. Respect
+    // a read-only replacement rather than aborting the entire document kernel.
+    if ("writable" in existing && existing.writable) {
+      Object.defineProperty(navigator, "geolocation", { value: createGeolocationFacade(service) });
+    }
+    return;
+  }
   Object.defineProperty(navigator, "geolocation", {
     configurable: true, enumerable: true, value: createGeolocationFacade(service),
   });
