@@ -48,7 +48,7 @@ export class TranscludeFrame {
 
     const style = document.createElement("style");
     style.textContent = `
-      iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: none; }
+      iframe { position: absolute; inset: 0; width: 100% !important; height: 100% !important; border: none; }
       :host {
         position: relative;
         display: block;
@@ -156,7 +156,6 @@ export class TranscludeFrame {
       },
       { once: true },
     );
-
     // Set the source before appending so the first load is the target rather
     // than the initial about:blank document.
     if (blobUrl) iframe.src = blobUrl;

@@ -1,173 +1,182 @@
+import iframeResize from "@iframe-resizer/parent";
 import type { EventsParent } from "../events/parent";
 import {
   AUTOSIZE_FALLBACK_EVENT,
   AUTOSIZE_MODE_EVENT,
-  AUTOSIZE_SIZE_EVENT,
   type AutosizeContext,
   type AutosizeMode,
   autosizesHeight,
   autosizesWidth,
-  isAutosizeSize,
   parseAutosizeMode,
 } from "./shared";
 
-// A child can change its content in response to its own size indefinitely.
-// Bound the total distance of host adjustments, while allowing small content updates.
-const AUTOSIZE_BUDGET = 4096;
+// A page can size itself from its iframe viewport (for example, 100vh plus
+// margins). Let the library measure it, but keep the host finite and scrollable.
+const MAX_SIZE = 12000;
+const REPEATED_GAP = 3;
+const PROBE_SIZE = 8;
 
 export function installAutosizeParent(
   element: HTMLElement,
+  iframe: HTMLIFrameElement,
   events: EventsParent,
   documentAutosize?: AutosizeContext,
 ) {
   let mode: AutosizeMode = "off";
-  const savedStyles = new Map<string, { value: string; priority: string }>();
+  let connected = false;
+  let destroyed = false;
   let lastSize: { width: number; height: number } | null = null;
-  let appliedSize: { width: number; height: number } | null = null;
-  let firstAppliedSize: { width: number; height: number } | null = null;
-  let remainingBudget = AUTOSIZE_BUDGET;
-  let stopped = false;
-  let lastFallback: { x: boolean; y: boolean } | null = null;
+  let fallback = { x: false, y: false };
+  const stopped = { x: false, y: false };
+  const growth = {
+    x: { viewport: -1, delta: 0, count: 0, flips: 0, at: 0, probe: null as number | null, timer: 0 },
+    y: { viewport: -1, delta: 0, count: 0, flips: 0, at: 0, probe: null as number | null, timer: 0 },
+  };
+  const savedStyles = new Map<string, { value: string; priority: string }>();
 
   const updateFallback = () => {
-    if (!lastSize) return;
     const next = {
-      x: autosizesWidth(mode) && element.clientWidth < lastSize.width,
-      y: autosizesHeight(mode) && element.clientHeight < lastSize.height,
+      x: autosizesWidth(mode) && !!lastSize &&
+        Math.floor(lastSize.width) > element.clientWidth,
+      y: autosizesHeight(mode) && !!lastSize &&
+        Math.floor(lastSize.height) > element.clientHeight,
     };
-    if (next.x === lastFallback?.x && next.y === lastFallback?.y) return;
-    lastFallback = next;
+    // Keep an unmeasured frame scrollable if the library never connects.
+    const scrollable = mode === "off" || !lastSize || next.x || next.y;
+    iframe.style.overflow = scrollable ? "auto" : "hidden";
+    iframe.setAttribute("scrolling", scrollable ? "auto" : "no");
+    if (next.x === fallback.x && next.y === fallback.y) return;
+    fallback = next;
     events.send(AUTOSIZE_FALLBACK_EVENT, next);
   };
 
-  const applySize = (payload: unknown) => {
-    // Size payload comes from an iframe; treat it as untrusted.
-    if (!isAutosizeSize(payload)) return;
+  const fit = (axis: "x" | "y", reported: number) => {
+    const enabled = axis === "x" ? autosizesWidth(mode) : autosizesHeight(mode);
+    if (!enabled || stopped[axis]) return;
 
-    const firstSize = lastSize === null;
-    lastSize = { width: payload.width, height: payload.height };
-    applyLastSize();
-    // The first size report confirms the child bridge is ready to receive its
-    // mode, including when a cached child script ran before this listener.
-    if (firstSize) events.send(AUTOSIZE_MODE_EVENT, mode);
-    updateFallback();
-  };
-
-  const applyLastSize = () => {
-    if (mode === "off" || !lastSize || stopped) return;
-    let size = lastSize;
-
-    // The child reports the space its document needs. The iframe fills the
-    // host's padding box, while CSS width/height refer to its content box or
-    // border box. Without this conversion, host padding or borders leave the
-    // child viewport smaller than reported and can restart a resize loop.
-    const style = getComputedStyle(element);
-    const px = (value: string) => Number.parseFloat(value) || 0;
-    const cssSize = (size: number, start: string, end: string) => {
-      const first = px(style.getPropertyValue(`padding-${start}`));
-      const last = px(style.getPropertyValue(`padding-${end}`));
-      const border = px(style.getPropertyValue(`border-${start}-width`)) +
-        px(style.getPropertyValue(`border-${end}-width`));
-      // Border-box size = iframe size + borders; content-box size = iframe
-      // size - padding. Both give the iframe the requested viewport.
-      return Math.max(0, size + (style.boxSizing === "border-box" ? border : -first - last));
-    };
-
-    let height = autosizesHeight(mode) ? `${cssSize(size.height, "top", "bottom")}px` : null;
-    let width = autosizesWidth(mode) ? `${cssSize(size.width, "left", "right")}px` : null;
-    if ((height === null || element.style.height === height) &&
-      (width === null || element.style.width === width)) return;
-
-    if (appliedSize) {
-      const movement = Math.max(
-        height === null ? 0 : Math.abs(size.height - appliedSize.height),
-        width === null ? 0 : Math.abs(size.width - appliedSize.width),
-      );
-      if (movement > remainingBudget) {
-        // Finish at a bounded, usable viewport. A 1px skeleton followed by a
-        // large page must not leave a 1px frame that is impossible to touch.
-        // Holding the larger size also stops two-state media-query loops.
-        const first = firstAppliedSize!;
-        size = {
-          width: Math.max(appliedSize.width, Math.min(size.width, first.width + AUTOSIZE_BUDGET)),
-          height: Math.max(appliedSize.height, Math.min(size.height, first.height + AUTOSIZE_BUDGET)),
-        };
-        height = autosizesHeight(mode) ? `${cssSize(size.height, "top", "bottom")}px` : null;
-        width = autosizesWidth(mode) ? `${cssSize(size.width, "left", "right")}px` : null;
-        stopped = true;
-      } else {
-        remainingBudget -= movement;
-      }
+    const viewport = axis === "x" ? element.clientWidth : element.clientHeight;
+    const delta = reported - viewport;
+    const run = growth[axis];
+    const now = performance.now();
+    let feedback = false;
+    if (run.probe !== null) {
+      if (Math.abs(viewport - run.viewport) <= 1) return;
+      clearTimeout(run.timer);
+      feedback = Math.abs(delta - run.probe) <= 1;
+      run.probe = null;
+      run.count = 0;
     }
-    if (height !== null) element.style.height = height;
-    if (width !== null) element.style.width = width;
-    firstAppliedSize ??= size;
-    appliedSize = size;
+    // The library can report the same layout several times. Count only
+    // changes caused by a new iframe viewport.
+    if (Math.abs(viewport - run.viewport) > 1) {
+      if (delta > 1 && Math.abs(delta - run.delta) <= 1 && now - run.at < 50) run.count++;
+      else run.count = delta > 1 ? 1 : 0;
+      // A viewport media query can alternate between two sizes indefinitely.
+      run.flips = Math.abs(delta) > 1 && Math.abs(delta + run.delta) <= 1 && now - run.at < 30000
+        ? run.flips + 1 : 0;
+      run.viewport = viewport;
+      run.delta = delta;
+      run.at = now;
+    }
+    if (feedback || run.flips >= 2 || reported > MAX_SIZE) stopped[axis] = true;
+
+    // A single large late update is valid. At the cap, native scrolling
+    // provides access to content beyond the iframe viewport.
+    let size = Math.min(Math.max(reported, stopped[axis] ? viewport : 0), MAX_SIZE);
+    if (feedback) size = viewport;
+    if (!stopped[axis] && run.count >= REPEATED_GAP) {
+      // A small deliberate viewport change distinguishes CSS feedback from
+      // unrelated content growing by the same amount at the same rate.
+      run.probe = delta;
+      size = Math.min(reported + PROBE_SIZE, MAX_SIZE);
+      run.timer = window.setTimeout(() => {
+        if (run.probe === null || destroyed) return;
+        run.probe = null;
+        run.count = 0;
+        if (lastSize) fit(axis, lastSize[axis === "x" ? "width" : "height"]);
+      }, 200);
+    }
+    const property = axis === "x" ? "width" : "height";
+    const style = getComputedStyle(element);
+    const start = axis === "x" ? "left" : "top";
+    const end = axis === "x" ? "right" : "bottom";
+    const px = (name: string) => Number.parseFloat(style.getPropertyValue(name)) || 0;
+    const cssSize = style.boxSizing === "border-box"
+      ? size + px(`border-${start}-width`) + px(`border-${end}-width`)
+      : size - px(`padding-${start}`) - px(`padding-${end}`);
+    element.style.setProperty(property, `${Math.max(0, cssSize)}px`);
   };
 
-  const stopListening = events.listen((event) => {
-    if (event.type !== AUTOSIZE_SIZE_EVENT) return;
-    // A size report describes this immediate child, not any containing lens.
-    // Do not pass it through as an unhandled event to an outer transclusion.
-    event.preventDefault();
-    applySize(event.detail);
-  });
+  const start = () => {
+    if (destroyed || connected || mode === "off") return;
+    connected = true;
+    iframeResize({
+      license: "GPLv3",
+      direction: "both",
+      // Sandboxed documents have opaque origins. With data: frames, the
+      // library otherwise mistakes the URL for a postMessage target origin.
+      checkOrigin: ["null"],
+      scrolling: "auto",
+      onReady: () => events.send(AUTOSIZE_MODE_EVENT, mode),
+      onResized: ({ width, height }) => {
+        if (!Number.isFinite(width) || !Number.isFinite(height) || width < 0 || height < 0) return;
+        lastSize = { width, height };
+        fit("x", width);
+        fit("y", height);
+        updateFallback();
+      },
+    }, iframe);
+  };
 
-  const restoreStyle = (axis: string) => {
-    const saved = savedStyles.get(axis);
+  const restoreStyle = (property: string) => {
+    const saved = savedStyles.get(property);
     if (!saved) return;
-    if (saved.value) element.style.setProperty(axis, saved.value, saved.priority);
-    else element.style.removeProperty(axis);
-    savedStyles.delete(axis);
-  };
-
-  const saveStyle = (property: string) => {
-    if (savedStyles.has(property)) return;
-    savedStyles.set(property, {
-      value: element.style.getPropertyValue(property),
-      priority: element.style.getPropertyPriority(property),
-    });
+    if (saved.value) element.style.setProperty(property, saved.value, saved.priority);
+    else element.style.removeProperty(property);
+    savedStyles.delete(property);
   };
 
   const setAutosizeMode = () => {
     const value = element.getAttribute("autosize");
-    const inherited = value?.trim().toLowerCase() === "inherit";
-    const previousMode = mode;
-    // A bare `autosize` attribute (`autosize=""`) follows HTML boolean-style
-    // usage and enables both axes.
-    mode = value === "" ? "both" : inherited
-      ? documentAutosize?.mode ?? "off"
-      : parseAutosizeMode(value);
-    if (mode !== previousMode) {
-      // A host-controlled mode change starts a new sizing session.
-      appliedSize = firstAppliedSize = null;
-      remainingBudget = AUTOSIZE_BUDGET;
-      stopped = false;
+    const next = value === "" ? "both"
+      : value?.trim().toLowerCase() === "inherit"
+        ? documentAutosize?.mode ?? "off"
+        : parseAutosizeMode(value);
+    if (next === mode) return;
+    mode = next;
+    stopped.x = stopped.y = false;
+    for (const run of [growth.x, growth.y]) {
+      clearTimeout(run.timer);
+      run.viewport = -1;
+      run.delta = run.count = run.flips = run.at = 0;
+      run.probe = null;
     }
-
-    // Own only the axes being autosized. Save each inline value and priority
-    // before changing it, or switching modes would discard author sizing.
-    for (const axis of ["width", "height"] as const) {
-      const enabled = axis === "width" ? autosizesWidth(mode) : autosizesHeight(mode);
-      if (enabled) saveStyle(axis);
-      else restoreStyle(axis);
+    for (const [property, enabled] of [
+      ["width", autosizesWidth(mode)],
+      ["height", autosizesHeight(mode)],
+    ] as const) {
+      if (enabled && !savedStyles.has(property)) {
+        savedStyles.set(property, {
+          value: element.style.getPropertyValue(property),
+          priority: element.style.getPropertyPriority(property),
+        });
+      } else if (!enabled) restoreStyle(property);
     }
-    applyLastSize();
-    if (lastSize) events.send(AUTOSIZE_MODE_EVENT, mode);
+    start();
+    if (connected) {
+      events.send(AUTOSIZE_MODE_EVENT, mode);
+      if (lastSize) {
+        fit("x", lastSize.width);
+        fit("y", lastSize.height);
+      }
+    }
     updateFallback();
   };
 
   const resizeObserver = new ResizeObserver(updateFallback);
   resizeObserver.observe(element);
-
   const observer = new MutationObserver(setAutosizeMode);
-  observer.observe(element, {
-    attributes: true,
-    attributeFilter: ["autosize"],
-  });
-  // The containing bridge may receive its mode after this child is created,
-  // and may change it later. Reading only once would leave a nested lens at
-  // its initial (usually off) mode.
+  observer.observe(element, { attributes: true, attributeFilter: ["autosize"] });
   const stopInheriting = documentAutosize?.subscribe(() => {
     if (element.getAttribute("autosize")?.trim().toLowerCase() === "inherit") setAutosizeMode();
   });
@@ -175,11 +184,15 @@ export function installAutosizeParent(
 
   return {
     destroy() {
-      stopListening();
+      destroyed = true;
+      (iframe as HTMLIFrameElement & { iFrameResizer?: { disconnect(): void } })
+        .iFrameResizer?.disconnect();
       stopInheriting?.();
       observer.disconnect();
       resizeObserver.disconnect();
-      for (const axis of savedStyles.keys()) restoreStyle(axis);
+      clearTimeout(growth.x.timer);
+      clearTimeout(growth.y.timer);
+      for (const property of savedStyles.keys()) restoreStyle(property);
     },
   };
 }

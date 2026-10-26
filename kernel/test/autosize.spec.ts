@@ -1,424 +1,180 @@
-import { expect, it, vi } from "vitest";
+import iframeResize from "@iframe-resizer/parent";
+import { beforeEach, expect, it, vi } from "vitest";
 import { installAutosizeChild } from "../src/bridges/autosize/child";
 import { installAutosizeParent } from "../src/bridges/autosize/parent";
-import { AUTOSIZE_FALLBACK_EVENT, AUTOSIZE_MODE_EVENT, AUTOSIZE_SIZE_EVENT } from "../src/bridges/autosize/shared";
+import { AUTOSIZE_FALLBACK_EVENT, AUTOSIZE_MODE_EVENT } from "../src/bridges/autosize/shared";
 import { createEventBridge } from "./events";
 
-it("applies reported size only on the axes selected by the host", () => {
+vi.mock("@iframe-resizer/parent", () => ({ default: vi.fn(() => []) }));
+
+beforeEach(() => vi.clearAllMocks());
+
+function setup(mode = "height") {
   const events = createEventBridge();
-  const element = document.createElement("sw-transclude");
-  element.setAttribute("autosize", "height");
-  const parent = installAutosizeParent(element, events.parent);
-  let consumed = false;
-  events.parent.listen((event) => {
-    if (event.type === AUTOSIZE_SIZE_EVENT) consumed = event.defaultPrevented;
+  const host = document.createElement("sw-transclude");
+  const iframe = document.createElement("iframe");
+  host.setAttribute("autosize", mode);
+  Object.defineProperties(host, {
+    clientWidth: { get: () => Number.parseFloat(host.style.width) || 480 },
+    clientHeight: { get: () => Number.parseFloat(host.style.height) || 150 },
   });
+  const bridge = installAutosizeParent(host, iframe, events.parent);
+  const options = vi.mocked(iframeResize).mock.calls.at(-1)?.[0];
+  const report = (width: number, height: number) => {
+    if (!options?.onResized) throw new Error("Library was not initialized");
+    options.onResized({ iframe: iframe as never, width, height, type: "resizeObserver" });
+  };
+  return { events, host, iframe, bridge, options, report };
+}
 
-  events.child.emit(AUTOSIZE_SIZE_EVENT, { width: 320, height: 480 });
-
-  expect(consumed).toBe(true);
-  expect(element.style.height).toBe("480px");
-  expect(element.style.width).toBe("");
-  parent.destroy();
+it("starts the library only for an autosized iframe", async () => {
+  const { host, bridge } = setup("off");
+  expect(iframeResize).not.toHaveBeenCalled();
+  host.setAttribute("autosize", "height");
+  await vi.waitFor(() => expect(iframeResize).toHaveBeenCalledOnce());
+  bridge.destroy();
 });
 
-it("inherits the containing document's autosize mode", () => {
-  const outerEvents = createEventBridge();
-  const context = installAutosizeChild(outerEvents.child);
-  let modeConsumed = false;
-  outerEvents.child.listen(AUTOSIZE_MODE_EVENT, (event) => {
-    modeConsumed = event.defaultPrevented;
-  });
-  const innerEvents = createEventBridge();
-  const element = document.createElement("sw-transclude");
-  element.setAttribute("autosize", "inherit");
-  const parent = installAutosizeParent(element, innerEvents.parent, context);
-  innerEvents.child.emit(AUTOSIZE_SIZE_EVENT, { width: 320, height: 480 });
-  expect(element.style.width).toBe("");
-  expect(element.style.height).toBe("");
-
-  outerEvents.parent.send(AUTOSIZE_MODE_EVENT, "height");
-  expect(modeConsumed).toBe(true);
-  expect(element.style.width).toBe("");
-  expect(element.style.height).toBe("480px");
-
-  outerEvents.parent.send(AUTOSIZE_MODE_EVENT, "both");
-  expect(element.style.width).toBe("320px");
-  expect(element.style.height).toBe("480px");
-
-  outerEvents.parent.send(AUTOSIZE_MODE_EVENT, "off");
-  expect(element.style.width).toBe("");
-  expect(element.style.height).toBe("");
-
-  outerEvents.parent.send(AUTOSIZE_MODE_EVENT, "width");
-  const lateEvents = createEventBridge();
-  const lateElement = document.createElement("sw-transclude");
-  lateElement.setAttribute("autosize", "inherit");
-  const lateParent = installAutosizeParent(lateElement, lateEvents.parent, context);
-  lateEvents.child.emit(AUTOSIZE_SIZE_EVENT, { width: 240, height: 180 });
-  expect(lateElement.style.width).toBe("240px");
-  expect(lateElement.style.height).toBe("");
-  lateParent.destroy();
-  parent.destroy();
-  outerEvents.parent.destroy();
-});
-
-it("preserves root overflow on axes the child bridge does not own", () => {
-  const rootStyle = document.documentElement.style;
-  const original = rootStyle.cssText;
-  const events = createEventBridge();
-  try {
-    rootStyle.removeProperty("overflow-x");
-    installAutosizeChild(events.child);
-    rootStyle.setProperty("overflow-x", "scroll");
-
-    events.parent.send(AUTOSIZE_MODE_EVENT, "height");
-    expect(rootStyle.overflowX).toBe("scroll");
-    expect(rootStyle.overflowY).toBe("hidden");
-
-    events.parent.send(AUTOSIZE_MODE_EVENT, "both");
-    expect(rootStyle.overflowX).toBe("hidden");
-    events.parent.send(AUTOSIZE_MODE_EVENT, "off");
-    expect(rootStyle.overflowX).toBe("scroll");
-  } finally {
-    rootStyle.cssText = original;
-    events.parent.destroy();
-  }
-});
-
-it("enables nested scrolling only when the parent reports fallback", () => {
-  const rootStyle = document.documentElement.style;
-  const original = rootStyle.cssText;
-  const events = createEventBridge();
-  try {
-    installAutosizeChild(events.child);
-    events.parent.send(AUTOSIZE_MODE_EVENT, "height");
-    expect(rootStyle.overflowY).toBe("hidden");
-    expect(rootStyle.scrollbarWidth).toBe("none");
-
-    events.parent.send(AUTOSIZE_FALLBACK_EVENT, { x: false, y: true });
-    expect(rootStyle.overflowY).toBe("auto");
-    expect(rootStyle.scrollbarWidth).toBe("");
-    events.parent.send(AUTOSIZE_FALLBACK_EVENT, { x: false, y: false });
-    expect(rootStyle.overflowY).toBe("hidden");
-    expect(rootStyle.scrollbarWidth).toBe("none");
-
-    events.parent.send(AUTOSIZE_FALLBACK_EVENT, { x: true, y: false });
-    expect(rootStyle.overflowY).toBe("hidden");
-    expect(rootStyle.scrollbarWidth).toBe("none");
-
-    events.parent.send(AUTOSIZE_MODE_EVENT, "off");
-    expect(rootStyle.overflowY).toBe("");
-    expect(rootStyle.scrollbarWidth).toBe("");
-  } finally {
-    rootStyle.cssText = original;
-    events.parent.destroy();
-  }
-});
-
-it("keeps fitted scrolling disabled after late author styles and restores them", async () => {
-  const rootStyle = document.documentElement.style;
-  const original = rootStyle.cssText;
-  const events = createEventBridge();
-  try {
-    installAutosizeChild(events.child);
-    events.parent.send(AUTOSIZE_MODE_EVENT, "height");
-    rootStyle.setProperty("overflow-y", "auto");
-    rootStyle.setProperty("scrollbar-width", "thin");
-
-    await vi.waitFor(() => expect(rootStyle.overflowY).toBe("hidden"));
-    expect(rootStyle.scrollbarWidth).toBe("none");
-    events.parent.send(AUTOSIZE_MODE_EVENT, "off");
-    expect(rootStyle.overflowY).toBe("auto");
-    expect(rootStyle.scrollbarWidth).toBe("thin");
-  } finally {
-    rootStyle.cssText = original;
-    events.parent.destroy();
-  }
-});
-
-it("reports fallback when a host is constrained or the growth budget stops", () => {
-  const events = createEventBridge();
-  const element = document.createElement("sw-transclude");
-  element.setAttribute("autosize", "height");
-  let availableHeight = 480;
-  Object.defineProperty(element, "clientHeight", {
-    get: () => Math.min(availableHeight, Number.parseFloat(element.style.height) || 0),
-  });
-  const fallback: unknown[] = [];
-  events.child.listen(AUTOSIZE_FALLBACK_EVENT, (event) => fallback.push(event.detail));
-  const parent = installAutosizeParent(element, events.parent);
-
-  events.child.emit(AUTOSIZE_SIZE_EVENT, { width: 320, height: 480 });
-  expect(fallback.at(-1)).toEqual({ x: false, y: false });
-
-  availableHeight = 300;
-  events.child.emit(AUTOSIZE_SIZE_EVENT, { width: 320, height: 480 });
-  expect(fallback.at(-1)).toEqual({ x: false, y: true });
-
-  availableHeight = 10000;
-  events.child.emit(AUTOSIZE_SIZE_EVENT, { width: 320, height: 10000 });
-  expect(fallback.at(-1)).toEqual({ x: false, y: true });
-  parent.destroy();
-});
-
-it("updates fallback when a host constraint changes without another size report", () => {
-  let notifyResize = () => {};
-  vi.stubGlobal("ResizeObserver", class {
-    constructor(callback: () => void) { notifyResize = callback; }
-    observe() {}
-    disconnect() {}
-  });
-  const events = createEventBridge();
-  const element = document.createElement("sw-transclude");
-  element.setAttribute("autosize", "height");
-  let availableHeight = 600;
-  Object.defineProperty(element, "clientHeight", {
-    get: () => Math.min(availableHeight, Number.parseFloat(element.style.height) || 0),
-  });
-  const fallback: unknown[] = [];
-  events.child.listen(AUTOSIZE_FALLBACK_EVENT, (event) => fallback.push(event.detail));
-  try {
-    const parent = installAutosizeParent(element, events.parent);
-    events.child.emit(AUTOSIZE_SIZE_EVENT, { width: 320, height: 600 });
-    availableHeight = 300;
-    notifyResize();
-    availableHeight = 600;
-    notifyResize();
-    expect(fallback).toEqual([
-      { x: false, y: false },
-      { x: false, y: true },
-      { x: false, y: false },
-    ]);
-    parent.destroy();
-  } finally {
-    vi.unstubAllGlobals();
-    events.parent.destroy();
-  }
-});
-
-it("does not enable vertical scrolling when only width exhausts the budget", () => {
-  const events = createEventBridge();
-  const element = document.createElement("sw-transclude");
-  element.setAttribute("autosize", "both");
-  Object.defineProperty(element, "clientWidth", {
-    get: () => Number.parseFloat(element.style.width) || 0,
-  });
-  Object.defineProperty(element, "clientHeight", {
-    get: () => Number.parseFloat(element.style.height) || 0,
-  });
-  const fallback: unknown[] = [];
-  events.child.listen(AUTOSIZE_FALLBACK_EVENT, (event) => fallback.push(event.detail));
-  const parent = installAutosizeParent(element, events.parent);
-
-  events.child.emit(AUTOSIZE_SIZE_EVENT, { width: 320, height: 480 });
-  events.child.emit(AUTOSIZE_SIZE_EVENT, { width: 10000, height: 480 });
-  expect(fallback.at(-1)).toEqual({ x: true, y: false });
-  parent.destroy();
-});
-
-it("applies the latest reported size when autosize is enabled later", async () => {
-  const events = createEventBridge();
-  const element = document.createElement("sw-transclude");
-  const parent = installAutosizeParent(element, events.parent);
-
-  events.child.emit(AUTOSIZE_SIZE_EVENT, { width: 320, height: 480 });
-  expect(element.style.height).toBe("");
-
-  element.setAttribute("autosize", "height");
-  await vi.waitFor(() => expect(element.style.height).toBe("480px"));
-  expect(element.style.width).toBe("");
-  parent.destroy();
-});
-
-it("sends the mode after the child reports a size and when it changes", async () => {
-  const events = createEventBridge();
+it("fits only the chosen axis and sends the mode when the library is ready", () => {
+  const { events, host, iframe, bridge, options, report } = setup("height");
   const modes: unknown[] = [];
   events.child.listen(AUTOSIZE_MODE_EVENT, (event) => modes.push(event.detail));
-  const element = document.createElement("sw-transclude");
-  element.setAttribute("autosize", "both");
-  const parent = installAutosizeParent(element, events.parent);
-
-  expect(modes).toEqual([]);
-  events.child.emit(AUTOSIZE_SIZE_EVENT, { width: 320, height: 480 });
-  expect(modes).toEqual(["both"]);
-
-  element.setAttribute("autosize", "height");
-  await vi.waitFor(() => expect(modes).toEqual(["both", "height"]));
-  parent.destroy();
+  options?.onReady?.(document.createElement("iframe") as never);
+  report(320, 480);
+  expect(host.style.height).toBe("480px");
+  expect(host.style.width).toBe("");
+  expect(iframe.getAttribute("scrolling")).toBe("no");
+  expect(iframe.style.overflow).toBe("hidden");
+  expect(modes).toContain("height");
+  bridge.destroy();
 });
 
-it("preserves explicit dimensions while autosizing is off", () => {
-  const events = createEventBridge();
-  const element = document.createElement("sw-transclude");
-  element.style.cssText = "width: 75%; height: 100vh";
-  const parent = installAutosizeParent(element, events.parent);
-
-  events.child.emit(AUTOSIZE_SIZE_EVENT, { width: 320, height: 480 });
-  expect(element.style.width).toBe("75%");
-  expect(element.style.height).toBe("100vh");
-  parent.destroy();
-  expect(element.style.height).toBe("100vh");
+it("keeps the original inline style when autosize is turned off", async () => {
+  const { host, bridge, report } = setup("height");
+  report(320, 480);
+  host.setAttribute("autosize", "off");
+  await vi.waitFor(() => expect(host.style.height).toBe(""));
+  bridge.destroy();
 });
 
-it("restores author sizing when switching axes, disabling, or destroying autosize", async () => {
-  const events = createEventBridge();
-  const element = document.createElement("sw-transclude");
-  element.style.cssText = "width: 75%; height: 100vh !important";
-  element.setAttribute("autosize", "height");
-  const parent = installAutosizeParent(element, events.parent);
-  events.child.emit(AUTOSIZE_SIZE_EVENT, { width: 320, height: 480 });
-  expect(element.style.height).toBe("480px");
-  expect(element.style.width).toBe("75%");
-
-  element.setAttribute("autosize", "width");
-  await vi.waitFor(() => expect(element.style.width).toBe("320px"));
-  expect(element.style.height).toBe("100vh");
-  expect(element.style.getPropertyPriority("height")).toBe("important");
-
-  element.removeAttribute("autosize");
-  await vi.waitFor(() => expect(element.style.width).toBe("75%"));
-  element.setAttribute("autosize", "both");
-  await vi.waitFor(() => expect(element.style.height).toBe("480px"));
-  parent.destroy();
-  expect(element.style.width).toBe("75%");
-  expect(element.style.height).toBe("100vh");
-  expect(element.style.getPropertyPriority("height")).toBe("important");
+it("allows one large late update without stopping the library", () => {
+  const { host, bridge, report } = setup("height");
+  report(480, 1);
+  report(480, 10000);
+  expect(host.style.height).toBe("10000px");
+  report(480, 10500);
+  expect(host.style.height).toBe("10500px");
+  bridge.destroy();
 });
 
-it("applies measured height without changing an author's minimum", async () => {
-  const events = createEventBridge();
-  const element = document.createElement("sw-transclude");
-  element.style.minHeight = "180px";
-  element.setAttribute("autosize", "height");
-  const parent = installAutosizeParent(element, events.parent);
-
-  events.child.emit(AUTOSIZE_SIZE_EVENT, { width: 240, height: 80 });
-  expect(element.style.height).toBe("80px");
-  expect(element.style.minHeight).toBe("180px");
-
-  element.setAttribute("autosize", "width");
-  await vi.waitFor(() => expect(element.style.height).toBe(""));
-  expect(element.style.minHeight).toBe("180px");
-  parent.destroy();
+it("bounds a viewport-driven growth loop", () => {
+  const { host, bridge, report } = setup("height");
+  for (let i = 0; i < 5; i++) report(480, host.clientHeight + 20);
+  const bounded = host.style.height;
+  report(480, host.clientHeight + 20);
+  expect(host.style.height).toBe(bounded);
+  bridge.destroy();
 });
 
-it("allows small content updates while bounding total growth", async () => {
-  const events = createEventBridge();
-  const element = document.createElement("sw-transclude");
-  element.setAttribute("autosize", "height");
-  const parent = installAutosizeParent(element, events.parent);
-
-  events.child.emit(AUTOSIZE_SIZE_EVENT, { width: 200, height: 100 });
-  for (let height = 120; height <= 900; height += 20) {
-    events.child.emit(AUTOSIZE_SIZE_EVENT, { width: 200, height });
-  }
-  expect(element.style.height).toBe("900px");
-
-  events.child.emit(AUTOSIZE_SIZE_EVENT, { width: 200, height: 10000 });
-  expect(element.style.height).toBe("4196px");
-
-  element.removeAttribute("autosize");
-  await vi.waitFor(() => expect(element.style.height).toBe(""));
-  element.setAttribute("autosize", "height");
-  await vi.waitFor(() => expect(element.style.height).toBe("10000px"));
-
-  parent.destroy();
+it("holds the larger size when CSS alternates between two heights", () => {
+  const { host, bridge, report } = setup("height");
+  report(480, 50);
+  report(480, 200);
+  report(480, 50);
+  report(480, 200);
+  expect(host.style.height).toBe("200px");
+  report(480, 50);
+  expect(host.style.height).toBe("200px");
+  bridge.destroy();
 });
 
-it("bounds exponentially growing reports by total movement", () => {
-  const events = createEventBridge();
-  const element = document.createElement("sw-transclude");
-  element.setAttribute("autosize", "height");
-  const parent = installAutosizeParent(element, events.parent);
-
-  for (const height of [100, 220, 460, 940, 1900, 3820, 7660]) {
-    events.child.emit(AUTOSIZE_SIZE_EVENT, { width: 200, height });
-  }
-  expect(element.style.height).toBe("4196px");
-
-  parent.destroy();
+it("caps extreme measurements", () => {
+  const { host, iframe, bridge, report } = setup("height");
+  report(480, 100000);
+  expect(host.style.height).toBe("12000px");
+  expect(iframe.getAttribute("scrolling")).toBe("auto");
+  bridge.destroy();
 });
 
-it("leaves a large late page with a usable bounded viewport", () => {
-  const events = createEventBridge();
-  const element = document.createElement("sw-transclude");
-  element.setAttribute("autosize", "height");
-  const parent = installAutosizeParent(element, events.parent);
-
-  events.child.emit(AUTOSIZE_SIZE_EVENT, { width: 200, height: 1 });
-  events.child.emit(AUTOSIZE_SIZE_EVENT, { width: 200, height: 10000 });
-  expect(element.style.height).toBe("4097px");
-  events.child.emit(AUTOSIZE_SIZE_EVENT, { width: 200, height: 12000 });
-  expect(element.style.height).toBe("4097px");
-
-  parent.destroy();
+it("keeps fitting varied late growth", () => {
+  const { host, bridge, report } = setup("height");
+  report(480, 170);
+  report(480, 210);
+  report(480, 260);
+  report(480, 320);
+  expect(host.style.height).toBe("320px");
+  bridge.destroy();
 });
 
-it("remeasures body content after resize, DOM changes, and shrinkage", async () => {
-  const events = createEventBridge();
-  const heights: number[] = [];
-  events.parent.listen((event) => {
-    if (event.type === AUTOSIZE_SIZE_EVENT) {
-      heights.push((event.detail as { height: number }).height);
-    }
-  });
-
-  let viewport = 300;
-  let contentHeight = 400;
-  const doc = document.documentElement;
-  const originalStyle = doc.style.cssText;
-  const oldClientHeight = Object.getOwnPropertyDescriptor(doc, "clientHeight");
-  const oldScrollHeight = Object.getOwnPropertyDescriptor(document.body, "scrollHeight");
-  Object.defineProperty(doc, "clientHeight", { configurable: true, get: () => viewport });
-  Object.defineProperty(document.body, "scrollHeight", { configurable: true, get: () => contentHeight });
-  const content = document.createElement("div");
-  document.body.append(content);
-
-  let notifyResize = () => {};
-  vi.stubGlobal("ResizeObserver", class {
-    constructor(callback: () => void) { notifyResize = callback; }
-    observe() {}
-    unobserve() {}
-    disconnect() {}
-  });
-
+it("does not stop regularly spaced content growth", () => {
+  const { host, bridge, report } = setup("height");
+  let time = 0;
+  const clock = vi.spyOn(performance, "now").mockImplementation(() => time);
   try {
+    for (let height = 100; height <= 900; height += 20) {
+      report(480, height);
+      time += 60;
+    }
+    expect(host.style.height).toBe("900px");
+  } finally {
+    clock.mockRestore();
+    bridge.destroy();
+  }
+});
+
+it("does not mistake rapid content updates for viewport feedback", () => {
+  const { host, bridge, report } = setup("height");
+  let time = 0;
+  const clock = vi.spyOn(performance, "now").mockImplementation(() => time);
+  try {
+    for (let height = 100; height <= 900; height += 20) {
+      report(480, height);
+      time += 20;
+    }
+    expect(host.style.height).toBe("900px");
+  } finally {
+    clock.mockRestore();
+    bridge.destroy();
+  }
+});
+
+it("lets a nested transclusion inherit later mode changes", async () => {
+  const outer = createEventBridge();
+  const context = installAutosizeChild(outer.child);
+  const inner = createEventBridge();
+  const host = document.createElement("sw-transclude");
+  const iframe = document.createElement("iframe");
+  host.setAttribute("autosize", "inherit");
+  const bridge = installAutosizeParent(host, iframe, inner.parent, context);
+  expect(iframeResize).not.toHaveBeenCalled();
+  outer.parent.send(AUTOSIZE_MODE_EVENT, "height");
+  expect(iframeResize).toHaveBeenCalledOnce();
+  outer.parent.send(AUTOSIZE_MODE_EVENT, "off");
+  await vi.waitFor(() => expect(host.style.height).toBe(""));
+  bridge.destroy();
+});
+
+it("enables native scrolling only in fallback and restores author overflow", () => {
+  const original = document.documentElement.style.cssText;
+  const originalBody = document.body.style.cssText;
+  const events = createEventBridge();
+  try {
+    document.documentElement.style.setProperty("overflow-y", "scroll");
+    document.body.style.setProperty("overflow-x", "hidden");
     installAutosizeChild(events.child);
     events.parent.send(AUTOSIZE_MODE_EVENT, "height");
-    await vi.waitFor(() => expect(heights.at(-1)).toBe(400));
-
-    viewport = 400;
-    contentHeight = 450;
-    notifyResize();
-    await vi.waitFor(() => expect(heights.at(-1)).toBe(450));
-
-    viewport = 450;
-    contentHeight = 900;
-    window.dispatchEvent(new Event("resize"));
-    content.append("Unrelated resize-handler text");
-    notifyResize();
-    await vi.waitFor(() => expect(heights.at(-1)).toBe(900));
-    expect(doc.style.overflowY).toBe("hidden");
-
-    content.append("Late content");
-    await new Promise((resolve) => setTimeout(resolve, 40));
-    expect(heights.at(-1)).toBe(900);
-
-    contentHeight = 200;
-    notifyResize();
-    await vi.waitFor(() => expect(heights.at(-1)).toBe(200));
-    contentHeight = 900;
-    content.append("Growth after a shrink");
-    await vi.waitFor(() => expect(heights.at(-1)).toBe(900));
+    expect(document.documentElement.style.overflowY).toBe("clip");
+    expect(document.body.style.overflowX).toBe("clip");
+    expect(document.body.style.overflowY).toBe("");
+    events.parent.send(AUTOSIZE_FALLBACK_EVENT, { x: false, y: true });
+    expect(document.documentElement.style.overflowY).toBe("auto");
+    expect(document.body.style.overflowX).toBe("hidden");
+    expect(document.body.style.overflowY).toBe("");
+    events.parent.send(AUTOSIZE_MODE_EVENT, "off");
+    expect(document.documentElement.style.overflowY).toBe("scroll");
   } finally {
-    content.remove();
-    doc.style.cssText = originalStyle;
-    if (oldClientHeight) Object.defineProperty(doc, "clientHeight", oldClientHeight);
-    else Reflect.deleteProperty(doc, "clientHeight");
-    if (oldScrollHeight) Object.defineProperty(document.body, "scrollHeight", oldScrollHeight);
-    else Reflect.deleteProperty(document.body, "scrollHeight");
-    vi.unstubAllGlobals();
+    document.documentElement.style.cssText = original;
+    document.body.style.cssText = originalBody;
     events.parent.destroy();
   }
 });

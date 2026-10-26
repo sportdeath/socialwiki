@@ -17,7 +17,7 @@
 </head>
 <body>
   <h1>Autosize browser cases</h1>
-  <p>Each case runs in a sandboxed Social.Wiki transclusion. Compare its iframe size with its document's scroll size.</p>
+  <p>Each case runs in a sandboxed Social.Wiki transclusion. Compare its iframe size with its document's scroll size. iframe-resizer defers updates for offscreen frames, so bring a case into view before treating a mismatch as a failure.</p>
   <div id="cases"></div>
   <script>
     if (window.top !== window) {
@@ -60,6 +60,15 @@
             box.style.height = (100 + (++stage * 20)) + 'px';
             if (stage === 40) clearInterval(timer);
           }, 60);`,
+      },
+      {
+        id: "rapid-stages",
+        markup: '<div id="box" style="height:100px;background:#def">Rapid late updates</div>',
+        run: `let stage = 0;
+          const timer = setInterval(() => {
+            box.style.height = (100 + (++stage * 20)) + 'px';
+            if (stage === 40) clearInterval(timer);
+          }, 20);`,
       },
       {
         id: "text-growth",
@@ -134,6 +143,24 @@
         id: "horizontal-overflow",
         css: 'body{min-height:100vh;margin:0}',
         markup: '<div style="width:calc(100vw + 40px);height:calc(100vh - 40px)">Wide page with a bottom marker</div>',
+      },
+      {
+        id: "body-hidden-x",
+        css: 'body{overflow-x:hidden}',
+        markup: '<div id="box" style="height:200px">No independent vertical body scroll</div>',
+        run: `setTimeout(() => { box.style.height = '800px'; }, 100);`,
+        bodyClip: true,
+      },
+      {
+        id: "body-hidden-x-absolute-overflow",
+        css: 'body{overflow-x:hidden;height:100px;position:relative}',
+        markup: '<div style="position:absolute;top:200px;height:200px">Absolute content remains measurable</div>',
+        bodyClip: true,
+      },
+      {
+        id: "missing-child-resizer",
+        markup: '<div style="height:600px">Content remains scrollable if the child never connects</div>',
+        disconnected: true,
       },
       {
         id: "fractional-height",
@@ -329,7 +356,7 @@
     });
 
     function childSource(spec) {
-      const boot = '<script src="https://social.wiki/init.js">' + closeScript;
+      const boot = spec.disconnected ? '' : '<script src="/init.js">' + closeScript;
       const script = `
         const caseId = ${JSON.stringify(spec.id)};
         ${spec.run || ''}
@@ -349,6 +376,8 @@
           viewportWidth: innerWidth,
           overflowY: getComputedStyle(document.documentElement).overflowY,
           overflowX: getComputedStyle(document.documentElement).overflowX,
+          bodyOverflowY: getComputedStyle(document.body).overflowY,
+          bodyOverflowX: getComputedStyle(document.body).overflowX,
           reachedX,
           reachedY,
         }, '*');
@@ -377,6 +406,7 @@
     }
 
     setInterval(() => {
+      const maxSize = 12000;
       for (const spec of cases) {
         const data = latest.get(spec.id);
         const height = spec.stoppedAt || Math.round(spec.host.getBoundingClientRect().height);
@@ -386,17 +416,23 @@
         const contentSize = spec.axis === 'width' ? data?.width : data?.height;
         const overflow = spec.axis === 'width' ? data?.overflowX : data?.overflowY;
         const reached = spec.axis === 'width' ? data?.reachedX : data?.reachedY;
-        if (spec.loop && size > 5000 && !spec.stoppedAt) {
+        const frame = spec.host.shadowRoot?.querySelector('iframe:not([title="Social.Wiki Loading"])');
+        if (spec.loop && size > maxSize && !spec.stoppedAt) {
           spec.stoppedAt = size;
           spec.host.remove();
         }
         const difference = data ? contentSize - viewportSize : null;
-        const status = !data ? 'waiting' : spec.loop
-          ? size < 5000 && (contentSize <= size || overflow === 'auto' && reached > 0)
+        const status = !data ? 'waiting' : spec.disconnected
+          ? frame?.getAttribute('scrolling') === 'auto' && reached > 0
+            ? 'scrollable fallback' : 'CLIPPED'
+          : spec.loop
+          ? size <= maxSize && (contentSize <= size || overflow === 'auto' && reached > 0)
             ? 'bounded and scrollable' : 'RUNAWAY'
           : spec.id === 'horizontal-overflow'
             ? data.clientHeight === data.viewportHeight && data.reachedY === 0
               ? 'pass' : 'GUTTER OR NESTED SCROLL'
+          : spec.bodyClip && (data.bodyOverflowX !== 'clip' || data.bodyOverflowY !== 'visible')
+            ? 'BODY SCROLL TARGET'
           : spec.constrained || spec.fallback
             ? spec.fallback && Math.abs(difference) <= 2 ? 'pass'
               : viewportSize >= (spec.fallback ? 200 : 1) && overflow === 'auto' && reached > 0

@@ -28,7 +28,7 @@ export function createParentBridgeEndpointInstaller(
       documentRoute,
     );
     const stopHistoryBridge = installHistoryParent(host, events, documentRoute);
-    const autosizeBridge = installAutosizeParent(host, events, autosize);
+    const autosizeBridge = installAutosizeParent(host, iframe, events, autosize);
     const resolution = installResolutionParent(events, resolve);
     const graffitiBridge = installGraffitiParent(iframe, host, createGraffiti());
     const peripheralsBridge = installPeripheralsParent(iframe, host, peripherals);
