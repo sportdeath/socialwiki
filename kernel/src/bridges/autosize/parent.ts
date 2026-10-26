@@ -29,10 +29,20 @@ export function installAutosizeParent(
   let fallback = { x: false, y: false };
   const stopped = { x: false, y: false };
   const growth = {
-    x: { viewport: -1, delta: 0, count: 0, flips: 0, at: 0, probe: null as number | null, timer: 0 },
-    y: { viewport: -1, delta: 0, count: 0, flips: 0, at: 0, probe: null as number | null, timer: 0 },
+    x: { viewport: -1, delta: 0, slope: 0, count: 0, flips: 0, at: 0,
+      probe: null as { reported: number; slope: number } | null, timer: 0 },
+    y: { viewport: -1, delta: 0, slope: 0, count: 0, flips: 0, at: 0,
+      probe: null as { reported: number; slope: number } | null, timer: 0 },
   };
   const savedStyles = new Map<string, { value: string; priority: string }>();
+
+  const restoreStyle = (property: string) => {
+    const saved = savedStyles.get(property);
+    if (!saved) return;
+    if (saved.value) element.style.setProperty(property, saved.value, saved.priority);
+    else element.style.removeProperty(property);
+    savedStyles.delete(property);
+  };
 
   const updateFallback = () => {
     const next = {
@@ -62,15 +72,24 @@ export function installAutosizeParent(
     if (run.probe !== null) {
       if (Math.abs(viewport - run.viewport) <= 1) return;
       clearTimeout(run.timer);
-      feedback = Math.abs(delta - run.probe) <= 1;
+      const expected = run.probe.slope * (viewport - run.viewport);
+      feedback = Math.abs(expected) > 1 &&
+        Math.abs((reported - run.probe.reported) - expected) <= 2;
       run.probe = null;
       run.count = 0;
     }
-    // The library can report the same layout several times. Count only
-    // changes caused by a new iframe viewport.
+    // Repeated proportional changes suggest that content follows the iframe
+    // viewport. A deliberate extra change distinguishes that from an author
+    // independently updating content at the same rate.
+    let direction = 0;
     if (Math.abs(viewport - run.viewport) > 1) {
-      if (delta > 1 && Math.abs(delta - run.delta) <= 1 && now - run.at < 50) run.count++;
-      else run.count = delta > 1 ? 1 : 0;
+      direction = Math.sign(viewport - run.viewport);
+      const previousReported = run.viewport + run.delta;
+      const slope = (reported - previousReported) / (viewport - run.viewport);
+      if (run.viewport >= 0 && slope > 0 && now - run.at < 50) {
+        run.count = Math.abs(slope - run.slope) <= 0.1 ? run.count + 1 : 1;
+        run.slope = slope;
+      } else run.count = 0;
       // A viewport media query can alternate between two sizes indefinitely.
       run.flips = Math.abs(delta) > 1 && Math.abs(delta + run.delta) <= 1 && now - run.at < 30000
         ? run.flips + 1 : 0;
@@ -78,17 +97,19 @@ export function installAutosizeParent(
       run.delta = delta;
       run.at = now;
     }
-    if (feedback || run.flips >= 2 || reported > MAX_SIZE) stopped[axis] = true;
+    const property = axis === "x" ? "width" : "height";
+    if (feedback || run.flips >= 2 || reported > MAX_SIZE) {
+      stopped[axis] = true;
+      // A viewport-driven page needs a stable iframe viewport. Give sizing
+      // back to the containing page and let the iframe scroll internally.
+      restoreStyle(property);
+      return;
+    }
 
-    // A single large late update is valid. At the cap, native scrolling
-    // provides access to content beyond the iframe viewport.
-    let size = Math.min(Math.max(reported, stopped[axis] ? viewport : 0), MAX_SIZE);
-    if (feedback) size = viewport;
-    if (!stopped[axis] && run.count >= REPEATED_GAP) {
-      // A small deliberate viewport change distinguishes CSS feedback from
-      // unrelated content growing by the same amount at the same rate.
-      run.probe = delta;
-      size = Math.min(reported + PROBE_SIZE, MAX_SIZE);
+    let size = reported;
+    if (direction && run.count >= REPEATED_GAP) {
+      run.probe = { reported, slope: run.slope };
+      size = Math.min(Math.max(1, reported + direction * PROBE_SIZE), MAX_SIZE);
       run.timer = window.setTimeout(() => {
         if (run.probe === null || destroyed) return;
         run.probe = null;
@@ -96,7 +117,6 @@ export function installAutosizeParent(
         if (lastSize) fit(axis, lastSize[axis === "x" ? "width" : "height"]);
       }, 200);
     }
-    const property = axis === "x" ? "width" : "height";
     const style = getComputedStyle(element);
     const start = axis === "x" ? "left" : "top";
     const end = axis === "x" ? "right" : "bottom";
@@ -128,14 +148,6 @@ export function installAutosizeParent(
     }, iframe);
   };
 
-  const restoreStyle = (property: string) => {
-    const saved = savedStyles.get(property);
-    if (!saved) return;
-    if (saved.value) element.style.setProperty(property, saved.value, saved.priority);
-    else element.style.removeProperty(property);
-    savedStyles.delete(property);
-  };
-
   const setAutosizeMode = () => {
     const value = element.getAttribute("autosize");
     const next = value === "" ? "both"
@@ -148,7 +160,7 @@ export function installAutosizeParent(
     for (const run of [growth.x, growth.y]) {
       clearTimeout(run.timer);
       run.viewport = -1;
-      run.delta = run.count = run.flips = run.at = 0;
+      run.delta = run.slope = run.count = run.flips = run.at = 0;
       run.probe = null;
     }
     for (const [property, enabled] of [

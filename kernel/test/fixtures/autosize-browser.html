@@ -282,6 +282,19 @@
         loop: true,
       },
       {
+        id: "viewport-messenger",
+        sectionStyle: 'height:420px;display:flex;flex-direction:column',
+        hostStyle: 'flex:1 0 auto;min-height:0;width:100%',
+        markup: '<div style="height:calc(100dvh + 20px);background:#fed">Messages in a viewport-sized panel</div>',
+        panel: true,
+      },
+      {
+        id: "viewport-shrink",
+        hostStyle: 'height:320px',
+        markup: '<div style="height:90vh;background:#fed">Ninety percent of the viewport</div>',
+        expectedHost: 320,
+      },
+      {
         id: "viewport-loop-with-mutation",
         markup: '<div style="height:calc(100vh + 20px);background:#fed">Viewport plus padding <span id="counter">0</span></div>',
         run: `let count = 0;
@@ -392,6 +405,7 @@
     for (const spec of cases) {
       const section = document.createElement('section');
       section.className = 'case';
+      if (spec.sectionStyle) section.style.cssText = spec.sectionStyle;
       section.innerHTML = '<strong></strong><p class="metrics">Loading…</p>';
       section.querySelector('strong').textContent = spec.id;
       const host = document.createElement('sw-transclude');
@@ -425,6 +439,14 @@
         const status = !data ? 'waiting' : spec.disconnected
           ? frame?.getAttribute('scrolling') === 'auto' && reached > 0
             ? 'scrollable fallback' : 'CLIPPED'
+          : spec.panel
+          ? size >= 200 && size < spec.section.clientHeight &&
+            spec.host.getBoundingClientRect().bottom <= spec.section.getBoundingClientRect().bottom - 4 &&
+            overflow === 'auto' && reached > 0
+              ? 'bounded panel' : 'PANEL OVERFLOW'
+          : spec.expectedHost
+          ? Math.abs(size - spec.expectedHost) <= 2 && contentSize <= size
+            ? 'bounded viewport' : 'BAD VIEWPORT'
           : spec.loop
           ? size <= maxSize && (contentSize <= size || overflow === 'auto' && reached > 0)
             ? 'bounded and scrollable' : 'RUNAWAY'

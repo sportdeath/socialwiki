@@ -9,10 +9,11 @@ vi.mock("@iframe-resizer/parent", () => ({ default: vi.fn(() => []) }));
 
 beforeEach(() => vi.clearAllMocks());
 
-function setup(mode = "height") {
+function setup(mode = "height", initialStyle = "") {
   const events = createEventBridge();
   const host = document.createElement("sw-transclude");
   const iframe = document.createElement("iframe");
+  host.style.cssText = initialStyle;
   host.setAttribute("autosize", mode);
   Object.defineProperties(host, {
     clientWidth: { get: () => Number.parseFloat(host.style.width) || 480 },
@@ -67,31 +68,61 @@ it("allows one large late update without stopping the library", () => {
   bridge.destroy();
 });
 
-it("bounds a viewport-driven growth loop", () => {
-  const { host, bridge, report } = setup("height");
+it("returns a viewport-driven page to the containing layout", () => {
+  const { host, iframe, bridge, report } = setup("height", "height: 320px");
   for (let i = 0; i < 5; i++) report(480, host.clientHeight + 20);
-  const bounded = host.style.height;
+  expect(host.style.height).toBe("320px");
+  expect(iframe.getAttribute("scrolling")).toBe("auto");
   report(480, host.clientHeight + 20);
-  expect(host.style.height).toBe(bounded);
+  expect(host.style.height).toBe("320px");
   bridge.destroy();
 });
 
-it("holds the larger size when CSS alternates between two heights", () => {
+it("can autosize again after a fallback is disabled and re-enabled", async () => {
+  const { events, host, bridge, report } = setup("height", "height: 320px");
+  const modes: unknown[] = [];
+  events.child.listen(AUTOSIZE_MODE_EVENT, (event) => modes.push(event.detail));
+  for (let i = 0; i < 5; i++) report(480, host.clientHeight + 20);
+  expect(host.style.height).toBe("320px");
+  host.setAttribute("autosize", "off");
+  await vi.waitFor(() => expect(modes).toContain("off"));
+  host.setAttribute("autosize", "height");
+  await vi.waitFor(() => expect(modes.at(-1)).toBe("height"));
+  report(480, 500);
+  expect(host.style.height).toBe("500px");
+  bridge.destroy();
+});
+
+it("returns a shrinking viewport-driven page to the containing layout", () => {
+  const { host, bridge, report } = setup("height", "height: 320px");
+  for (let i = 0; i < 7; i++) report(480, host.clientHeight * 0.9);
+  expect(host.style.height).toBe("320px");
+  bridge.destroy();
+});
+
+it("bounds exponential viewport growth before reaching the emergency cap", () => {
+  const { host, bridge, report } = setup("height", "height: 320px");
+  for (let i = 0; i < 7; i++) report(480, host.clientHeight * 2 + 20);
+  expect(host.style.height).toBe("320px");
+  bridge.destroy();
+});
+
+it("returns to the containing layout when CSS alternates between two heights", () => {
   const { host, bridge, report } = setup("height");
   report(480, 50);
   report(480, 200);
   report(480, 50);
   report(480, 200);
-  expect(host.style.height).toBe("200px");
+  expect(host.style.height).toBe("");
   report(480, 50);
-  expect(host.style.height).toBe("200px");
+  expect(host.style.height).toBe("");
   bridge.destroy();
 });
 
-it("caps extreme measurements", () => {
+it("uses the containing layout for extreme measurements", () => {
   const { host, iframe, bridge, report } = setup("height");
   report(480, 100000);
-  expect(host.style.height).toBe("12000px");
+  expect(host.style.height).toBe("");
   expect(iframe.getAttribute("scrolling")).toBe("auto");
   bridge.destroy();
 });
