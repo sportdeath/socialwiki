@@ -52,10 +52,11 @@
                 </a>
             </li>
             <li v-if="historyEnabled === false">
-                <button type="button" @click="enableBrowserHistory">
-                    Enable browser history
+                <button type="button" :disabled="historySaving" @click="enableBrowserHistory">
+                    {{ historySaving ? "Saving…" : "Enable browser history" }}
                 </button>
             </li>
+            <li v-if="historyError" role="alert">{{ historyError }}</li>
         </ul>
     </form>
 </template>

@@ -15,6 +15,7 @@ import {
     useGraffitiSession,
 } from "@graffiti-garden/wrapper-vue";
 import { useLensSources } from "./lens-resolver";
+import { useBrowserHistory } from "./browser-history";
 import { ErrorPage } from "../utils/status-pages";
 import {
     applyDocumentMetadata,
@@ -38,6 +39,7 @@ function setup() {
     const lens = ref("");
     const lensParams = ref<URLSearchParams | undefined>(undefined);
     const siteAddress = ref<string | undefined>(undefined);
+    const browserHistory = useBrowserHistory(siteAddress);
     const routeReady = ref(false);
     // The latest document produced by View or History. Any route change
     // invalidates it until the active lens reports its new output.
@@ -73,11 +75,11 @@ function setup() {
     let directLensLoad = 0;
 
     watch(
-        [lens, session, lensRevision],
-        async ([currentLens, currentSession]) => {
+        [lens, () => session.value && session.value.actor, lensRevision],
+        async ([currentLens]) => {
             const load = ++directLensLoad;
             directLensSource.value = undefined;
-            if (currentSession === undefined || currentLens === "v") return;
+            if (session.value === undefined || currentLens === "v") return;
 
             if (currentLens !== "e" && currentLens !== "h") {
                 directLensSource.value = ErrorPage(
@@ -298,6 +300,7 @@ function setup() {
     }
 
     return {
+        browserHistory,
         directLensSource,
         editRoute,
         historyRoute,

@@ -9,12 +9,13 @@ import type { NavigableTransclude } from "./navigation/shared";
 import { installResolutionParent } from "./resolution/parent";
 import { preparePeripheralsFrame } from "./peripherals/features";
 import { installPeripheralsParent } from "./peripherals/parent";
+import { prepareGuardFrame } from "./graffiti/identity";
 
 /** Create an installer that can be used to connect this document to a transcluded iframe */
 export function createParentBridgeEndpointInstaller(
   bridgedServices: BridgedServices,
 ) {
-  const { resolve, createGraffiti, documentRoute, peripherals, autosize } = bridgedServices;
+  const { guardPath, resolve, createGraffiti, documentRoute, peripherals, autosize } = bridgedServices;
   const install = (
     host: NavigableTransclude,
     iframe: HTMLIFrameElement,
@@ -49,7 +50,10 @@ export function createParentBridgeEndpointInstaller(
       setQuery: navigationBridge.setQuery,
     };
   };
-  install.prepareFrame = (iframe: HTMLIFrameElement, host: HTMLElement) => preparePeripheralsFrame(iframe, host, peripherals);
+  install.prepareFrame = (iframe: HTMLIFrameElement, host: HTMLElement) => {
+    prepareGuardFrame(iframe, host, guardPath);
+    return preparePeripheralsFrame(iframe, host, peripherals);
+  };
   return install;
 }
 

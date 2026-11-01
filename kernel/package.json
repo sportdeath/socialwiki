@@ -12,9 +12,9 @@
   },
   "dependencies": {
     "@graffiti-garden/api": "^1.4.0",
-    "@graffiti-garden/implementation-local": "^1.4.0",
-    "@graffiti-garden/wrapper-data-guard": "^0.2.8",
-    "@graffiti-garden/wrapper-iframe-rpc": "^0.2.0",
+    "@graffiti-garden/implementation-local": "^1.5.0",
+    "@graffiti-garden/wrapper-data-guard": "^0.3.0",
+    "@graffiti-garden/wrapper-iframe-rpc": "^0.3.0",
     "@graffiti-garden/wrapper-synchronize": "^1.4.0",
     "@graffiti-garden/wrapper-vue": "^1.4.3",
     "@iframe-resizer/child": "5.5.9",

@@ -9,6 +9,7 @@
 
         <address-bar
             :address="siteAddress"
+            :browser-history="browserHistory"
             :route-for-input-address="routeForInputAddress"
             v-model="isDropdownOpen"
             @navigate="navigateToInputAddress"
@@ -88,6 +89,7 @@
     <settings-dialog
         v-model="showSettingsDialog"
         :lens-sources="lensSources"
+        :browser-history="browserHistory"
     ></settings-dialog>
     <main>
         <div

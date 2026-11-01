@@ -7,9 +7,12 @@ import { installHistoryChild } from "./history/child";
 import { installNavigationChild } from "./navigation/child";
 import { installResolutionChild } from "./resolution/child";
 import { installPeripheralsChild } from "./peripherals/child";
+import { consumeFrameData } from "./bootstrap";
+import { installGuardIdentity } from "./graffiti/identity";
 
 /** Install the child half of every capability provided over an iframe boundary. */
 export function installChildBridgeEndpoints() : BridgedServices {
+  const guardPath = installGuardIdentity(consumeFrameData("guardPath"));
   const events = installEventsChild();
   installDocumentMetadataChild(events);
   const createGraffiti = installGraffitiChild();
@@ -18,5 +21,5 @@ export function installChildBridgeEndpoints() : BridgedServices {
   installHistoryChild(events, documentRoute);
   const autosize = installAutosizeChild(events);
   const peripherals = installPeripheralsChild();
-  return { createGraffiti, resolve, documentRoute, peripherals, autosize };
+  return { guardPath, createGraffiti, resolve, documentRoute, peripherals, autosize };
 }

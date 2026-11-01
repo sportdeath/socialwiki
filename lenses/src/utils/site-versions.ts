@@ -1,3 +1,4 @@
+import { GraffitiErrorForbidden } from "@graffiti-garden/api";
 import type {
   Graffiti,
   GraffitiObject,
@@ -5,7 +6,7 @@ import type {
   GraffitiSession,
   JSONSchema,
 } from "@graffiti-garden/api";
-import { protectionSchema } from "./schemas";
+import { confirmationSchema, isConfirmedOrLegacy, protectionSchema } from "./schemas";
 import { siteChannel, siteChannels } from "./site-channel";
 
 export function siteVersionSchema(siteName: string) {
@@ -13,6 +14,7 @@ export function siteVersionSchema(siteName: string) {
     properties: {
       value: {
         type: "object",
+        allOf: [confirmationSchema],
         properties: {
           action: { const: "Publish site" },
           "site name": { const: siteName },
@@ -36,6 +38,7 @@ function legacySiteVersionSchema(siteName: string) {
   return {
     properties: {
       value: {
+        allOf: [confirmationSchema],
         properties: {
           activity: { const: "Update" },
           object: {
@@ -101,6 +104,7 @@ export function normalizeSiteVersions(
   const versions: SiteVersionObject[] = [];
   for (const object of objects) {
     const value = object.value as Record<string, unknown>;
+    if (!isConfirmedOrLegacy(value)) continue;
     if (
       value.action === "Publish site" &&
       typeof value["site name"] === "string" &&
@@ -128,6 +132,8 @@ export function normalizeSiteVersions(
       versions.push({
         ...object,
         value: {
+          // Preserve provenance and confirmation while adapting the old fields.
+          ...value,
           action: "Publish site",
           "site name": value.object,
           changes: value.summary,
@@ -178,20 +184,31 @@ export async function createSiteVersion(
   // Selection and the published record must use exactly the same timestamp.
   const time = Date.now();
   const previousVersions = selectPreviousVersions(knownVersions, time);
-  return await graffiti.post<SiteVersionSchema>(
-    {
-      channels: [siteChannel(siteName)],
-      value: {
-        action: "Publish site",
-        "site name": siteName,
-        changes,
-        document,
-        ...(previousVersions.length ? { "previous versions": previousVersions } : {}),
-        time,
+  try {
+    return await graffiti.post<SiteVersionSchema>(
+      {
+        channels: [siteChannel(siteName)],
+        value: {
+          "confirm with guard": true,
+          action: "Publish site",
+          "site name": siteName,
+          changes,
+          document,
+          ...(previousVersions.length ? { "previous versions": previousVersions } : {}),
+          time,
+        },
       },
-    },
-    session,
-  );
+      session,
+    );
+  } catch (error) {
+    // The file was uploaded before the publication could be confirmed. Clean
+    // it up on an explicit denial, but keep it if a network failure leaves the
+    // outcome of the publication uncertain.
+    if (error instanceof GraffitiErrorForbidden) {
+      await graffiti.deleteMedia(document, session).catch(console.error);
+    }
+    throw error;
+  }
 }
 
 export async function deleteSiteVersion(

@@ -1,5 +1,6 @@
 import type { Graffiti, GraffitiSession } from "@graffiti-garden/api";
 import type { TrustObject, TrustSchema } from "./schemas";
+import { isConfirmedOrLegacy } from "./schemas";
 
 export async function trustActor(
   graffiti: Graffiti,
@@ -10,6 +11,7 @@ export async function trustActor(
     {
       channels: [session.actor],
       value: {
+        "confirm with guard": true,
         activity: "Trust",
         account: actor,
         time: Date.now(),
@@ -40,6 +42,7 @@ export function computeTrustAnnotationsByActor(
     defaultActors.map((actor) => [actor, true]),
   );
   for (const object of trustAnnotations) {
+    if (!isConfirmedOrLegacy(object.value)) continue;
     const actor = object.value.account;
     const existing = byActor.get(actor);
     byActor.set(

@@ -7,9 +7,10 @@ import {
     watch,
     type PropType,
 } from "vue";
-import { useBrowserHistory } from "../browser-history";
+import type { BrowserHistory } from "../browser-history";
 
 type Props = {
+    browserHistory: BrowserHistory;
     address?: string;
     routeForInputAddress: (address: string) => string;
     modelValue: boolean;
@@ -38,11 +39,9 @@ function setupAddressBar(props: Props, { emit }: { emit: Emit }) {
         },
         { immediate: true },
     );
-    const {
-        enabled: historyEnabled,
-        suggestions: historySuggestions,
-        enable: enableBrowserHistory,
-    } = useBrowserHistory(siteAddress, addressInput);
+    const { enabled: historyEnabled, saving: historySaving, error: historyError } = props.browserHistory;
+    const historySuggestions = computed(() => props.browserHistory.suggestions(addressInput.value));
+    const enableBrowserHistory = () => props.browserHistory.setEnabled(true);
 
     function navigateToInputAddress() {
         emit("navigate", addressInput.value || "Social.Wiki");
@@ -199,6 +198,8 @@ function setupAddressBar(props: Props, { emit }: { emit: Emit }) {
         addressInput,
         enableBrowserHistory,
         historyEnabled,
+        historySaving,
+        historyError,
         historySuggestions,
         isDropdownOpen,
         navigateToInputAddress,
@@ -216,6 +217,7 @@ function setupAddressBar(props: Props, { emit }: { emit: Emit }) {
 export default defineComponent({
     template: "#address-bar-template",
     props: {
+        browserHistory: { type: Object as PropType<BrowserHistory>, required: true },
         address: String,
         routeForInputAddress: { type: Function as PropType<Props["routeForInputAddress"]>, required: true },
         modelValue: { type: Boolean, required: true },

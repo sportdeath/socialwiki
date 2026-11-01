@@ -19,19 +19,22 @@ afterAll(() => vi.unstubAllGlobals());
 const receivers = new WeakMap<HTMLElement, Parameters<ParentBridgeEndpointInstaller>[2]>();
 const receivedQueries = new WeakMap<HTMLElement, ReturnType<typeof vi.fn>>();
 const receivedRoutes = new WeakMap<HTMLElement, ReturnType<typeof vi.fn>>();
+const bridgeInstalled = vi.fn();
+const bridgeDestroyed = vi.fn();
 const resolveDocument = vi.fn(async (src: string) => ({
   srcdoc: "<p>Lens</p>",
   query: src.startsWith("?") ? src : `?/${src}`,
 }));
 defineTranscludeElement(
   resolveDocument,
-  (host, _iframe, receive) => {
+  (host, iframe, receive) => {
+    bridgeInstalled(iframe);
     receivers.set(host, receive);
     const setQuery = vi.fn();
     const setRoute = vi.fn();
     receivedQueries.set(host, setQuery);
     receivedRoutes.set(host, setRoute);
-    return { destroy() {}, send() {}, setQuery, setRoute };
+    return { destroy: bridgeDestroyed, send() {}, setQuery, setRoute };
   },
   "https://social.wiki/init.js",
 );
@@ -60,6 +63,29 @@ function receive(element: TranscludeElement, type: string, detail: unknown) {
 }
 
 afterEach(() => document.body.replaceChildren());
+
+it("replaces a live frame and bridge when its permission identity changes", () => {
+  const element = transclude();
+  const frame = () => element.shadowRoot!.querySelectorAll("iframe")[1];
+  const original = frame();
+  const installs = bridgeInstalled.mock.calls.length;
+  const destroys = bridgeDestroyed.mock.calls.length;
+
+  element.setAttribute("query", "?one");
+  expect(frame()).toBe(original);
+
+  element.id = "new-site-id";
+  const newSite = frame();
+  expect(newSite).not.toBe(original);
+  expect(original.isConnected).toBe(false);
+  expect(bridgeInstalled).toHaveBeenCalledTimes(installs + 1);
+  expect(bridgeDestroyed).toHaveBeenCalledTimes(destroys + 1);
+
+  element.setAttribute("permission-scope", "inherit");
+  expect(frame()).not.toBe(newSite);
+  expect(bridgeInstalled).toHaveBeenCalledTimes(installs + 2);
+  expect(bridgeDestroyed).toHaveBeenCalledTimes(destroys + 2);
+});
 
 it("distinguishes absent, empty, and explicit routes", () => {
   const element = transclude();

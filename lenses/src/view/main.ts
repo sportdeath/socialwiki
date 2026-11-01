@@ -53,6 +53,8 @@ function setup() {
   );
 
   function showDocument(html: string, id: string) {
+    // Rechecking trust after login may select the version already on screen.
+    if (displayed.value.id === id && displayed.value.html === html) return;
     displayed.value = { html, id };
   }
 
@@ -110,7 +112,8 @@ function setup() {
     const contentKey = requestedVersion
       ? `version:${requestedVersion}`
       : `site:${name}`;
-    if (force || contentKey !== currentContentKey) {
+    const changingSite = contentKey !== currentContentKey;
+    if (changingSite) {
       applyDocumentMetadata({ title: "", icon: null }, name || "Social.Wiki");
     }
     displayedSiteName.value = name;
@@ -118,10 +121,10 @@ function setup() {
     // A site lookup needs both its first discovery and the trust list.
     // An explicit version URL can be loaded without either.
     if (!requestedVersion && (isFirstPoll.value || !editors)) {
-      if (force || contentKey !== currentContentKey) {
-        // A new site or forced refresh invalidates any pending render and
-        // shows a status until the data needed to select a version arrives.
-        activeRenderVersion++;
+      // Invalidate an earlier selection, but keep the current page mounted
+      // while a login/trust update determines whether its version changed.
+      activeRenderVersion++;
+      if (changingSite) {
         currentContentKey = "";
         renderedAddress = "";
         const error = (isFirstPoll.value ? siteError.value : null) ??
@@ -155,8 +158,10 @@ function setup() {
     currentContentKey = contentKey;
     // A newer route may finish first; ignore this render's later results.
     const renderVersion = ++activeRenderVersion;
-    emitLensOutput("loading");
-    showDocument(LoadingPage, "loading");
+    if (changingSite) {
+      emitLensOutput("loading");
+      showDocument(LoadingPage, "loading");
+    }
 
     try {
       let mediaAddress = requestedVersion;

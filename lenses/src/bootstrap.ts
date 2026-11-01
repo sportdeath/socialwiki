@@ -105,8 +105,11 @@ export function startBrowserLoader() {
       console.error(detail.error);
       return;
     }
+    // Site approvals can update the same account's session. Only an account
+    // change can select a different personal browser.
+    const changed = session?.actor !== detail.session.actor;
     session = detail.session;
-    if (initialized) void loadBrowser();
+    if (initialized && changed) void loadBrowser();
   });
 
   graffiti.sessionEvents.addEventListener("logout", (event) => {
@@ -115,14 +118,16 @@ export function startBrowserLoader() {
       console.error(detail.error);
       return;
     }
-    if (session?.actor === detail.actor) session = null;
+    if (session?.actor !== detail.actor) return;
+    session = null;
     if (initialized) void loadBrowser();
   });
 
+  // Initialization can be replayed for new consumers of the shared client.
   graffiti.sessionEvents.addEventListener("initialized", (event) => {
     const detail = (event as GraffitiSessionInitializedEvent).detail;
     if (detail?.error) console.error(detail.error);
     initialized = true;
     void loadBrowser();
-  });
+  }, { once: true });
 }

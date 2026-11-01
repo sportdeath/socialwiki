@@ -1,5 +1,6 @@
 import type { Graffiti, GraffitiSession } from "@graffiti-garden/api";
 import type { ProtectionObject, ProtectionSchema } from "./schemas";
+import { isConfirmedOrLegacy } from "./schemas";
 import { siteChannel } from "./site-channel";
 
 export function sortProtectionHistory(
@@ -10,6 +11,7 @@ export function sortProtectionHistory(
   const relevantAnnotations = annotations.filter(
     (a) =>
       trustedActorSet.has(a.actor) &&
+      isConfirmedOrLegacy(a.value) &&
       (a.value.action === "Protect site" || a.value.action === "Remove site protection"),
   );
   const protectUrls = new Set(
@@ -59,6 +61,7 @@ export async function updateSiteProtection(
       {
         channels: [siteChannel(siteName)],
         value: {
+          "confirm with guard": true,
           action: "Remove site protection",
           "site name": siteName,
           "protection removed": activeProtection.url,
@@ -73,6 +76,7 @@ export async function updateSiteProtection(
     {
       channels: [siteChannel(siteName)],
       value: {
+        "confirm with guard": true,
         action: "Protect site",
         "site name": siteName,
         time: Date.now(),

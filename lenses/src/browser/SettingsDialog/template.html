@@ -18,6 +18,18 @@
             </button>
         </div>
 
+        <section v-if="session" class="lens-settings">
+            <h3>Browser history</h3>
+            <p>Save visited sites privately for address-bar suggestions. Turning this off keeps existing history.</p>
+            <div class="settings-actions">
+                <button type="button" :disabled="busy || historyEnabled === undefined" @click="toggleHistory">
+                    {{ historySaving ? "Saving…" : historyEnabled === undefined ? "Loading…" :
+                        historyEnabled ? "Disable browser history" : "Enable browser history" }}
+                </button>
+            </div>
+            <p v-if="historyError" role="alert">{{ historyError }}</p>
+        </section>
+
         <section class="lens-settings">
             <h3>Modify Social.Wiki</h3>
             <p v-if="lensDiscoveryError" role="alert">

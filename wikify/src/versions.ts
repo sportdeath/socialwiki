@@ -1,4 +1,5 @@
 import type { GraffitiObject, GraffitiObjectBase, JSONSchema } from "@graffiti-garden/api";
+import { confirmationSchema, isConfirmedOrLegacy } from "../../lenses/src/utils/schemas";
 
 export function versionSchema(siteName: string, actors: string[]) {
   return {
@@ -6,6 +7,7 @@ export function versionSchema(siteName: string, actors: string[]) {
       actor: { enum: actors },
       value: {
         type: "object",
+        allOf: [confirmationSchema],
         required: ["action", "site name", "changes", "document", "time"],
         properties: {
           action: { const: "Publish site" },
@@ -30,6 +32,7 @@ export function versionFollowSchema(actor: string) {
       allowed: { type: "array", maxItems: 0 },
       value: {
         type: "object",
+        allOf: [confirmationSchema],
         properties: {
           action: { const: "Follow site admin versions" },
           "my version": { type: "string" },
@@ -44,11 +47,13 @@ export function versionFollowSchema(actor: string) {
 export type VersionFollow = GraffitiObject<ReturnType<typeof versionFollowSchema>>;
 
 export function isSiteVersion(object: GraffitiObjectBase): object is SiteVersion {
-  return (object.value as { action?: unknown }).action === "Publish site";
+  return isConfirmedOrLegacy(object.value) &&
+    (object.value as { action?: unknown }).action === "Publish site";
 }
 
 export function isVersionFollow(object: GraffitiObjectBase): object is VersionFollow {
-  return (object.value as { action?: unknown }).action === "Follow site admin versions";
+  return isConfirmedOrLegacy(object.value) &&
+    (object.value as { action?: unknown }).action === "Follow site admin versions";
 }
 
 export function followsOwnVersion(

@@ -1,10 +1,24 @@
 import type { GraffitiObject, GraffitiObjectBase, JSONSchema } from "@graffiti-garden/api";
 
+/** Guarded decisions need confirmation; records predating provenance still work. */
+export const confirmationSchema = {
+  anyOf: [
+    { properties: { "confirm with guard": { const: true } }, required: ["confirm with guard"] },
+    { not: { required: ["via site"] } },
+  ],
+} as const satisfies JSONSchema;
+
+/** Match the discovery rule when narrowing mixed results or reading records directly. */
+export function isConfirmedOrLegacy(value: Record<string, unknown>) {
+  return value["confirm with guard"] === true || !Object.hasOwn(value, "via site");
+}
+
 export function protectionSchema(siteName: string) {
   return {
     properties: {
       value: {
         type: "object",
+        allOf: [confirmationSchema],
         properties: {
           "site name": { const: siteName },
           time: { type: "number" },
@@ -37,6 +51,7 @@ export function trustSchema(actor?: string) {
     properties: {
       value: {
         type: "object",
+        allOf: [confirmationSchema],
         properties: {
           activity: { const: "Trust" },
           account: { type: "string" },
@@ -57,6 +72,7 @@ export type TrustObject = GraffitiObject<TrustSchema>;
 export function isProtectionObject(object: GraffitiObjectBase): object is ProtectionObject {
   const value = object.value as Record<string, unknown>;
   return (
+    isConfirmedOrLegacy(value) &&
     typeof value["site name"] === "string" &&
     typeof value.time === "number" &&
     (value.action === "Protect site" ||

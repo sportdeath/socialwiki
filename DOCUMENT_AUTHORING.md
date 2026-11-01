@@ -102,11 +102,13 @@ The document runs in a sandboxed originless iframe. Some browser functionalities
 
 `GraffitiObject` contains:
 
-- `value`: freeform JSON. Use human-readable properties and values because system permission dialogs show them to users.
+- `value`: freeform JSON. Use human-readable properties and values because system permission dialogs may show them to users.
 - `channels`: `string[]` (discoverable ONLY by querying channels)
 - `allowed?: string[] | null` (omitted/undefined/null -> public; `[]` -> creator-only; list -> restricted to listed actors)
 - `actor`: string (creator; only creator can delete)
 - `url`: string (unique object identifier/locator)
+
+Objects can be at most 32Kb including channels/allowed/etc. This is plenty for most uses (don't bother measuring) but do not use them for data that may be unrestricted in size, such as a whole blog post or a save file in a game. Store large data as "media" instead with metadata describing and linking to the media in an object. Objects are queryable, media is not.
 
 #### Graffiti Media
 
@@ -129,6 +131,7 @@ The document runs in a sandboxed originless iframe. Some browser functionalities
 - Fetching Graffiti objects requires a JSON Schema that will filter for objects matching a specific shape.
 - Using the schema `{}` will match everything, but DO NOT USE UNLESS NECESSARY.
 - The schema applies to the whole object (`value`, `channels`, `allowed`, `actor`, `url`), not just `object.value`. Generally just filtering for `value` is OK, but filtering `actor` can be useful if you only want objects by a certain set of actors.
+- Leave room for additional properties in `value`, both for interoperability and for fields added by the "data guard" (below). Never use `additionalProperties: false`.
 - Start from this shape:
 
   ```js
@@ -278,6 +281,7 @@ useGraffitiDiscover(
 - If `error` is set, display it with "Retrying…" even while `isFirstPoll` is true; discover retries automatically until it clears.
 - For ongoing updates from other people (e.g. messaging), enable `autopoll` on at most ONE discovery; it is resource heavy. Local posts/deletes propagate reactively to `objects`; no `autopoll` necessary.
 - Discover calls are expensive. For per-item data (e.g. reactions), discover in batches. E.g. pass `() => posts.objects.value.map(post => post.url)` to a second `useGraffitiDiscover`; do not put a discovery in each repeated row.
+- Discover queries are cached when channels and schema are static, avoid routine changes to channels/schema arguments.
 - Pass an array of channels even for one channel: `:channels="['my-channel']"`
 
 ##### useGraffitiGet
@@ -344,16 +348,31 @@ useGraffitiHandleToActor(
 - Component equivalent: `<graffiti-handle-to-actor :handle="handle" v-slot="{ actor, error }">`
 - By default, the component displays the actor, so do not put anything inside the tags unless you want to do something with it.
 
-### Mitigating System Prompts
+### Data guard
 
-Session-backed Graffiti actions may trigger the system to prompt the user for confirmation. Gets/discoveries without a session, or gets/discoveries that return only public data, do not prompt. Users may remember decisions for similar actions, such as posting or deleting objects with the same structure or similar media. Posting a private object/media file also permits later reads of that exact data.
+Logging in grants the document access to freely post as the user.
+The user may be automatically prompted by the system's "Data Guard" to confirm these Graffiti actions:
+- Deletes of data posted from other documents
+- Gets/discoveries that retrieve private data posted from other documents
+- Posts whose value requests direct confirmation with this property:
+```js
+graffiti.post({
+  ...object,
+  value: { ...object.value, "confirm with guard": true },
+}, session);
+```
+The user can choose to remember deletes/gets/discoveries, but a post with `value["confirm with guard"] === true` always triggers a prompt.
 
-To make your document usable under this model:
+The guard adds `"via site": { name, id, url? }` to all object values (`name` and `id` are strings; `url` is an optional string). Do not set `"via site"` yourself, an error will throw.
 
-- Keep posted object shapes consistent so remembered decisions apply to similar posts/deletes.
+To make your document usable and secure under this model:
 - Make object properties and values human-readable because they appear in permission prompts. HTTP(S) links, Graffiti URLs and actors, UUIDs, and timestamps are displayed meaningfully.
-- Start session-backed actions from a user interaction unless they continue a feature the user enabled. For example, post read receipts automatically only after the user opts in; record that choice in Graffiti so the document can find it on later visits.
+- Request a session for `get` or `discover` only when private data is needed, and avoid broad queries that would ask for unrelated private items.
 - Most documents can rely on a parent document (a "browser") to provide a permissions button. A document providing its own navigation UI may call `window.showPermissions()` to open the system permissions manager.
+- Some objects express decisions that other documents may rely on, such as trust relationships, a global profile change, or publishing a site version. Post such objects with `value["confirm with guard"] === true` and require that same property when discovering them. Be selective about requiring confirmation or it will introduce confirmation fatigue.
+- A site's own ID is `window.guard.id`
+- When displaying data without direct confirmation made on another site (`window.guard.id !== object.value["via site"].id`), display its `object.value["via site"].name` beside the author and make it a link when `object.value["via site"].url` is available (e.g. "Alice via [NAME](URL)"). This makes it easy for people to detect fraudulent posts if they occur.
+- Do NOT restrict to only showing data where `window.guard.id === object.value["via site"].id`, this disables interoperability.
 
 ### Channels and Privacy
 
@@ -369,7 +388,7 @@ To make your document usable under this model:
 - Explain channel intent in comments.
 - Remember: you cannot truly prevent others from posting to your channels outside your UI.
   - Mitigate by filtering displayed objects (e.g., only owner-authored posts) + schema constraints.
-  - Treat values like timestamps and locations as untrusted. `actor` and `url` are unforgeable.
+  - Treat values like timestamps and locations as untrusted. `actor` and `url` are unforgeable. For decisions that require the person's direct approval, also require `value["confirm with guard"] === true`.
 
 ### Modifying and Deleting within Graffiti
 
@@ -428,7 +447,7 @@ Transclusion is including one Social.Wiki document within another.
 - A lens receives the site's address in `window.address` (parse it with `window.route.parseAddress`) and lens options in `window.params`.
 - Site versions are public Graffiti objects with this shape:
   - `channels: ["site:" + siteName]`
-  - `value: { action: "Publish site", "site name": siteName, changes: string, document: mediaUrl, time: number, "previous versions"?: string[] }`
+  - `value: { action: "Publish site", "site name": siteName, changes: string, document: mediaUrl, time: number, "previous versions"?: string[], "confirm with guard": true }`
   - `allowed` is omitted (public).
 - A custom View lens selects which versions and publishers to trust. It transcludes the selected HTML with the site's query, `route=""`, and `autosize="inherit"`.
 - Every lens reports `window.emit("sw-lens-output", { status, srcdoc })`, where `status` is `"loading"`, `"ok"`, `"not-found"`, or `"error"`. On `"ok"`, `srcdoc` is the source HTML displayed or edited. For asynchronous resolution, emit `"loading"` first and ignore stale results. If forwarding child events, consume their `sw-lens-output` rather than reporting it as the lens's own.
@@ -472,11 +491,13 @@ Transclusion is including one Social.Wiki document within another.
       - Leave `additionalProperties` allowed for extensions
     - `allowed` policy (public vs private)
     - `channels` used (and why)
+    - Whether another document may treat this record as a consequential decision. If so, include `"confirm with guard": true` when posting and require `object.value["confirm with guard"] === true` when consuming it.
 5. Identify which Graffiti methods, composables, and components you will use.
     - For methods with an optional session, decide if you need it for private objects or media.
 6. Optional: identify state to store in route with `window.address`/`params`.
 7. Implement UI that supports:
-    - login/logout
+    - public use before login, with in situ "Log in" buttons where identity, posting, or private data are needed
+    - log out
     - creating objects with appropriate actions
     - discovering and displaying objects in appropriate views
     - any interactions like like/comment/delete
@@ -491,6 +512,7 @@ Transclusion is including one Social.Wiki document within another.
   - Use `actorToHandle` / `handleToActor` (or their Vue wrappers) for translation.
 - Use friendly UI labels: "user/account" instead of actor; "page/topic/space" instead of channel.
 - In people-based apps, make first contacts discoverable (e.g., a directory, shared-space participants, or invite link). In cases where a handle must be entered, show the user their own handle as an example.
+- Images, video, and other media cannot be embedded within the HTML unless very small. Often it makes sense for assets to be editable within the app (e.g. a profile has a profile picture editor). Otherwise, assets can be uploaded via <https://social.wiki/#/v?/imager>.
 - Linkify user-generated text (posts, messages): recognize HTTP(S) URLs and site links beginning `#/`. Show the site name for links such as `#/v?/mysite` -> `<a href="#/v?/mysite">mysite</a>`:
 
   ```js
@@ -504,7 +526,7 @@ Transclusion is including one Social.Wiki document within another.
 
   Render odd-index parts as `<a :href="part">{{ linkText(part) }}</a>` and the rest as text (not `v-html`).
 
-- Do not add design explanations or excessive instructions into the UI. An app built with good usability principles should not need an instruction manual.
+- Do not add filler text, design explanations, or excessive instructions into the UI. An app built with good usability principles should not need an instruction manual.
 - Use loading states while awaiting async calls.
 - Use optimistic rendering for interactions users may repeat while `graffiti.post` is in progress, such as sending messages or painting on a canvas. Show each new item immediately as pending, then remove that copy when `graffiti.post` finishes. For non-optimistic interactions, disable the button while posting to prevent duplicates.
 - Handle failed posts, deletes, and media uploads visibly; remove or mark failed optimistic items. Report success only after required operations succeed.
@@ -518,6 +540,7 @@ Transclusion is including one Social.Wiki document within another.
 - Keep the single HTML readable; do not minify code people will edit.
 - Build shared views from discovered objects; in-memory component state will not survive reload or show others' updates.
 - Test the HTML over HTTP(S), not `file://`, with `https://social.wiki/init-test.js`. Its accounts and data stay in your browser, so create as many test users and objects as needed. Check that the document mounts, external content loads, and its main interactions work, then restore `init.js` before publishing.
+- Objects are not free, don't create more than you need. For ephemeral data like position in a game or read receipts in a chat, delete old ones when creating new ones.
 
 ## Examples
 

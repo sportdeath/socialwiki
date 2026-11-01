@@ -146,6 +146,7 @@ export function wikify(options: WikifyOptions): void {
           channels: ["site:" + siteName],
           value: {
             action: "Follow site admin versions",
+            "confirm with guard": true,
             "my version": ownVersion.url,
           },
         }, currentSession);

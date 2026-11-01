@@ -8,6 +8,7 @@ import { serializeRouteUrl } from "./bridges/navigation/route-serialization";
 import { handleNavigation } from "./bridges/navigation/shared";
 import { createParentBridgeEndpointInstaller } from "./bridges/parent";
 import { createPeripheralsHost } from "./bridges/peripherals/host";
+import { installGuardIdentity } from "./bridges/graffiti/identity";
 import {
   applyDocumentMetadata,
   isDocumentMetadata,
@@ -54,6 +55,7 @@ if (window.top !== window) {
   const { resolve } = bridgedServices;
   installTransclude(resolve, installParentBridgeEndpoints, kernelUrl.href);
 } else {
+  const guardPath = installGuardIdentity([window.location.origin]);
   // If we are the top-level document, wrap the document in an iframe
   // while this document acts as the host for all nested documents
   const initializeHost = () => {
@@ -108,6 +110,7 @@ if (window.top !== window) {
     // Make an installer that allows those services to be
     // bridged to sub-documents.
     const bridgedServices = {
+      guardPath,
       // Create Graffiti Local when a frame connects so the bridge observes
       // its initial session events.
       createGraffiti: () => TEST_GRAFFITI

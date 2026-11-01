@@ -5,6 +5,7 @@ import type { PeripheralsService } from "./peripherals/shared";
 import type { AutosizeContext } from "./autosize/shared";
 
 export type BridgedServices = {
+  guardPath: readonly string[];
   createGraffiti: () => Graffiti;
   resolve: DocumentResolver;
   documentRoute: DocumentRouteState;

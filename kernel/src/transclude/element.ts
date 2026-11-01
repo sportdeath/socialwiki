@@ -63,7 +63,7 @@ export function defineTranscludeElement(
 
     // Only attributes which require an immediate reaction are observed.
     static get observedAttributes() {
-      return ["src", "srcdoc", "query", "route"];
+      return ["src", "srcdoc", "query", "route", "id", "permission-scope"];
     }
 
     // The frame is where the document is actually rendered using an iframe.
@@ -107,6 +107,14 @@ export function defineTranscludeElement(
       // Attribute callbacks also run on detached elements. connectedCallback
       // will render the latest values once this element is in the document.
       if (!this.isConnected) return;
+
+      if (name === "id" || name === "permission-scope") {
+        // A changed permission identity must not retain the old frame's
+        // cached login sessions, even when its document HTML is unchanged.
+        this.#frame.showLoading();
+        if (this.#resolvedDocument) this.#frame.render(this.#resolvedDocument);
+        return;
+      }
 
       if (name === "query") {
         // query only belongs to a directly supplied document.

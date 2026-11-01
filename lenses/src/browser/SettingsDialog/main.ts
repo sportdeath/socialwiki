@@ -6,9 +6,10 @@ import {
 import DialogFrame from "../../utils/DialogFrame/main";
 import type { Lens } from "../../utils/lenses";
 import type { LensSources } from "../lens-resolver";
+import type { BrowserHistory } from "../browser-history";
 
 const { composeAddress, composeQuery, parseAddress, parseQuery } = window.route;
-type Props = { modelValue: boolean; lensSources: LensSources };
+type Props = { modelValue: boolean; lensSources: LensSources; browserHistory: BrowserHistory };
 function setupSettingsDialog(props: Props, { emit }: { emit: (event: "update:modelValue", value: boolean) => void }) {
     const open = computed({
         get: () => props.modelValue,
@@ -17,12 +18,14 @@ function setupSettingsDialog(props: Props, { emit }: { emit: (event: "update:mod
     const graffiti = useGraffiti();
     const session = useGraffitiSession();
     const lensDiscoveryError = props.lensSources.error;
+    const { enabled: historyEnabled, saving: historySaving, error: historyError } = props.browserHistory;
+    const toggleHistory = () => props.browserHistory.setEnabled(!historyEnabled.value);
     const loggingOut = ref(false);
     const resetting = ref<Lens | null>(null);
     const modifying = ref<Lens | null>(null);
     const busy = computed(
         () =>
-            loggingOut.value || resetting.value !== null || modifying.value !== null,
+            loggingOut.value || resetting.value !== null || modifying.value !== null || historySaving.value,
     );
 
     async function logout() {
@@ -96,13 +99,15 @@ function setupSettingsDialog(props: Props, { emit }: { emit: (event: "update:mod
         );
     }
 
-    return { open, session, lensDiscoveryError, loggingOut, resetting, modifying, busy, logout, modifyLens, resetLens };
+    return { open, session, lensDiscoveryError, loggingOut, resetting, modifying, busy, logout, modifyLens, resetLens,
+        historyEnabled, historySaving, historyError, toggleHistory };
 }
 
 export default defineComponent({
     template: "#settings-dialog-template",
     components: { DialogFrame },
     props: {
+        browserHistory: { type: Object as PropType<BrowserHistory>, required: true },
         lensSources: { type: Object as PropType<LensSources>, required: true },
         modelValue: { type: Boolean, required: true },
     },

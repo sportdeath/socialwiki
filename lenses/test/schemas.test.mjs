@@ -6,7 +6,7 @@ import {
   normalizeSiteVersions, pickVersion, siteStateSchema,
   siteVersionsSchema, sortSiteVersions,
 } from "../src/utils/site-versions.ts";
-import { protectionSchema, trustSchema } from "../src/utils/schemas.ts";
+import { isProtectionObject, protectionSchema, trustSchema } from "../src/utils/schemas.ts";
 import { sortProtectionHistory, updateSiteProtection } from "../src/utils/protection.ts";
 import { computeTrustAnnotationsByActor, trustedActors, trustActor, untrustActor } from "../src/utils/trust.ts";
 import { browserHistorySchema } from "../src/browser/browser-history.ts";
@@ -103,6 +103,7 @@ test("publishing uses only readable fields and can reference legacy revisions", 
   assert.deepEqual(posts[0], {
     channels: [siteChannel("mypage")],
     value: {
+      "confirm with guard": true,
       action: "Publish site", "site name": "mypage", changes: "Added feature",
       document: "uploaded-html", "previous versions": [legacy.url], time: posts[0].value.time,
     },
@@ -135,6 +136,7 @@ test("protection removal links to the specific protection and wins at equal time
   const matches = await compileGraffitiObjectSchema(protectionSchema("mypage"));
   assert(posts.every((post) => matches({ ...post, actor: session.actor, url: "posted" })));
   assert(posts.every((post) => post.channels.length === 1 && post.channels[0] === siteChannel("mypage")));
+  assert(posts.every(post => post.value["confirm with guard"] === true));
   assert.equal(posts[1].value["protection removed"], protection.url);
   const unrelated = record("unrelated", { ...removal.value, "protection removed": "missing" });
   const untrusted = { ...protection, actor: "did:example:mallory", url: "untrusted" };
@@ -149,7 +151,7 @@ test("trust records match the homepage format and enforce authorship", async () 
   await trustActor(graffiti, "did:example:bob", session);
   assert.deepEqual(posts[0], {
     channels: [session.actor],
-    value: { activity: "Trust", account: "did:example:bob", time: posts[0].value.time },
+    value: { "confirm with guard": true, activity: "Trust", account: "did:example:bob", time: posts[0].value.time },
   });
   const trust = record("trust", { ...posts[0].value, time: 100 }, { channels: [session.actor] });
   const matches = await compileGraffitiObjectSchema(trustSchema(session.actor));
@@ -219,4 +221,54 @@ test("a first publication omits previous versions and reads as a history root", 
   const explicitEmpty = { ...first, value: { ...first.value, "previous versions": [] } };
   assert(matches(explicitEmpty));
   assert.equal(normalizeSiteVersions([explicitEmpty]).length, 1);
+});
+
+const stamp = { id: '["https://example.com","game"]', name: 'Game' };
+for (const [name, object, schema] of [
+  ['publication', current, siteStateSchema('mypage')],
+  ['legacy publication format', legacy, siteStateSchema('mypage')],
+  ['protection', protection, siteStateSchema('mypage')],
+  ['protection removal', removal, siteStateSchema('mypage')],
+  ['trust', record('trust', { activity: 'Trust', account: 'bob', time: 100 }), trustSchema(session.actor)],
+]) {
+  test(`${name} accepts unstamped legacy data but requires confirmation when stamped`, async () => {
+    const matches = await compileGraffitiObjectSchema(schema);
+    assert(matches(object));
+    for (const via of [stamp, null, {}, '']) {
+      const value = { ...object.value, 'via site': via };
+      assert(!matches({ ...object, value }));
+      assert(!matches({ ...object, value: { ...value, 'confirm with guard': false } }));
+      assert(!matches({ ...object, value: { ...value, 'confirm with guard': 'true' } }));
+      assert(matches({ ...object, value: { ...value, 'confirm with guard': true } }));
+    }
+  });
+}
+
+test('mixed results cannot bypass confirmation while narrowing decisions', () => {
+  const stamped = object => ({ ...object, value: { ...object.value, 'via site': stamp } });
+  assert.deepEqual(normalizeSiteVersions([stamped(current), stamped(legacy)]), []);
+  assert.equal(isProtectionObject(stamped(protection)), false);
+  assert.deepEqual(sortProtectionHistory([stamped(protection)], [session.actor]), []);
+  assert.equal(computeTrustAnnotationsByActor([
+    stamped(record('trust', { activity: 'Trust', account: 'bob', time: 100 })),
+  ], []).size, 0);
+  const confirmed = { ...legacy, value: { ...legacy.value, 'via site': stamp, 'confirm with guard': true } };
+  const normalized = normalizeSiteVersions([confirmed])[0];
+  assert.deepEqual(normalized.value['via site'], stamp);
+  assert.equal(normalized.value['confirm with guard'], true);
+});
+
+test('canceling publication removes its uploaded HTML; uncertain failures keep it', async () => {
+  // Match the API instance used by the TypeScript module under tsx.
+  const { createRequire } = await import('node:module');
+  const { GraffitiErrorForbidden: Forbidden } = createRequire(import.meta.url)('@graffiti-garden/api');
+  for (const error of [new Forbidden('Canceled'), new Error('Network failure')]) {
+    const deleted = [];
+    await assert.rejects(createSiteVersion({
+      async postMedia() { return 'uploaded-html'; },
+      async post() { throw error; },
+      async deleteMedia(url) { deleted.push(url); },
+    }, 'site', 'HTML', [], 'Change', session), error);
+    assert.deepEqual(deleted, error instanceof Forbidden ? ['uploaded-html'] : []);
+  }
 });

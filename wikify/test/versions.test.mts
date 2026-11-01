@@ -48,3 +48,21 @@ test("old choice records do not enable following", () => {
   } };
   assert.equal(followsOwnVersion([oldChoice], "mine"), false);
 });
+
+// The shell must enforce the same confirmation rule as the built-in lenses.
+test('guarded publications and follow choices require confirmation; unstamped records remain valid', async () => {
+  const { compileGraffitiObjectSchema } = await import('@graffiti-garden/api');
+  const { versionSchema, versionFollowSchema, isSiteVersion } = await import('../src/versions.ts');
+  for (const [record, schema] of [
+    [version('old', 100), versionSchema('example', ['admin'])],
+    [follow('follow', 'mine'), versionFollowSchema('viewer')],
+  ] as const) {
+    const matches = await compileGraffitiObjectSchema(schema);
+    assert(matches(record));
+    const stamped = { ...record, value: { ...record.value, 'via site': { id: 'game', name: 'Game' } } };
+    assert(!matches(stamped));
+    assert(matches({ ...stamped, value: { ...stamped.value, 'confirm with guard': true } }));
+    if (record.value.action === 'Publish site') assert.equal(isSiteVersion(stamped), false);
+    else assert.equal(followsOwnVersion([stamped], 'mine'), false);
+  }
+});
