@@ -31,10 +31,6 @@ To function properly, all Social.Wiki documents must include the kernel via a li
 <script src="https://social.wiki/init.js"></script>
 ```
 
-The kernel fetches its source once and embeds it in descendant documents.
-Each sandboxed frame executes its own copy and passes that source to its children.
-Pages using a Content Security Policy must permit the inline kernel.
-
 ## Development
 
 To develop locally:

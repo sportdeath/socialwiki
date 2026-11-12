@@ -88,7 +88,7 @@ if (window.top !== window) {
         dataPermissionUrl: (source) => graffitiGuarded!.auditUrl({ source }),
       }),
     );
-    handleDocumentResolution(createDefaultResolver(kernelUrl));
+    handleDocumentResolution(createDefaultResolver(kernelUrl, kernelSource));
     // Most pages resolve URLs relative to a default route (https://social.wiki),
     // but allow browser-like documents to override this route with their own roots
     const configuredDocumentRoute = currentScript.getAttribute(
