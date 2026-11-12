@@ -22,8 +22,8 @@ import {
   resolveDocument,
 } from "./bridges/resolution/shared";
 import { canReplaceRouteHistory, decodeUrlQuery } from "./url-route";
+import { installBrowserImports } from "./browser-imports";
 
-declare const KERNEL_IMPORT_MAP: { imports: Record<string, string> };
 declare const TEST_GRAFFITI: boolean;
 
 const currentScript = document.currentScript;
@@ -39,14 +39,11 @@ const kernelSource: Promise<string> = currentScript.src
     })
   : Promise.resolve(currentScript.text);
 
+// Install before subsequent module scripts, including the root bootstrap.
+const importMap = installBrowserImports();
+
 // For most documents, which do not run at the top level...
 if (window.top !== window) {
-  // A classic script can inject the import map before later module scripts run.
-  const importScript = document.createElement("script");
-  importScript.type = "importmap";
-  importScript.textContent = JSON.stringify(KERNEL_IMPORT_MAP);
-  document.head.append(importScript);
-
   // Set up a connection to the parent document for
   // passing Graffiti data, navigation requests,
   // resolutions, and so on
@@ -74,6 +71,9 @@ if (window.top !== window) {
     // This script has already started: changing its src cannot fetch or execute it
     // again or navigate the page; it only updates the attribute we serialize.
     currentScript.src = "https://social.wiki/init.js";
+    // Removing the element leaves the root's registered map in effect. Its
+    // serialized child will install its own map with a frame-local Blob URL.
+    importMap.remove();
     const html = serializeDocument(document, documentUrl);
 
     // Replace the document with a clean host for the root transclude below.

@@ -86,5 +86,6 @@ export function packageImportUrl(specifier: string) {
 // Public imports supplied to every Social.Wiki document by the kernel.
 // Exact versions come from the lockfile, so the map stays in sync on updates.
 export const browserImports = Object.fromEntries(
-  Object.keys(rawBrowserEntrypoints).map((name) => [name, packageImportUrl(name)]),
+  [...Object.keys(rawBrowserEntrypoints), "@graffiti-garden/api"]
+    .map((name) => [name, packageImportUrl(name)]),
 );
