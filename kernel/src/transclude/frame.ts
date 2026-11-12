@@ -1,4 +1,3 @@
-import { findKernelScript, inlineKernel } from "./kernel-source";
 import type { ParentBridgeEndpointInstaller } from "../bridges/parent";
 import type { NavigableTransclude } from "../bridges/navigation/shared";
 import type { ResolvedDocument } from "../bridges/resolution/shared";
@@ -26,8 +25,7 @@ export class TranscludeFrame {
   readonly #host: NavigableTransclude;
   readonly #installParentBridgeEndpoints: ParentBridgeEndpointInstaller;
   readonly #onEvent: (event: CustomEvent<unknown>) => void;
-  readonly #runtimeUrl: string;
-  readonly #runtimeSource?: Promise<string | undefined>;
+  readonly #runtimeSource: Promise<string>;
   readonly #shadow: ShadowRoot;
   readonly #loadingIframe = document.createElement("iframe");
   #displayedFrame: DisplayedFrame | null = null;
@@ -38,13 +36,11 @@ export class TranscludeFrame {
     host: NavigableTransclude,
     installParentBridgeEndpoints: ParentBridgeEndpointInstaller,
     onEvent: (event: CustomEvent<unknown>) => void,
-    runtimeUrl: string,
-    runtimeSource?: Promise<string | undefined>,
+    runtimeSource: Promise<string>,
   ) {
     this.#host = host;
     this.#installParentBridgeEndpoints = installParentBridgeEndpoints;
     this.#onEvent = onEvent;
-    this.#runtimeUrl = runtimeUrl;
     this.#runtimeSource = runtimeSource;
     // Expose nested frames to browser testing and inspection tools. The iframe
     // sandbox, not the shadow root, isolates each document's live DOM.
@@ -112,29 +108,26 @@ export class TranscludeFrame {
       this.#host.getAttribute("name") ||
       this.#host.getAttribute("src") || iframe.title;
     const generation = this.#generation;
+    let srcdoc = next.srcdoc;
     try {
       const preparation = this.#installParentBridgeEndpoints.prepareFrame?.(iframe, this.#host);
       // Bridges may need bootstrap data before the child's scripts execute.
       if (preparation) await preparation;
+      if (generation !== this.#generation) return;
+
+      const document = new DOMParser().parseFromString(srcdoc, "text/html");
+      const script = document.querySelector<HTMLScriptElement>(
+        'script[src="https://social.wiki/init.js"]',
+      );
+      if (script) {
+        script.removeAttribute("src");
+        script.text = await this.#runtimeSource;
+        if (generation !== this.#generation) return;
+        srcdoc = (document.doctype ? "<!doctype html>" : "") + document.documentElement.outerHTML;
+      }
     } catch (error) {
       if (generation === this.#generation) this.#loadingIframe.srcdoc = ErrorPage(String(error));
       return;
-    }
-    if (generation !== this.#generation) return;
-
-    // Run embedded documents with the same kernel as their containing document.
-    // Keep the resolved source intact for reuse and lens output.
-    let srcdoc = next.srcdoc.replaceAll(
-      "https://social.wiki/init.js",
-      this.#runtimeUrl,
-    );
-    if (this.#runtimeSource) {
-      const script = findKernelScript(srcdoc, this.#runtimeUrl);
-      if (script) {
-        const source = await this.#runtimeSource;
-        if (generation !== this.#generation) return;
-        if (source) srcdoc = inlineKernel(srcdoc, script, this.#runtimeUrl, source);
-      }
     }
 
     // WebKit needs a blob URL at the top level to avoid deeply nested srcdoc

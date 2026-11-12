@@ -30,16 +30,14 @@ const currentScript = document.currentScript;
 if (!(currentScript instanceof HTMLScriptElement)) {
   throw new Error("The Social.Wiki kernel must be loaded as a classic script");
 }
-const sourceUrl = currentScript.src || currentScript.getAttribute("data-kernel-url");
-if (!sourceUrl) throw new Error("Missing kernel URL");
-const kernelUrl = new URL(sourceUrl);
-// Share source automatically. Inlined descendants pass their existing copy on;
-// an externally loaded kernel fetches a copy for its descendants.
-const kernelSource = currentScript.src
-  ? fetch(kernelUrl, { signal: AbortSignal.timeout(3000) })
-      .then(response => response.ok ? response.text() : undefined)
-      .catch(() => undefined)
-  : Promise.resolve(currentScript.textContent ?? undefined);
+// Descendants execute the source already embedded in their script. Only an
+// externally loaded root needs to fetch a copy for its descendants.
+const kernelSource: Promise<string> = currentScript.src
+  ? fetch(currentScript.src).then(response => {
+      if (!response.ok) throw new Error(`Could not load kernel (${response.status})`);
+      return response.text();
+    })
+  : Promise.resolve(currentScript.text);
 
 // For most documents, which do not run at the top level...
 if (window.top !== window) {
@@ -62,14 +60,18 @@ if (window.top !== window) {
   // Initialize the <sw-transclude> component that
   // allows this document to include sub-documents
   const { resolve } = bridgedServices;
-  installTransclude(resolve, installParentBridgeEndpoints, kernelUrl.href, kernelSource);
+  installTransclude(resolve, installParentBridgeEndpoints, kernelSource);
 } else {
+  // Keep local development's View lens beside the original external script.
+  const kernelUrl = currentScript.src || "https://social.wiki/init.js";
   const guardPath = installGuardIdentity([window.location.origin]);
   // If we are the top-level document, wrap the document in an iframe
   // while this document acts as the host for all nested documents
   const initializeHost = () => {
     const documentUrl = window.location.href;
     const documentTitle = document.title;
+    // The serialized root uses the same kernel marker as other documents.
+    currentScript.src = "https://social.wiki/init.js";
     const html = serializeDocument(document, documentUrl);
 
     // Replace the document with a clean host for the root transclude below.
@@ -86,7 +88,7 @@ if (window.top !== window) {
         dataPermissionUrl: (source) => graffitiGuarded!.auditUrl({ source }),
       }),
     );
-    handleDocumentResolution(createDefaultResolver(kernelUrl.href));
+    handleDocumentResolution(createDefaultResolver(kernelUrl));
     // Most pages resolve URLs relative to a default route (https://social.wiki),
     // but allow browser-like documents to override this route with their own roots
     const configuredDocumentRoute = currentScript.getAttribute(
@@ -133,7 +135,7 @@ if (window.top !== window) {
       createParentBridgeEndpointInstaller(bridgedServices);
 
     // Install the <sw-transclude> component for including sub-documents
-    installTransclude(resolveDocument, installParentBridgeEndpoints, kernelUrl.href, kernelSource);
+    installTransclude(resolveDocument, installParentBridgeEndpoints, kernelSource);
 
     // Transclude the serialized document
     const transclude = document.createElement("sw-transclude");

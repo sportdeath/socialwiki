@@ -26,4 +26,13 @@ describe("default document resolution", () => {
       "https://social.wiki/view/index.html",
     );
   });
+  it("uses the canonical kernel marker when loading the local View lens", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      '<html><head><script src="../init.js"></script></head><body>Local View</body></html>',
+    )));
+    const result = await createDefaultResolver("http://localhost:5173/init-test.js")("mypage");
+    expect(result.srcdoc).toContain('<script src="https://social.wiki/init.js"></script>');
+    expect(result.query).toBe("?/mypage");
+  });
+
 });

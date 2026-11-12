@@ -7,7 +7,8 @@ export function createDefaultResolver(kernelUrl: string): DocumentResolver {
   return async (src, signal) => {
     return {
       // Lens HTML lives beside init.js
-      srcdoc: await loadDocument(new URL("view/index.html", kernelUrl), signal),
+      srcdoc: (await loadDocument(new URL("view/index.html", kernelUrl), signal))
+        .replaceAll(new URL("init.js", kernelUrl).href, "https://social.wiki/init.js"),
       query: src.startsWith("?") ? src : composeQuery(undefined, src),
     };
   };

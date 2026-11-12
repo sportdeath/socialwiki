@@ -36,7 +36,7 @@ defineTranscludeElement(
     receivedRoutes.set(host, setRoute);
     return { destroy: bridgeDestroyed, send() {}, setQuery, setRoute };
   },
-  "https://social.wiki/init.js",
+  Promise.resolve("window.kernel = true;"),
 );
 
 function transclude() {
