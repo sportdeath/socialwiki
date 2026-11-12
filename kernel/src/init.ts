@@ -27,10 +27,23 @@ declare const KERNEL_IMPORT_MAP: { imports: Record<string, string> };
 declare const TEST_GRAFFITI: boolean;
 
 const currentScript = document.currentScript;
-if (!(currentScript instanceof HTMLScriptElement) || !currentScript.src) {
+if (!(currentScript instanceof HTMLScriptElement)) {
   throw new Error("The Social.Wiki kernel must be loaded as a classic script");
 }
-const kernelUrl = new URL(currentScript.src);
+const sourceUrl = currentScript.src || currentScript.getAttribute("data-kernel-url");
+if (!sourceUrl) throw new Error("Missing kernel URL");
+const kernelUrl = new URL(sourceUrl);
+// Only the owned top-level loader opts into source sharing. External hosts keep
+// their existing CSP requirements; an inlined descendant inherits this source.
+const shareSource = !currentScript.src ||
+  (window.top === window && currentScript.hasAttribute("data-share-kernel"));
+const kernelSource = shareSource
+  ? currentScript.src
+    ? fetch(kernelUrl, { signal: AbortSignal.timeout(3000) })
+        .then(response => response.ok ? response.text() : undefined)
+        .catch(() => undefined)
+    : Promise.resolve(currentScript.textContent ?? undefined)
+  : undefined;
 
 // For most documents, which do not run at the top level...
 if (window.top !== window) {
@@ -53,7 +66,7 @@ if (window.top !== window) {
   // Initialize the <sw-transclude> component that
   // allows this document to include sub-documents
   const { resolve } = bridgedServices;
-  installTransclude(resolve, installParentBridgeEndpoints, kernelUrl.href);
+  installTransclude(resolve, installParentBridgeEndpoints, kernelUrl.href, kernelSource);
 } else {
   const guardPath = installGuardIdentity([window.location.origin]);
   // If we are the top-level document, wrap the document in an iframe
@@ -124,7 +137,7 @@ if (window.top !== window) {
       createParentBridgeEndpointInstaller(bridgedServices);
 
     // Install the <sw-transclude> component for including sub-documents
-    installTransclude(resolveDocument, installParentBridgeEndpoints, kernelUrl.href);
+    installTransclude(resolveDocument, installParentBridgeEndpoints, kernelUrl.href, kernelSource);
 
     // Transclude the serialized document
     const transclude = document.createElement("sw-transclude");

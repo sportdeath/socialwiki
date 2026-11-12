@@ -1,3 +1,4 @@
+import { findKernelScript, inlineKernel } from "./kernel-source";
 import type { ParentBridgeEndpointInstaller } from "../bridges/parent";
 import type { NavigableTransclude } from "../bridges/navigation/shared";
 import type { ResolvedDocument } from "../bridges/resolution/shared";
@@ -26,6 +27,7 @@ export class TranscludeFrame {
   readonly #installParentBridgeEndpoints: ParentBridgeEndpointInstaller;
   readonly #onEvent: (event: CustomEvent<unknown>) => void;
   readonly #runtimeUrl: string;
+  readonly #runtimeSource?: Promise<string | undefined>;
   readonly #shadow: ShadowRoot;
   readonly #loadingIframe = document.createElement("iframe");
   #displayedFrame: DisplayedFrame | null = null;
@@ -37,11 +39,13 @@ export class TranscludeFrame {
     installParentBridgeEndpoints: ParentBridgeEndpointInstaller,
     onEvent: (event: CustomEvent<unknown>) => void,
     runtimeUrl: string,
+    runtimeSource?: Promise<string | undefined>,
   ) {
     this.#host = host;
     this.#installParentBridgeEndpoints = installParentBridgeEndpoints;
     this.#onEvent = onEvent;
     this.#runtimeUrl = runtimeUrl;
+    this.#runtimeSource = runtimeSource;
     // Expose nested frames to browser testing and inspection tools. The iframe
     // sandbox, not the shadow root, isolates each document's live DOM.
     this.#shadow = host.attachShadow({ mode: "open" });
@@ -120,10 +124,18 @@ export class TranscludeFrame {
 
     // Run embedded documents with the same kernel as their containing document.
     // Keep the resolved source intact for reuse and lens output.
-    const srcdoc = next.srcdoc.replaceAll(
+    let srcdoc = next.srcdoc.replaceAll(
       "https://social.wiki/init.js",
       this.#runtimeUrl,
     );
+    if (this.#runtimeSource) {
+      const script = findKernelScript(srcdoc, this.#runtimeUrl);
+      if (script) {
+        const source = await this.#runtimeSource;
+        if (generation !== this.#generation) return;
+        if (source) srcdoc = inlineKernel(srcdoc, script, this.#runtimeUrl, source);
+      }
+    }
 
     // WebKit needs a blob URL at the top level to avoid deeply nested srcdoc
     // frames. Other browsers can use srcdoc, including embedded previews that

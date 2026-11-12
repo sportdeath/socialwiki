@@ -31,6 +31,21 @@ To function properly, all Social.Wiki documents must include the kernel via a li
 <script src="https://social.wiki/init.js"></script>
 ```
 
+The Social.Wiki loader adds `data-share-kernel` to its top-level kernel script.
+This fetches one copy of the kernel source and embeds it in eligible descendant
+documents, avoiding a separate kernel request from each opaque sandbox. The
+sandbox and permission paths are unchanged; each frame still executes its own
+kernel. Other hosts can opt in with the same attribute only when their HTTP
+Content Security Policy permits inline scripts in descendant documents.
+
+Sharing applies to the first ordinary parser-blocking head script. Documents
+with a CSP meta tag, special script attributes (including `async`, `defer`,
+`integrity`, or `nonce`), or unrecognized preceding markup retain external
+loading. The rest of the document stays byte-for-byte unchanged. A failed source
+fetch, including a three-second timeout, also retains external loading. A page
+uses the fetched source for its lifetime; reloading fetches it again. This shares
+source bytes, not compiled code or application state.
+
 ## Development
 
 To develop locally:

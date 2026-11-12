@@ -127,3 +127,57 @@ it("uses the containing document's runtime for embedded documents", () => {
   expect(install).toHaveBeenCalledOnce();
   frame.disconnect();
 });
+
+it("shares source after bridge preparation and reuses the original document for query changes", async () => {
+  vi.stubGlobal("origin", "null");
+  const host = document.createElement("div") as unknown as NavigableTransclude;
+  const attach = vi.spyOn(host, "attachShadow");
+  const setQuery = vi.fn();
+  const install = Object.assign(vi.fn(() => ({ destroy() {}, send() {}, setRoute() {}, setQuery })), {
+    prepareFrame(iframe: HTMLIFrameElement) { iframe.name = "prepared"; },
+  });
+  const frame = new TranscludeFrame(host, install, () => {}, "https://social.wiki/init.js", Promise.resolve("window.kernel = true;"));
+  const srcdoc = '<script src="https://social.wiki/init.js"></script><p>Unchanged</p>';
+  frame.render({ srcdoc, query: "" });
+  await Promise.resolve();
+  const iframe = (attach.mock.results[0].value as ShadowRoot).querySelectorAll("iframe")[1];
+  expect(iframe.name).toBe("prepared");
+  expect(iframe.srcdoc).toContain('data-kernel-url="https://social.wiki/init.js"');
+  expect(iframe.srcdoc).toContain("window.kernel = true;");
+  expect(iframe.getAttribute("sandbox")).not.toContain("allow-same-origin");
+  frame.render({ srcdoc, query: "?/next" });
+  expect(install).toHaveBeenCalledOnce();
+  expect(setQuery).toHaveBeenCalledWith("?/next");
+  frame.disconnect();
+});
+
+it("discards source delivery after a newer render or disconnect", async () => {
+  vi.stubGlobal("origin", "null");
+  let finish!: (value: string) => void;
+  const source = new Promise<string>(resolve => { finish = resolve; });
+  const host = document.createElement("div") as unknown as NavigableTransclude;
+  const install = vi.fn(() => ({ destroy() {}, send() {}, setRoute() {}, setQuery() {} }));
+  const frame = new TranscludeFrame(host, install, () => {}, "https://social.wiki/init.js", source);
+  const srcdoc = '<script src="https://social.wiki/init.js"></script>';
+  frame.render({ srcdoc, query: "" });
+  frame.render({ srcdoc: "Newer document", query: "" });
+  expect(install).toHaveBeenCalledOnce();
+  frame.render({ srcdoc, query: "" });
+  frame.disconnect();
+  finish("window.kernel = true;");
+  await Promise.resolve();
+  expect(install).toHaveBeenCalledOnce();
+});
+
+it("retains external loading when shared source is unavailable", async () => {
+  vi.stubGlobal("origin", "null");
+  const host = document.createElement("div") as unknown as NavigableTransclude;
+  const attach = vi.spyOn(host, "attachShadow");
+  const install = vi.fn(() => ({ destroy() {}, send() {}, setRoute() {}, setQuery() {} }));
+  const frame = new TranscludeFrame(host, install, () => {}, "https://social.wiki/init.js", Promise.resolve(undefined));
+  const srcdoc = '<script src="https://social.wiki/init.js"></script>';
+  frame.render({ srcdoc, query: "" });
+  await Promise.resolve();
+  expect((attach.mock.results[0].value as ShadowRoot).querySelectorAll("iframe")[1].srcdoc).toBe(srcdoc);
+  frame.disconnect();
+});

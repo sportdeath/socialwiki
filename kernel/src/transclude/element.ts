@@ -36,6 +36,7 @@ export function defineTranscludeElement(
   resolve: DocumentResolver,
   installParentBridgeEndpoints: ParentBridgeEndpointInstaller,
   runtimeUrl: string,
+  runtimeSource?: Promise<string | undefined>,
 ) {
   /**
    * Displays a document inside a sandboxed iframe.
@@ -84,6 +85,7 @@ export function defineTranscludeElement(
         // Route events from the iframe back to this element
         (event) => this.#receiveFrameEvent(event),
         runtimeUrl,
+        runtimeSource,
       );
     }
 
