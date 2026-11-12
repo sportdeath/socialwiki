@@ -31,12 +31,12 @@ To function properly, all Social.Wiki documents must include the kernel via a li
 <script src="https://social.wiki/init.js"></script>
 ```
 
-The Social.Wiki loader adds `data-share-kernel` to its top-level kernel script.
-This fetches one copy of the kernel source and embeds it in eligible descendant
+The kernel automatically shares its source with descendant documents; no
+attribute or configuration is required. It fetches one copy and embeds it in eligible descendant
 documents, avoiding a separate kernel request from each opaque sandbox. The
 sandbox and permission paths are unchanged; each frame still executes its own
-kernel. Other hosts can opt in with the same attribute only when their HTTP
-Content Security Policy permits inline scripts in descendant documents.
+kernel. HTTP Content Security Policy must permit the inline kernel in descendant
+documents.
 
 Sharing applies to the first ordinary parser-blocking head script. Documents
 with a CSP meta tag, special script attributes (including `async`, `defer`,

@@ -33,17 +33,13 @@ if (!(currentScript instanceof HTMLScriptElement)) {
 const sourceUrl = currentScript.src || currentScript.getAttribute("data-kernel-url");
 if (!sourceUrl) throw new Error("Missing kernel URL");
 const kernelUrl = new URL(sourceUrl);
-// Only the owned top-level loader opts into source sharing. External hosts keep
-// their existing CSP requirements; an inlined descendant inherits this source.
-const shareSource = !currentScript.src ||
-  (window.top === window && currentScript.hasAttribute("data-share-kernel"));
-const kernelSource = shareSource
-  ? currentScript.src
-    ? fetch(kernelUrl, { signal: AbortSignal.timeout(3000) })
-        .then(response => response.ok ? response.text() : undefined)
-        .catch(() => undefined)
-    : Promise.resolve(currentScript.textContent ?? undefined)
-  : undefined;
+// Share source automatically. Inlined descendants pass their existing copy on;
+// an externally loaded kernel fetches a copy for its descendants.
+const kernelSource = currentScript.src
+  ? fetch(kernelUrl, { signal: AbortSignal.timeout(3000) })
+      .then(response => response.ok ? response.text() : undefined)
+      .catch(() => undefined)
+  : Promise.resolve(currentScript.textContent ?? undefined);
 
 // For most documents, which do not run at the top level...
 if (window.top !== window) {

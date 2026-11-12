@@ -17,7 +17,7 @@ describe("kernel source delivery", () => {
     expect(result).toContain("window.example = 1;");
   });
   it("preserves route metadata and quoted source URLs", () => {
-    const result = apply(`<script data-document-route='#/' src='${url}' data-share-kernel></script>`);
+    const result = apply(`<script data-document-route='#/' src='${url}'></script>`);
     const parsed = new DOMParser().parseFromString(result, "text/html");
     expect(parsed.scripts[0].getAttribute("data-document-route")).toBe("#/");
     expect(parsed.scripts[0].hasAttribute("src")).toBe(false);

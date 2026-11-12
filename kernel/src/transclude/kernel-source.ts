@@ -36,7 +36,7 @@ export function findKernelScript(html: string, runtimeUrl: string): ScriptSpan |
     template.innerHTML = html.slice(start, end + 1) + "</script>";
     const element = template.content.firstElementChild;
     if (!(element instanceof HTMLScriptElement) || element.getAttribute("src") !== runtimeUrl) return;
-    const allowed = new Set(["src", "data-document-route", "data-share-kernel", "vite-ignore"]);
+    const allowed = new Set(["src", "data-document-route", "vite-ignore"]);
     if ([...element.attributes].some(attribute => !allowed.has(attribute.name))) return;
     // Conservatively retain external loading for any HTTP-equivalent metadata.
     // False positives in comments/text only skip sharing; avoid parsing the
