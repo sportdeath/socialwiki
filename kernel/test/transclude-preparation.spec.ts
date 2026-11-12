@@ -38,7 +38,7 @@ it("uses srcdoc in Chromium previews and preserves WebKit's top-level blob frame
   userAgent.mockReturnValue("Mozilla/5.0 AppleWebKit/537.36 Chrome/153.0.0.0 Safari/537.36");
   const chromiumHost = document.createElement("div") as unknown as NavigableTransclude;
   const chromiumShadow = vi.spyOn(chromiumHost, "attachShadow");
-  const chromiumFrame = new TranscludeFrame(chromiumHost, install, () => {}, "http://localhost:8000/init.js");
+  const chromiumFrame = new TranscludeFrame(chromiumHost, install, () => {}, Promise.resolve("window.kernel = true;"));
   chromiumFrame.render({ srcdoc: "Chromium", query: "" });
   expect((chromiumShadow.mock.results[0].value as ShadowRoot).querySelectorAll("iframe")[1].srcdoc).toBe("Chromium");
   expect(createObjectURL).not.toHaveBeenCalled();
@@ -47,7 +47,7 @@ it("uses srcdoc in Chromium previews and preserves WebKit's top-level blob frame
   userAgent.mockReturnValue("Mozilla/5.0 AppleWebKit/605.1.15 Version/26.0 Safari/605.1.15");
   const webkitHost = document.createElement("div") as unknown as NavigableTransclude;
   const webkitShadow = vi.spyOn(webkitHost, "attachShadow");
-  const webkitFrame = new TranscludeFrame(webkitHost, install, () => {}, "http://localhost:8000/init.js");
+  const webkitFrame = new TranscludeFrame(webkitHost, install, () => {}, Promise.resolve("window.kernel = true;"));
   webkitFrame.render({ srcdoc: "WebKit", query: "" });
   expect((webkitShadow.mock.results[0].value as ShadowRoot).querySelectorAll("iframe")[1].src).toBe("blob:http://localhost:8000/frame");
   expect(createObjectURL).toHaveBeenCalledOnce();
@@ -64,7 +64,7 @@ it("waits for bridge metadata before mounting and discards a superseded preparat
       completions.push(() => { iframe.name = "prepared"; resolve(); });
     })),
   });
-  const frame = new TranscludeFrame(host, install, () => {}, "https://social.wiki/init.js");
+  const frame = new TranscludeFrame(host, install, () => {}, Promise.resolve("window.kernel = true;"));
   frame.render({ srcdoc: "First", query: "" });
   frame.render({ srcdoc: "Second", query: "" });
   expect(install).not.toHaveBeenCalled();
@@ -82,7 +82,7 @@ it("still mounts immediately when bridge preparation is synchronous", () => {
   const install = Object.assign(vi.fn(() => ({ destroy() {}, send() {}, setRoute() {}, setQuery() {} })), {
     prepareFrame(iframe: HTMLIFrameElement) { iframe.name = "prepared"; },
   });
-  const frame = new TranscludeFrame(host, install, () => {}, "https://social.wiki/init.js");
+  const frame = new TranscludeFrame(host, install, () => {}, Promise.resolve("window.kernel = true;"));
   frame.render({ srcdoc: "Synchronous", query: "" });
   expect(install).toHaveBeenCalledOnce();
   expect(install.mock.calls[0][1].name).toBe("prepared");
@@ -98,7 +98,7 @@ it("shows preparation failures and recovers on the next render", async () => {
     .mockImplementationOnce(() => { throw new Error("Synchronous failure"); })
     .mockReturnValueOnce(undefined);
   const install = Object.assign(vi.fn(() => ({ destroy() {}, send() {}, setRoute() {}, setQuery() {} })), { prepareFrame });
-  const frame = new TranscludeFrame(host, install, () => {}, "https://social.wiki/init.js");
+  const frame = new TranscludeFrame(host, install, () => {}, Promise.resolve("window.kernel = true;"));
   const shadow = attach.mock.results[0].value as ShadowRoot;
   const loading = shadow.querySelector("iframe")!;
   frame.render({ srcdoc: "First", query: "" }); await Promise.resolve();
@@ -113,17 +113,105 @@ it("shows preparation failures and recovers on the next render", async () => {
   frame.disconnect();
 });
 
-it("uses the containing document's runtime for embedded documents", () => {
+it("uses the containing document's runtime for embedded documents", async () => {
   vi.stubGlobal("origin", "null");
   const host = document.createElement("div") as unknown as NavigableTransclude;
   const attach = vi.spyOn(host, "attachShadow");
   const install = vi.fn(() => ({ destroy() {}, send() {}, setRoute() {}, setQuery() {} }));
-  const frame = new TranscludeFrame(host, install, () => {}, "http://localhost:8000/init.js");
+  const frame = new TranscludeFrame(host, install, () => {}, Promise.resolve("window.kernel = true;"));
   const html = '<script src="https://social.wiki/init.js"></script>';
   frame.render({ srcdoc: html, query: "" });
+  await Promise.resolve();
   const iframe = (attach.mock.results[0].value as ShadowRoot).querySelectorAll("iframe")[1];
-  expect(iframe.srcdoc).toBe('<script src="http://localhost:8000/init.js"></script>');
+  const parsed = new DOMParser().parseFromString(iframe.srcdoc, "text/html");
+  expect(parsed.scripts[0].hasAttribute("src")).toBe(false);
+  expect(parsed.scripts[0].text).toBe("window.kernel = true;");
   frame.render({ srcdoc: html, query: "?/next" });
   expect(install).toHaveBeenCalledOnce();
+  frame.disconnect();
+});
+
+it("shares source after bridge preparation and reuses the original document for query changes", async () => {
+  vi.stubGlobal("origin", "null");
+  const host = document.createElement("div") as unknown as NavigableTransclude;
+  const attach = vi.spyOn(host, "attachShadow");
+  const setQuery = vi.fn();
+  const install = Object.assign(vi.fn(() => ({ destroy() {}, send() {}, setRoute() {}, setQuery })), {
+    prepareFrame(iframe: HTMLIFrameElement) { iframe.name = "prepared"; },
+  });
+  const frame = new TranscludeFrame(host, install, () => {}, Promise.resolve("window.kernel = true;"));
+  const srcdoc = '<script src="https://social.wiki/init.js"></script><p>Unchanged</p>';
+  frame.render({ srcdoc, query: "" });
+  await Promise.resolve();
+  const iframe = (attach.mock.results[0].value as ShadowRoot).querySelectorAll("iframe")[1];
+  expect(iframe.name).toBe("prepared");
+  expect(iframe.srcdoc).not.toContain("data-kernel-url");
+  expect(iframe.srcdoc).not.toContain('src="https://social.wiki/init.js"');
+  expect(iframe.srcdoc).toContain("window.kernel = true;");
+  expect(iframe.getAttribute("sandbox")).not.toContain("allow-same-origin");
+  frame.render({ srcdoc, query: "?/next" });
+  expect(install).toHaveBeenCalledOnce();
+  expect(setQuery).toHaveBeenCalledWith("?/next");
+  frame.disconnect();
+});
+
+it("discards source delivery after a newer render or disconnect", async () => {
+  vi.stubGlobal("origin", "null");
+  let finish!: (value: string) => void;
+  const source = new Promise<string>(resolve => { finish = resolve; });
+  const host = document.createElement("div") as unknown as NavigableTransclude;
+  const install = vi.fn(() => ({ destroy() {}, send() {}, setRoute() {}, setQuery() {} }));
+  const frame = new TranscludeFrame(host, install, () => {}, source);
+  const srcdoc = '<script src="https://social.wiki/init.js"></script>';
+  frame.render({ srcdoc, query: "" });
+  frame.render({ srcdoc: "Newer document", query: "" });
+  expect(install).toHaveBeenCalledOnce();
+  frame.render({ srcdoc, query: "" });
+  frame.disconnect();
+  finish("window.kernel = true;");
+  await Promise.resolve();
+  expect(install).toHaveBeenCalledOnce();
+});
+
+it("shows an error when required runtime source fails to load", async () => {
+  vi.stubGlobal("origin", "null");
+  const host = document.createElement("div") as unknown as NavigableTransclude;
+  const attach = vi.spyOn(host, "attachShadow");
+  const install = vi.fn(() => ({ destroy() {}, send() {}, setRoute() {}, setQuery() {} }));
+  const frame = new TranscludeFrame(host, install, () => {}, Promise.reject(new Error("Kernel fetch failed")));
+  frame.render({ srcdoc: '<script src="https://social.wiki/init.js"></script>', query: "" });
+  await Promise.resolve();
+  const iframes = (attach.mock.results[0].value as ShadowRoot).querySelectorAll("iframe");
+  expect(iframes).toHaveLength(1);
+  expect(iframes[0].srcdoc).toContain("Kernel fetch failed");
+  expect(install).not.toHaveBeenCalled();
+  frame.disconnect();
+});
+
+it("selects the kernel script directly while preserving document content and script order", async () => {
+  vi.stubGlobal("origin", "null");
+  const host = document.createElement("div") as unknown as NavigableTransclude;
+  const install = vi.fn(() => ({ destroy() {}, send() {}, setRoute() {}, setQuery() {} }));
+  const frame = new TranscludeFrame(host, install, () => {}, Promise.resolve("window.kernel = true;"));
+  const srcdoc = `<!doctype html><html lang="en"><head>
+    <!-- <script src="https://social.wiki/init.js"></script> -->
+    <script>window.before = true;</script>
+    <script src='https://social.wiki/init.js' data-document-route='#/'></script>
+    <script>window.after = true;</script>
+    </head><body><textarea>&lt;script src="https://social.wiki/init.js"&gt;&lt;/script&gt;</textarea>
+    <p data-value="&quot;">A &amp; B</p></body></html>`;
+  frame.render({ srcdoc, query: "" });
+  await Promise.resolve();
+  const iframe = host.shadowRoot!.querySelectorAll("iframe")[1];
+  const parsed = new DOMParser().parseFromString(iframe.srcdoc, "text/html");
+  expect(parsed.doctype?.name).toBe("html");
+  expect(parsed.documentElement.lang).toBe("en");
+  expect([...parsed.scripts].map(script => script.text)).toEqual([
+    "window.before = true;", "window.kernel = true;", "window.after = true;",
+  ]);
+  expect(parsed.scripts[1].getAttribute("data-document-route")).toBe("#/");
+  expect(parsed.scripts[1].hasAttribute("src")).toBe(false);
+  expect(parsed.querySelector("textarea")!.textContent).toContain('src="https://social.wiki/init.js"');
+  expect(parsed.querySelector("p")!.textContent).toBe("A & B");
   frame.disconnect();
 });
