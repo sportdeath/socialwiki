@@ -70,7 +70,9 @@ if (window.top !== window) {
   const initializeHost = () => {
     const documentUrl = window.location.href;
     const documentTitle = document.title;
-    // The serialized root uses the same kernel marker as other documents.
+    // Normalize the marker for serialization so the root clone gets inline source.
+    // This script has already started: changing its src cannot fetch or execute it
+    // again or navigate the page; it only updates the attribute we serialize.
     currentScript.src = "https://social.wiki/init.js";
     const html = serializeDocument(document, documentUrl);
 
