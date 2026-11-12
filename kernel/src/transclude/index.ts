@@ -5,8 +5,8 @@ import { defineTranscludeElement } from "./element";
 export function installTransclude(
   resolve: DocumentResolver,
   installParentBridgeEndpoints: ParentBridgeEndpointInstaller,
-  runtimeSource: Promise<string>,
+  runtimeUrl: string,
 ) {
   if (customElements.get("sw-transclude")) return;
-  defineTranscludeElement(resolve, installParentBridgeEndpoints, runtimeSource);
+  defineTranscludeElement(resolve, installParentBridgeEndpoints, runtimeUrl);
 }

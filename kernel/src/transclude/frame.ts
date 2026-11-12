@@ -25,7 +25,7 @@ export class TranscludeFrame {
   readonly #host: NavigableTransclude;
   readonly #installParentBridgeEndpoints: ParentBridgeEndpointInstaller;
   readonly #onEvent: (event: CustomEvent<unknown>) => void;
-  readonly #runtimeSource: Promise<string>;
+  readonly #runtimeUrl: string;
   readonly #shadow: ShadowRoot;
   readonly #loadingIframe = document.createElement("iframe");
   #displayedFrame: DisplayedFrame | null = null;
@@ -36,12 +36,12 @@ export class TranscludeFrame {
     host: NavigableTransclude,
     installParentBridgeEndpoints: ParentBridgeEndpointInstaller,
     onEvent: (event: CustomEvent<unknown>) => void,
-    runtimeSource: Promise<string>,
+    runtimeUrl: string,
   ) {
     this.#host = host;
     this.#installParentBridgeEndpoints = installParentBridgeEndpoints;
     this.#onEvent = onEvent;
-    this.#runtimeSource = runtimeSource;
+    this.#runtimeUrl = runtimeUrl;
     // Expose nested frames to browser testing and inspection tools. The iframe
     // sandbox, not the shadow root, isolates each document's live DOM.
     this.#shadow = host.attachShadow({ mode: "open" });
@@ -108,27 +108,22 @@ export class TranscludeFrame {
       this.#host.getAttribute("name") ||
       this.#host.getAttribute("src") || iframe.title;
     const generation = this.#generation;
-    let srcdoc = next.srcdoc;
     try {
       const preparation = this.#installParentBridgeEndpoints.prepareFrame?.(iframe, this.#host);
       // Bridges may need bootstrap data before the child's scripts execute.
       if (preparation) await preparation;
-      if (generation !== this.#generation) return;
-
-      const document = new DOMParser().parseFromString(srcdoc, "text/html");
-      const script = document.querySelector<HTMLScriptElement>(
-        'script[src="https://social.wiki/init.js"]',
-      );
-      if (script) {
-        script.removeAttribute("src");
-        script.text = await this.#runtimeSource;
-        if (generation !== this.#generation) return;
-        srcdoc = (document.doctype ? "<!doctype html>" : "") + document.documentElement.outerHTML;
-      }
     } catch (error) {
       if (generation === this.#generation) this.#loadingIframe.srcdoc = ErrorPage(String(error));
       return;
     }
+    if (generation !== this.#generation) return;
+
+    // Run embedded documents with the same kernel as their containing document.
+    // Keep the resolved source intact for reuse and lens output.
+    const srcdoc = next.srcdoc.replaceAll(
+      "https://social.wiki/init.js",
+      this.#runtimeUrl,
+    );
 
     // WebKit needs a blob URL at the top level to avoid deeply nested srcdoc
     // frames. Other browsers can use srcdoc, including embedded previews that

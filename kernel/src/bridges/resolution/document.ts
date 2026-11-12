@@ -11,7 +11,6 @@ export function serializeDocument(document: Document, url: string) {
   return (document.doctype ? "<!doctype html>" : "") + html.outerHTML;
 }
 
-/** Load an inert document and retain the base URL of its response. */
 export async function loadDocument(url: URL, signal?: AbortSignal) {
   const response = await fetch(url, { signal });
   if (!response.ok) {
@@ -23,5 +22,5 @@ export async function loadDocument(url: URL, signal?: AbortSignal) {
     await response.text(),
     "text/html",
   );
-  return { document, url: response.url || url.href };
+  return serializeDocument(document, response.url || url.href);
 }
