@@ -23,7 +23,9 @@ for (const [name, testGraffiti] of [["init", false], ["init-test", true]] as con
     ...options,
     outfile: `dist/${name}.js`,
     define: { ...options.define, TEST_GRAFFITI: String(testGraffiti) },
-    plugins: [polyfillNode()],
+    // The kernel runs in a browser window. Its local test backend uses
+    // FileReader for blobs; injecting Buffer pulls in an unused Node fallback.
+    plugins: [polyfillNode({ globals: { buffer: false } })],
   };
   if (process.argv.includes("--watch")) {
     const context = await esbuild.context(buildOptions);
