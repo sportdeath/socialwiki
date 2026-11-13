@@ -11,7 +11,14 @@ export function serializeDocument(document: Document, url: string) {
   return (document.doctype ? "<!doctype html>" : "") + html.outerHTML;
 }
 
-export async function loadDocument(url: URL, signal?: AbortSignal) {
+/** Load HTML for callers that pass it directly to a sandbox's srcdoc. */
+export async function loadDocument(url: URL, signal?: AbortSignal): Promise<string> {
+  const loaded = await loadParsedDocument(url, signal);
+  return serializeDocument(loaded.document, loaded.url);
+}
+
+/** Load a parsed document when its DOM must be edited before serialization. */
+export async function loadParsedDocument(url: URL, signal?: AbortSignal) {
   const response = await fetch(url, { signal });
   if (!response.ok) {
     throw new Error(
@@ -22,5 +29,5 @@ export async function loadDocument(url: URL, signal?: AbortSignal) {
     await response.text(),
     "text/html",
   );
-  return serializeDocument(document, response.url || url.href);
+  return { document, url: response.url || url.href };
 }
