@@ -14,5 +14,4 @@ export function installBrowserImports() {
   script.textContent = JSON.stringify({ imports });
   document.head.append(script);
   // Keep the Blob URL for this document's lifetime, including later imports.
-  return script;
 }

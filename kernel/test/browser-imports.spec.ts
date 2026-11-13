@@ -13,7 +13,8 @@ it("maps bare imports to one document-local module", () => {
   const imports = ["vue", "@graffiti-garden/wrapper-vue", "@graffiti-garden/api"];
   vi.stubGlobal("BROWSER_IMPORTS", imports);
 
-  const script = installBrowserImports();
+  installBrowserImports();
+  const script = document.head.querySelector<HTMLScriptElement>('script[type="importmap"]')!;
   expect(script.type).toBe("importmap");
   expect(document.head.querySelectorAll('script[type="importmap"]')).toHaveLength(1);
   expect(createObjectURL).toHaveBeenCalledTimes(1);
@@ -24,10 +25,11 @@ it("maps bare imports to one document-local module", () => {
     Object.fromEntries(imports.map(name => [name, "blob:https://example.test/libraries"])),
   );
 
-  // The root drops this element before serializing; a child gets its own URL.
-  script.remove();
+  // Each new document creates its own module URL.
+  document.head.replaceChildren();
   createObjectURL.mockReturnValueOnce("blob:null/child-libraries");
-  const childMap = installBrowserImports();
+  installBrowserImports();
+  const childMap = document.head.querySelector<HTMLScriptElement>('script[type="importmap"]')!;
   expect(new Set(Object.values(JSON.parse(childMap.textContent!).imports)))
     .toEqual(new Set(["blob:null/child-libraries"]));
 });
