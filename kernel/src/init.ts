@@ -22,8 +22,8 @@ import {
   resolveDocument,
 } from "./bridges/resolution/shared";
 import { canReplaceRouteHistory, decodeUrlQuery } from "./url-route";
+import { installBrowserImports } from "./browser-imports";
 
-declare const KERNEL_IMPORT_MAP: { imports: Record<string, string> };
 declare const TEST_GRAFFITI: boolean;
 
 const currentScript = document.currentScript;
@@ -41,11 +41,9 @@ const kernelSource: Promise<string> = currentScript.src
 
 // For most documents, which do not run at the top level...
 if (window.top !== window) {
-  // A classic script can inject the import map before later module scripts run.
-  const importScript = document.createElement("script");
-  importScript.type = "importmap";
-  importScript.textContent = JSON.stringify(KERNEL_IMPORT_MAP);
-  document.head.append(importScript);
+  // Only sandboxed documents need the application libraries. A root module
+  // may report an unresolved bare import; the classic kernel still wraps it.
+  installBrowserImports();
 
   // Set up a connection to the parent document for
   // passing Graffiti data, navigation requests,

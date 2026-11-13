@@ -2,6 +2,28 @@ import * as esbuild from "esbuild";
 import { polyfillNode } from "esbuild-plugin-polyfill-node";
 import { browserImports } from "../browser-imports.mts";
 
+// Bundle the public libraries together, including dynamic dependencies such as
+// AJV. They become source inside init.js, not separate files or CDN requests.
+const browserModules = await esbuild.build({
+  stdin: {
+    contents: browserImports
+      .map(name => `export * from ${JSON.stringify(name)};`).join("\n"),
+    resolveDir: import.meta.dirname,
+  },
+  alias: { vue: "vue/dist/vue.esm-browser.prod.js" },
+  platform: "browser",
+  bundle: true,
+  splitting: false,
+  format: "esm",
+  minify: true,
+  write: false,
+  metafile: true,
+});
+if (browserModules.outputFiles.length !== 1 ||
+    Object.values(browserModules.metafile.outputs).some(output => output.imports.length)) {
+  throw new Error("The browser libraries must be one self-contained module");
+}
+
 const options = {
   entryPoints: ["src/init.ts"],
   platform: "browser",
@@ -14,7 +36,8 @@ const options = {
     ".css": "text",
   },
   define: {
-    KERNEL_IMPORT_MAP: JSON.stringify({ imports: browserImports }),
+    BROWSER_IMPORTS: JSON.stringify(browserImports),
+    BROWSER_MODULES_SOURCE: JSON.stringify(browserModules.outputFiles[0].text),
   },
 } satisfies esbuild.BuildOptions;
 
