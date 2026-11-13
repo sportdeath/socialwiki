@@ -1,5 +1,5 @@
 declare const BROWSER_MODULES_SOURCE: string;
-declare const KERNEL_IMPORT_MAP: { imports: Record<string, string> };
+declare const BROWSER_IMPORTS: string[];
 
 /** Keep the existing import names, backed by one module in this document. */
 export function installBrowserImports() {
@@ -7,11 +7,7 @@ export function installBrowserImports() {
     type: "text/javascript",
   }));
   const imports = Object.fromEntries(
-    Object.entries(KERNEL_IMPORT_MAP.imports).flatMap(([name, cdnUrl]) => [
-      [name, moduleUrl],
-      // Packaged lenses use these exact versioned URLs instead of bare names.
-      [cdnUrl, moduleUrl],
-    ]),
+    BROWSER_IMPORTS.map(name => [name, moduleUrl]),
   );
   const script = document.createElement("script");
   script.type = "importmap";

@@ -4,11 +4,8 @@ import { dirname, resolve } from "node:path";
 import ts from "typescript";
 import { defineConfig, type Plugin, type UserConfig } from "vite";
 import { viteSingleFile } from "vite-plugin-singlefile";
-import {
-  browserImports,
-  isPackageImport,
-  packageImportUrl,
-} from "../browser-imports.mts";
+import { browserImports } from "../browser-imports.mts";
+import { isPackageImport, packageImportUrl } from "./cdn-imports.mts";
 
 export const root = resolve(import.meta.dirname, "src");
 export const entries = {
@@ -180,8 +177,7 @@ export function buildConfig(
         external: isPackageImport,
         output: {
           paths: (specifier) =>
-            entry !== "index" &&
-            Object.hasOwn(browserImports, specifier)
+            browserImports.includes(specifier)
               ? specifier
               : packageImportUrl(specifier),
         },

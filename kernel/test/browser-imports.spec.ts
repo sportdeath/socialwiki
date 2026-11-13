@@ -6,16 +6,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it("maps bare and pinned CDN imports to one document-local module", () => {
+it("maps bare imports to one document-local module", () => {
   const createObjectURL = vi.fn((_blob: Blob) => "blob:https://example.test/libraries");
   vi.stubGlobal("URL", { createObjectURL });
   vi.stubGlobal("BROWSER_MODULES_SOURCE", "export const marker = true;");
-  const imports = {
-    vue: "https://cdn.example/vue.js",
-    "@graffiti-garden/wrapper-vue": "https://cdn.example/plugin.js",
-    "@graffiti-garden/api": "https://cdn.example/api.js",
-  };
-  vi.stubGlobal("KERNEL_IMPORT_MAP", { imports });
+  const imports = ["vue", "@graffiti-garden/wrapper-vue", "@graffiti-garden/api"];
+  vi.stubGlobal("BROWSER_IMPORTS", imports);
 
   const script = installBrowserImports();
   expect(script.type).toBe("importmap");
@@ -25,10 +21,7 @@ it("maps bare and pinned CDN imports to one document-local module", () => {
   expect(blob.type).toBe("text/javascript");
   expect(blob.size).toBe("export const marker = true;".length);
   expect(JSON.parse(script.textContent!).imports).toEqual(
-    Object.fromEntries(Object.entries(imports).flatMap(([name, url]) => [
-      [name, "blob:https://example.test/libraries"],
-      [url, "blob:https://example.test/libraries"],
-    ])),
+    Object.fromEntries(imports.map(name => [name, "blob:https://example.test/libraries"])),
   );
 
   // The root drops this element before serializing; a child gets its own URL.

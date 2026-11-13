@@ -6,7 +6,7 @@ import { browserImports } from "../browser-imports.mts";
 // AJV. They become source inside init.js, not separate files or CDN requests.
 const browserModules = await esbuild.build({
   stdin: {
-    contents: Object.keys(browserImports)
+    contents: browserImports
       .map(name => `export * from ${JSON.stringify(name)};`).join("\n"),
     resolveDir: import.meta.dirname,
   },
@@ -36,7 +36,7 @@ const options = {
     ".css": "text",
   },
   define: {
-    KERNEL_IMPORT_MAP: JSON.stringify({ imports: browserImports }),
+    BROWSER_IMPORTS: JSON.stringify(browserImports),
     BROWSER_MODULES_SOURCE: JSON.stringify(browserModules.outputFiles[0].text),
   },
 } satisfies esbuild.BuildOptions;
