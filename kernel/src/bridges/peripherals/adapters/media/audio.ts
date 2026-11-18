@@ -6,6 +6,7 @@ export function createAudioEndpoint(fail: (error: unknown) => void) {
     throw new DOMException("Local microphone delivery requires AudioWorklet support.", "NotSupportedError");
   }
   const context = new AudioContext({ sampleRate: 48000 });
+  let stopped = false;
   // Call resume synchronously, while the app's click/tap activation is still available.
   const running = context.resume();
   // Safari rejects blob URLs created in opaque sandboxed frames. Keep the module
@@ -19,6 +20,7 @@ export function createAudioEndpoint(fail: (error: unknown) => void) {
   return {
     context, ready,
     node(direction: "send" | "receive", channels: number) {
+      if (stopped || context.state === "closed") throw new DOMException("Microphone capture ended.", "AbortError");
       const node = new AudioWorkletNode(context, `socialwiki-audio-${direction}`, {
         numberOfInputs: direction === "send" ? 1 : 0,
         numberOfOutputs: direction === "send" ? 1 : 2,
@@ -32,6 +34,8 @@ export function createAudioEndpoint(fail: (error: unknown) => void) {
       return node;
     },
     stop() {
+      if (stopped) return;
+      stopped = true; // AudioContext.state need not change until close() finishes.
       context.onstatechange = null;
       if (context.state !== "closed") void context.close().catch(() => {});
     },
@@ -40,7 +44,6 @@ export function createAudioEndpoint(fail: (error: unknown) => void) {
 
 export async function receiveAudio(endpoint: ReturnType<typeof createAudioEndpoint>, port: MessagePort, channels: number) {
   await endpoint.ready;
-  if (endpoint.context.state === "closed") throw new DOMException("Microphone capture ended.", "AbortError");
   const node = endpoint.node("receive", channels);
   const destination = endpoint.context.createMediaStreamDestination();
   destination.channelCount = channels;

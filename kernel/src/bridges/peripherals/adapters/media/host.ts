@@ -28,8 +28,8 @@ export function createMediaAdapter(native: MediaDevices | undefined = navigator.
           let audio: ReturnType<typeof createAudioEndpoint> | undefined;
           let audioPort: MessagePort | undefined;
           let audioTimer: ReturnType<typeof setTimeout> | undefined;
-          const emit = (value: MediaEvent, transferables?: Transferable[]) => {
-            if (!stopped) update({ type: "data", value, ...(transferables ? { transferables } : {}) });
+          const emit = (value: MediaEvent) => {
+            if (!stopped) update({ type: "data", value, ...("port" in value ? { transferables: [value.port] } : {}) });
           };
           const stop = () => {
             if (stopped) return;
@@ -70,7 +70,7 @@ export function createMediaAdapter(native: MediaDevices | undefined = navigator.
             if (constraints.video) {
               const track = stream.getVideoTracks()[0];
               video = createVideoSender(track, fail);
-              emit({ type: "video", port: video.port, track: trackInfo(track) }, [video.port]);
+              emit({ type: "video", port: video.port, track: trackInfo(track) });
             }
             if (constraints.audio) {
               const track = stream.getAudioTracks()[0];
@@ -86,7 +86,7 @@ export function createMediaAdapter(native: MediaDevices | undefined = navigator.
               audio.context.createMediaStreamSource(new MediaStream([track])).connect(sender);
               sender.connect(audio.context.destination); // The sender outputs silence, never microphone monitoring.
               audioPort = sender.port;
-              emit({ type: "audio", port: sender.port, channels, track: trackInfo(track) }, [sender.port]);
+              emit({ type: "audio", port: sender.port, channels, track: trackInfo(track) });
             }
           })().catch(fail);
           return { stop, async send(value) {

@@ -167,6 +167,23 @@ describe("guarded camera and microphone", () => {
     expect(ended).toHaveBeenCalledTimes(1);
     expect(vi.mocked(createVideoSender).mock.results[0].value.stop).toHaveBeenCalled();
   });
+  it("stops a receiving track that becomes ready after permission is revoked", async () => {
+    let deliver!: (track: MediaStreamTrack) => void;
+    vi.mocked(createVideoReceiver).mockReturnValueOnce({
+      ready: new Promise((resolve) => { deliver = resolve; }), stop: vi.fn(),
+    });
+    const s = setup();
+    const pending = s.capture({ video: true });
+    const rejected = expect(pending).rejects.toMatchObject({ name: "NotAllowedError" });
+    await flush();
+    s.permissions.revoke({ source: [], capability: "camera" });
+    await rejected;
+    const track = new Track("video");
+    deliver(track as unknown as MediaStreamTrack);
+    await flush();
+    expect(track.readyState).toBe("ended");
+    expect(s.tracks[0].readyState).toBe("ended");
+  });
   it("forwards device constraints and returns host settings without exposing mutable cache", async () => {
     const s = setup();
     const [track] = (await s.capture({ video: true })).getVideoTracks();
