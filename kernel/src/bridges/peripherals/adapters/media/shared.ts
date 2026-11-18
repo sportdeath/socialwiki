@@ -9,14 +9,12 @@ export type TrackInfo = {
   constraints: MediaTrackConstraints;
   capabilities: MediaTrackCapabilities;
 };
-export type MediaSignal =
-  | { type: "description"; description: RTCSessionDescriptionInit; tracks?: TrackInfo[] }
-  | { type: "candidate"; candidate: RTCIceCandidateInit | null };
-export type MediaCommand = MediaSignal
-  | { type: "stopTrack"; kind: MediaKind }
+export type MediaCommand = { type: "stopTrack"; kind: MediaKind }
   | { type: "applyConstraints"; kind: MediaKind; constraints: MediaTrackConstraints };
-export type MediaEvent = MediaSignal | { type: "trackEnded"; kind: MediaKind }
-  | { type: "trackState"; track: TrackInfo };
+export type MediaEvent = { type: "trackEnded"; kind: MediaKind }
+  | { type: "trackState"; track: TrackInfo }
+  | { type: "audio"; port: MessagePort; channels: number; track: TrackInfo }
+  | { type: "video"; port: MessagePort; track: TrackInfo };
 
 /** Only audio/video select devices. Native capture validates constraint dictionaries. */
 export function normalizeConstraints(value: MediaStreamConstraints = {}): MediaStreamConstraints {

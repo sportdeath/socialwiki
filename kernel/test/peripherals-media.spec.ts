@@ -1,12 +1,29 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createMediaAdapter } from "../src/bridges/peripherals/adapters/media/host";
 import { createGetUserMedia } from "../src/bridges/peripherals/adapters/media/child";
-import { createMediaPeer } from "../src/bridges/peripherals/adapters/media/peer";
+import { createVideoSender, createVideoReceiver } from "../src/bridges/peripherals/adapters/media/video";
 import { createPeripheralsHost } from "../src/bridges/peripherals/host";
 import { createPeripheralPermissions, type AskPermission } from "../src/bridges/peripherals/permissions";
 import type { PeripheralRequest } from "../src/bridges/peripherals/shared";
 
-// These fakes exercise signaling order and resource ownership, not browser codecs/ICE.
+// Mock only media transport; keep the actual permission and track lifecycle code.
+// Browser capture, worklets, frames, and playback are checked manually in test/browser/audio.
+const transport = vi.hoisted(() => ({ deliver: true }));
+vi.mock("../src/bridges/peripherals/adapters/media/video", () => ({
+  createVideoSender: vi.fn(() => ({ port: { close: vi.fn() }, stop: vi.fn() })),
+  createVideoReceiver: vi.fn(() => ({
+    ready: transport.deliver ? Promise.resolve(new Track("video")) : new Promise(() => {}),
+    stop: vi.fn(),
+  })),
+}));
+vi.mock("../src/bridges/peripherals/adapters/media/audio", () => ({
+  createAudioEndpoint: () => {
+    const context = { state: "running", destination: {}, createMediaStreamSource: () => ({ connect() {} }) };
+    return { context, ready: Promise.resolve(), node: () => ({ port: { close() {} }, connect() {} }),
+      stop() { context.state = "closed"; } };
+  },
+  receiveAudio: () => Promise.resolve(new Track("audio")),
+}));
 class Track extends EventTarget {
   readyState = "live";
   muted = false;
@@ -36,46 +53,6 @@ class Stream {
   addTrack(track: Track) { this.tracks.push(track); }
   clone() { return new Stream(this.tracks.map((track) => track.clone())); }
 }
-class Peer extends EventTarget {
-  static peers: Peer[] = [];
-  static connect = true;
-  id = Peer.peers.length;
-  tracks: Track[] = [];
-  localDescription: (RTCSessionDescriptionInit & { toJSON(): RTCSessionDescriptionInit }) | null = null;
-  remoteDescription: RTCSessionDescriptionInit | null = null;
-  connectionState = "new";
-  onicecandidate: ((event: { candidate: null }) => void) | null = null;
-  onconnectionstatechange: (() => void) | null = null;
-  ontrack: ((event: { track: Track }) => void) | null = null;
-  candidates: unknown[] = [];
-  constructor(public configuration: RTCConfiguration) { super(); Peer.peers.push(this); }
-  addTransceiver(track: Track) { this.tracks.push(track); }
-  async createOffer() { return { type: "offer" as const, sdp: String(this.id) }; }
-  async createAnswer() { return { type: "answer" as const, sdp: String(this.id) }; }
-  async setLocalDescription(value: RTCSessionDescriptionInit) {
-    this.localDescription = { ...value, toJSON: () => value };
-    // Exercise a candidate arriving before the SDP description.
-    this.onicecandidate?.({ candidate: null });
-  }
-  async setRemoteDescription(value: RTCSessionDescriptionInit) {
-    this.remoteDescription = value;
-    const other = Peer.peers[Number(value.sdp)];
-    if (value.type === "offer") {
-      other.tracks.forEach((track) => this.ontrack?.({ track: new Track(track.kind) }));
-    } else if (Peer.connect) {
-      for (const peer of [this, other]) {
-        peer.connectionState = "connected";
-        peer.onconnectionstatechange?.();
-        peer.dispatchEvent(new Event("connectionstatechange"));
-      }
-    }
-  }
-  async addIceCandidate(candidate: unknown) {
-    if (!this.remoteDescription) throw new Error("Candidate before remote description");
-    this.candidates.push(candidate);
-  }
-  close() { this.connectionState = "closed"; }
-}
 const request: PeripheralRequest = { source: [{ id: "call", name: "Call" }], capability: "media", method: "getUserMedia", args: [{ audio: true, video: true }] };
 function setup(ask: AskPermission = async () => ({ allow: true, remember: false })) {
   const tracks: Track[] = [];
@@ -93,12 +70,13 @@ const flush = async () => { for (let i = 0; i < 40; i++) await Promise.resolve()
 beforeAll(() => {
   vi.stubGlobal("MediaStreamTrack", Track);
   vi.stubGlobal("MediaStream", Stream);
-  vi.stubGlobal("RTCPeerConnection", Peer);
 });
-afterEach(() => {
+afterEach(async () => {
   window.dispatchEvent(new Event("pagehide"));
-  Peer.peers = []; Peer.connect = true;
+  await flush();
+  transport.deliver = true;
   vi.useRealTimers();
+  vi.clearAllMocks();
 });
 afterAll(() => vi.unstubAllGlobals());
 
@@ -112,9 +90,8 @@ describe("guarded camera and microphone", () => {
     expect(s.getUserMedia).toHaveBeenCalledExactlyOnceWith({ audio: true, video: { width: 640 } });
     expect(stream).toBeInstanceOf(Stream);
     expect(stream.getTracks()).toHaveLength(2);
-    expect(Peer.peers).toHaveLength(2);
-    expect(Peer.peers.every((peer) => peer.configuration.iceServers?.length === 0)).toBe(true);
-    expect(Peer.peers.every((peer) => peer.candidates.length === 1)).toBe(true);
+    expect(createVideoSender).toHaveBeenCalledTimes(1);
+    expect(createVideoReceiver).toHaveBeenCalledTimes(1);
   });
   it("does not open either device when one permission is denied", async () => {
     const s = setup(async (_source, permissions) => ({ allow: !permissions.some(({ capability }) => capability === "camera"), remember: false }));
@@ -135,7 +112,7 @@ describe("guarded camera and microphone", () => {
     const s = setup();
     s.getUserMedia.mockRejectedValueOnce(Object.assign(new DOMException("Too wide", "OverconstrainedError"), { constraint: "width" }));
     await expect(s.capture({ video: true })).rejects.toMatchObject({ name: "OverconstrainedError", constraint: "width" });
-    expect(Peer.peers).toHaveLength(0);
+    expect(createVideoSender).not.toHaveBeenCalled();
   });
   it("releases a native result that arrives after cancellation", async () => {
     const s = setup();
@@ -150,7 +127,7 @@ describe("guarded camera and microphone", () => {
     await flush();
     expect(track.readyState).toBe("ended");
     expect(update).not.toHaveBeenCalled();
-    expect(Peer.peers).toHaveLength(0);
+    expect(createVideoSender).not.toHaveBeenCalled();
   });
   it("stopping camera leaves microphone running, then stops the whole session", async () => {
     const s = setup();
@@ -159,10 +136,10 @@ describe("guarded camera and microphone", () => {
     await flush();
     expect(s.tracks.find((track) => track.kind === "video")!.readyState).toBe("ended");
     expect(s.tracks.find((track) => track.kind === "audio")!.readyState).toBe("live");
-    expect(Peer.peers.every((peer) => peer.connectionState === "connected")).toBe(true);
+    expect(vi.mocked(createVideoReceiver).mock.results[0].value.stop).toHaveBeenCalled();
     stream.getAudioTracks()[0].stop();
     await flush();
-    expect(Peer.peers.every((peer) => peer.connectionState === "closed")).toBe(true);
+    expect(vi.mocked(createVideoSender).mock.results[0].value.stop).toHaveBeenCalled();
   });
   it("keeps capture until the last clone stops, including a newly constructed stream's clones", async () => {
     const s = setup();
@@ -177,7 +154,7 @@ describe("guarded camera and microphone", () => {
     await flush();
     expect(s.tracks[0].readyState).toBe("ended");
   });
-  it("revocation closes the host peer and ends all receiving clones", async () => {
+  it("revocation stops delivery and ends all receiving clones", async () => {
     const s = setup();
     const stream = await s.capture({ audio: true, video: true });
     const clone = stream.clone();
@@ -188,7 +165,7 @@ describe("guarded camera and microphone", () => {
     expect(s.tracks.every((track) => track.readyState === "ended")).toBe(true);
     expect([...stream.getTracks(), ...clone.getTracks()].every((track) => track.readyState === "ended")).toBe(true);
     expect(ended).toHaveBeenCalledTimes(1);
-    expect(Peer.peers.every((peer) => peer.connectionState === "closed")).toBe(true);
+    expect(vi.mocked(createVideoSender).mock.results[0].value.stop).toHaveBeenCalled();
   });
   it("forwards device constraints and returns host settings without exposing mutable cache", async () => {
     const s = setup();
@@ -237,35 +214,23 @@ describe("guarded camera and microphone", () => {
     expect(s.tracks[0].readyState).toBe("ended");
     expect(pending.getUserMedia).not.toHaveBeenCalled();
   });
-  it("fails boundedly when WebRTC never connects and releases devices", async () => {
-    vi.useFakeTimers(); Peer.connect = false;
+  it("fails boundedly when no video frames arrive and releases devices", async () => {
+    vi.useFakeTimers(); transport.deliver = false;
     const s = setup();
     const capture = s.capture({ video: true });
     const rejected = expect(capture).rejects.toMatchObject({ name: "NotReadableError" });
     await flush();
-    await vi.advanceTimersByTimeAsync(30001);
+    await vi.advanceTimersByTimeAsync(15001);
     await rejected;
     expect(s.tracks[0].readyState).toBe("ended");
-    expect(Peer.peers.every((peer) => peer.connectionState === "closed")).toBe(true);
+    expect(vi.mocked(createVideoSender).mock.results[0].value.stop).toHaveBeenCalled();
   });
   it("rejects control messages before authorization and after stop", async () => {
     const s = setup();
     const session = s.service.start(request, vi.fn());
-    await expect(session.send!({ type: "candidate", candidate: null })).rejects.toThrow("unavailable");
+    await expect(session.send!({ type: "stopTrack", kind: "video" })).rejects.toThrow("unavailable");
     await flush(); session.stop();
     await expect(session.send!({ type: "stopTrack", kind: "video" })).rejects.toThrow("unavailable");
-  });
-  it("queues candidates until the remote description and closes failed connections", async () => {
-    const fail = vi.fn();
-    const peer = createMediaPeer(async () => {}, fail);
-    await peer.receive({ type: "candidate", candidate: null });
-    expect(Peer.peers[0].candidates).toHaveLength(0);
-    await peer.receive({ type: "description", description: { type: "offer", sdp: "0" } });
-    expect(Peer.peers[0].candidates).toHaveLength(1);
-    Peer.peers[0].connectionState = "failed";
-    Peer.peers[0].onconnectionstatechange?.();
-    expect(fail).toHaveBeenCalledWith(expect.objectContaining({ name: "NotReadableError" }));
-    peer.close();
   });
 });
 

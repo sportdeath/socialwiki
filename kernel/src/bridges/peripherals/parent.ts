@@ -23,7 +23,8 @@ export function installPeripheralsParent(
         if (subscriptions.get(id)?.dispose !== session.stop) return;
         if (update.type !== "data") close(id);
         void connection.promise.then((remote) => remote.update(id, update,
-          new CallOptions({ timeout: 10000 }))).catch(() => close(id));
+          new CallOptions({ timeout: 10000,
+            transferables: update.type === "data" ? update.transferables : undefined }))).catch(() => close(id));
       });
     subscriptions.set(id, { value, dispose: session.stop, send: session.send });
   }

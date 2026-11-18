@@ -9,7 +9,7 @@ export type PeripheralRequest = {
   args: unknown[];
 };
 export type PeripheralUpdate =
-  | { type: "data"; value: unknown }
+  | { type: "data"; value: unknown; transferables?: Transferable[] }
   | { type: "error"; name: string; message: string; constraint?: string }
   | { type: "end" };
 export type PeripheralSink = (update: PeripheralUpdate) => void;
