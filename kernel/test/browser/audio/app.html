@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Local media bridge</title>
+  <!-- KERNEL -->
+  <style>
+    body { font: 16px/1.5 system-ui; max-width: 54rem; margin: auto; padding: 20px; }
+    h1 { font-size: 1.5rem; margin-top: 0; }
+    button, select { font: inherit; padding: 8px 12px; margin: 4px 4px 4px 0; }
+    meter, video, textarea { width: 100%; }
+    video { max-height: 24rem; background: #111; }
+    textarea { box-sizing: border-box; height: 18rem; font: 12px/1.5 monospace; }
+    #status { font-weight: 600; } #error { color: #c33; white-space: pre-wrap; }
+    .hint { opacity: .75; } fieldset { margin: 16px 0; }
+  </style>
+</head>
+<body>
+  <h1>Local media bridge</h1>
+  <p>Video: ImageBitmaps → local MessagePort → canvas MediaStream. Audio: local AudioWorklets.</p>
+  <p class="hint">Camera, microphone, recording, and playback stay on this device. No WebRTC. Only you run these checks.</p>
+  <p id="status" role="status">Ready</p>
+  <p id="error" role="alert"></p>
+  <fieldset><legend>Capture</legend>
+    <label>Devices <select id="devices"><option value="both">Camera + microphone</option><option value="video">Camera only</option><option value="audio">Microphone only</option></select></label><br>
+    <label>Video <select id="resolution"><option value="640">640 × 480</option><option value="1280">1280 × 720</option><option value="1920">1920 × 1080</option></select></label>
+    <label>FPS <select id="fps"><option>30</option><option>15</option><option>60</option></select></label>
+    <label>Camera <select id="facing"><option value="user">Front</option><option value="environment">Back</option></select></label><br>
+    <label>Audio channels <select id="channels"><option value="">Device default</option><option value="1">Prefer mono</option><option value="2">Prefer stereo</option></select></label><br>
+    <button id="start">Start capture</button>
+    <button id="stop" disabled>Stop all</button>
+    <button id="stop-video" disabled>Stop camera only</button>
+    <button id="stop-audio" disabled>Stop microphone only</button>
+    <button id="mute" disabled>Mute microphone</button>
+    <button id="clone" disabled>Clone, then stop original</button>
+    <button id="apply" disabled>Apply video size / FPS</button>
+    <video id="preview" autoplay muted playsinline hidden></video>
+    <p id="video-stats" class="hint"></p>
+    <p><label>Received audio level <meter id="level" min="0" max="1" value="0"></meter></label></p>
+    <p id="audio-state" role="status"></p>
+    <p id="track" class="hint">No stream</p>
+  </fieldset>
+  <fieldset><legend>Recording</legend>
+    <button id="record" disabled>Record</button>
+    <button id="end-recording" disabled>Finish recording</button>
+    <video id="playback" controls playsinline></video>
+    <p class="hint">Speak, move, and clap visibly. Finish recording and press Play. Check motion, orientation, and whether sound matches the clap.</p>
+  </fieldset>
+  <details><summary>Manual checks</summary>
+    <ol>
+      <li>Start camera only, then camera + microphone; allow permission, record, finish, and play back.</li>
+      <li>Rotate the phone, try front/back cameras, and apply a different video size or FPS.</li>
+      <li>Stop camera only; audio should continue. Restart, then stop microphone only; video should continue.</li>
+      <li>Clone and stop the original; the clone should still work. Stop all; device indicators should turn off.</li>
+      <li>Revoke permission or remove the app using the toolbar. Capture should stop, including after a pending permission prompt.</li>
+      <li>Try background/foreground and a longer recording. Note freezes, gaps, or growing audio/video offset.</li>
+      <li>On the phone, compare Wi-Fi and cellular using the same HTTPS test URL.</li>
+    </ol>
+  </details>
+  <p><button id="copy">Copy diagnostics</button> <span id="copy-status" role="status"></span></p>
+  <textarea id="diagnostics" aria-label="Media diagnostics" readonly spellcheck="false"></textarea>
+  <script>
+  if (window !== window.top) {
+    const $ = id => document.getElementById(id);
+    const log = window.audioTestLog;
+    let stream, meterContext, meterSource, analyser, meterTimer, recorder, playbackUrl, videoCallback;
+    let starting = false, entries = [], previewFrames = 0, previewSince = 0;
+    function renderDiagnostics() {
+      $('diagnostics').value = JSON.stringify({ version: 6, probes: window.audioTestProbes, browser: navigator.userAgent,
+        secureContext: isSecureContext, origin: self.origin, entries }, null, 2);
+      $('diagnostics').scrollTop = $('diagnostics').scrollHeight;
+    }
+    addEventListener('message', ({ data, source }) => {
+      if (source !== window.top) return;
+      if (data?.audioTest === 'history') entries = data.entries;
+      else if (data?.audioTest === 'entry') entries.push(data.entry);
+      else return;
+      if (entries.length > 500) entries.splice(0, entries.length - 500);
+      renderDiagnostics();
+    });
+    window.top.postMessage({ audioTest: 'subscribe' }, '*');
+    const live = kind => stream?.getTracks().find(track => (!kind || track.kind === kind) && track.readyState === 'live');
+    function update() {
+      $('start').disabled = starting || !!live();
+      $('stop').disabled = $('clone').disabled = !live();
+      $('stop-video').disabled = $('apply').disabled = !live('video');
+      $('stop-audio').disabled = $('mute').disabled = !live('audio');
+      $('record').disabled = !live() || recorder?.state === 'recording';
+      $('end-recording').disabled = recorder?.state !== 'recording';
+      $('mute').textContent = live('audio')?.enabled === false ? 'Unmute microphone' : 'Mute microphone';
+      const audio = live('audio');
+      $('audio-state').textContent = !audio ? '' : audio.muted
+        ? 'The microphone track is muted by its source; no audio is currently available. This is different from the app’s Mute button.'
+        : audio.enabled ? 'Microphone track is available.' : 'Microphone muted in this app.';
+      $('track').textContent = stream?.getTracks().map(track => {
+        const s = track.getSettings();
+        return `${track.kind}: ${track.readyState}, muted=${track.muted}, enabled=${track.enabled}; capture: ` +
+          (track.kind === 'video' ? `${s.width}×${s.height} at ${s.frameRate ?? '?'} FPS` : `${s.sampleRate ?? '?'} Hz, ${s.channelCount ?? '?'} channel(s)`);
+      }).join(' · ') || 'No stream';
+    }
+    function failed(stage, error) {
+      $('error').textContent = `${stage}: ${error.name}: ${error.message}`;
+      log('app error', { stage, name: error.name, message: error.message });
+    }
+    function closeMeter() {
+      clearInterval(meterTimer);
+      meterSource?.disconnect(); meterSource = undefined;
+      $('level').value = 0;
+      if (meterContext?.state !== 'closed') void meterContext?.close();
+    }
+    function stopPreview() {
+      if (videoCallback !== undefined) $('preview').cancelVideoFrameCallback(videoCallback);
+      videoCallback = undefined;
+    }
+    function previewFrame(now, metadata) {
+      previewFrames++;
+      if (now - previewSince >= 1000) {
+        const fps = previewFrames * 1000 / (now - previewSince);
+        $('video-stats').textContent = `Received preview: ${metadata.width}×${metadata.height}, ${fps.toFixed(1)} FPS`;
+        log('app video frames', { fps, width: metadata.width, height: metadata.height,
+          mediaTime: metadata.mediaTime, presentedFrames: metadata.presentedFrames, readyState: $('preview').readyState });
+        previewFrames = 0; previewSince = now;
+      }
+      if (live('video')) videoCallback = $('preview').requestVideoFrameCallback(previewFrame);
+    }
+    async function watchTracks() {
+      for (const track of stream.getTracks()) for (const type of ['mute', 'unmute', 'ended']) track.addEventListener(type, () => {
+        log(`received track ${type}`, { kind: track.kind }); update();
+        if (type === 'ended' && track.kind === 'audio') closeMeter();
+        if (!live()) $('status').textContent = 'Capture ended';
+      });
+      if (live('audio')) {
+        meterSource?.disconnect();
+        meterSource = meterContext.createMediaStreamSource(new MediaStream(stream.getAudioTracks()));
+        meterSource.connect(analyser);
+      }
+      stopPreview();
+      $('preview').hidden = !live('video');
+      $('preview').srcObject = live('video') ? new MediaStream(stream.getVideoTracks()) : null;
+      if (live('video')) {
+        previewFrames = 0; previewSince = performance.now();
+        if ($('preview').requestVideoFrameCallback) videoCallback = $('preview').requestVideoFrameCallback(previewFrame);
+        else $('video-stats').textContent = 'Frame counter unavailable; check the preview and recording.';
+        await $('preview').play();
+      }
+    }
+    function videoConstraints() {
+      const width = Number($('resolution').value), height = width === 640 ? 480 : width * 9 / 16;
+      return { width: { ideal: width }, height: { ideal: height }, frameRate: { ideal: Number($('fps').value) } };
+    }
+    $('start').onclick = async () => {
+      starting = true; $('error').textContent = ''; $('status').textContent = 'Opening devices and local bridge…'; update();
+      try {
+        const audio = $('devices').value !== 'video', video = $('devices').value !== 'audio';
+        if (audio) {
+          // Resume the meter in the same gesture; it is separate from the kernel's contexts.
+          meterContext = new AudioContext();
+          void meterContext.resume().catch(() => {});
+          analyser = meterContext.createAnalyser();
+        }
+        const channels = Number($('channels').value);
+        const constraints = { audio: audio && (channels ? { channelCount: { ideal: channels } } : true),
+          video: video && { ...videoConstraints(), facingMode: { ideal: $('facing').value } } };
+        log('app getUserMedia requested', { constraints });
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+        log('app received native MediaStream', { nativeStream: stream instanceof MediaStream, kinds: stream.getTracks().map(track => track.kind) });
+        await watchTracks();
+        if (audio) {
+          const data = new Float32Array(analyser.fftSize);
+          let lastMeterLog = 0;
+          meterTimer = setInterval(() => {
+            analyser.getFloatTimeDomainData(data);
+            let squareSum = 0, peak = 0;
+            for (const sample of data) { squareSum += sample * sample; peak = Math.max(peak, Math.abs(sample)); }
+            const rms = Math.sqrt(squareSum / data.length);
+            $('level').value = Math.min(1, rms * 4);
+            if (performance.now() - lastMeterLog >= 1000) {
+              lastMeterLog = performance.now();
+              const track = stream.getAudioTracks()[0];
+              log('app meter', { state: meterContext.state, contextTime: meterContext.currentTime,
+                rms, peak, enabled: track.enabled, muted: track.muted, readyState: track.readyState });
+            }
+            update();
+          }, 100);
+        }
+        $('status').textContent = 'Media received in this iframe';
+      } catch (error) { failed('getUserMedia / setup', error); stream?.getTracks().forEach(track => track.stop()); closeMeter(); stopPreview(); }
+      finally { starting = false; update(); }
+    };
+    function stop(kind) {
+      log('app stopped tracks', { kind: kind || 'all' });
+      stream?.getTracks().filter(track => !kind || track.kind === kind).forEach(track => track.stop());
+      if (!kind || kind === 'audio') closeMeter();
+      if (!kind || kind === 'video') stopPreview();
+      $('status').textContent = live() ? 'Remaining device is still running' : 'Stopped'; update();
+    }
+    $('stop').onclick = () => stop();
+    $('stop-video').onclick = () => stop('video');
+    $('stop-audio').onclick = () => stop('audio');
+    $('mute').onclick = () => {
+      const track = live('audio'); track.enabled = !track.enabled;
+      log('app track enabled', { kind: 'audio', enabled: track.enabled }); update();
+    };
+    $('clone').onclick = async () => {
+      try {
+        if (recorder?.state === 'recording') recorder.stop();
+        const original = stream; stream = original.clone();
+        original.getTracks().forEach(track => track.stop());
+        log('app cloned stream and stopped original'); await watchTracks(); update();
+      } catch (error) { failed('clone / preview', error); }
+    };
+    $('apply').onclick = async () => {
+      try { await live('video').applyConstraints(videoConstraints()); log('video constraints applied', videoConstraints()); update(); }
+      catch (error) { failed('applyConstraints', error); }
+    };
+    $('record').onclick = () => {
+      try {
+        const recording = recorder = new MediaRecorder(stream);
+        const chunks = [];
+        recorder.ondataavailable = ({ data }) => { if (data.size) chunks.push(data); };
+        recorder.onerror = event => failed('MediaRecorder', event.error ?? new Error('Recorder error'));
+        recorder.onstop = () => {
+          const blob = new Blob(chunks, { type: recording.mimeType });
+          if (playbackUrl) URL.revokeObjectURL(playbackUrl);
+          playbackUrl = URL.createObjectURL(blob); $('playback').src = playbackUrl;
+          log('recording finished', { bytes: blob.size, mimeType: blob.type }); update();
+        };
+        recorder.start(); log('recording started', { mimeType: recorder.mimeType }); update();
+      } catch (error) { failed('MediaRecorder', error); }
+    };
+    $('end-recording').onclick = () => recorder.stop();
+    $('copy').onclick = async () => {
+      try { await navigator.clipboard.writeText($('diagnostics').value); $('copy-status').textContent = 'Copied'; }
+      catch { $('diagnostics').focus(); $('diagnostics').select(); $('copy-status').textContent = 'Select and copy the text below'; }
+    };
+    addEventListener('pagehide', () => { stream?.getTracks().forEach(track => track.stop()); closeMeter(); stopPreview(); });
+    renderDiagnostics();
+  }
+  </script>
+</body>
+</html>

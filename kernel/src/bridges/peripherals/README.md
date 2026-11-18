@@ -203,17 +203,29 @@ permissions still needed, and a remembered denial blocks the request. Both grant
 are required before the native capture call. Remember this decision applies to
 each permission in the prompt; decisions remain separate in the Permissions table. The browser/OS also controls access at the trusted host origin.
 
-One native WebRTC connection sends media directly from the host to the requesting
-leaf, even through nested documents. Penpal relays offer/answer and trickle ICE;
-there is no custom media serialization and no STUN/TURN server. Browsers that
-block local WebRTC candidates cannot use this bridge. Connection setup is bounded
-to 30 seconds; a disconnect lasting 10 seconds ends capture. Waiting for a user to
-answer the native device prompt has no deadline, as with ordinary getUserMedia.
-If that prompt resolves after cancellation, its tracks are immediately stopped.
+Microphone tracks use a local AudioWorklet on each side. Penpal transfers
+one MessagePort through the existing permission scope to the requesting leaf;
+PCM samples then flow directly between the worklets, including through nested
+documents. No WebRTC or network transport is involved. Both AudioContexts run at
+48 kHz; Web Audio resamples the capture input. Blocks contain 1024 frames, with at
+most four blocks in flight and a two-block playback cushion. A paused receiver
+cannot accumulate an unbounded backlog. The output channel count is chosen when
+capture starts. Call getUserMedia from a click/tap so the receiving AudioContext
+can start.
+
+Camera tracks use a muted, inline video element at the host to produce
+ImageBitmaps. A transferred MessagePort delivers them directly to a canvas in
+the requesting iframe; canvas.captureStream() supplies its native video track.
+Only one frame can be outstanding. Each bitmap is released after drawing, and
+resizing follows incoming frames. Audio and video use the same permission request
+and independent transports; neither requires WebRTC, ICE, STUN, or TURN.
+Host audio startup and receiving media each have a 15-second deadline. Waiting
+for the native device permission prompt has no deadline. If that prompt resolves
+after cancellation, its tracks are immediately stopped.
 
 The host owns capture and transmission. Revoking either permission ends that
 request's whole stream, including receiver clones. Stopping the final local track
-of one kind stops that device; stopping the final kind closes the connection.
+of one kind stops that device; stopping the final kind closes the session.
 Navigation, frame teardown, pagehide, and failed transport also stop capture.
 Separate getUserMedia calls have independent capture lifetimes.
 
@@ -235,8 +247,10 @@ Changing permissions also refreshes the device list.
 
 Limits of API transparency:
 
-- WebRTC encodes media: it can add latency, compression, and receiver adaptation.
-  Host capture settings do not guarantee identical received dimensions/quality.
+- Canvas video delivery uses the main thread and can be throttled in background
+  tabs. It does not preserve the original capture timestamps or guarantee native
+  audio/video synchronization. Host capture settings do not guarantee identical
+  received frame rate. Check recording, rotation, and backgrounding on each browser.
 - Clones share the existing capture settings. While multiple tracks in a clone
   group are live, `applyConstraints()` rejects with `NotSupportedError` rather
   than silently changing every clone. Apply constraints before cloning, stop the
@@ -247,10 +261,12 @@ Limits of API transparency:
 - Screen capture and audio-output selection are not bridged. The mediaDevices
   facade is an EventTarget, not a branded native MediaDevices instance.
 
+The [manual media fixture](../../../test/browser/audio/README.md) exercises both
+paths through nested sandboxed frames using the real kernel and browser APIs.
+
 The [media capture specification](https://www.w3.org/TR/mediacapture-streams/)
-and [WebRTC specification](https://www.w3.org/TR/webrtc/) define the native APIs.
-The [manual checks and retained findings](../../../test/browser/peripherals/README.md)
-cover the transport; actual browser tests of this integrated adapter are manual.
+and [canvas capture specification](https://w3c.github.io/mediacapture-fromelement/)
+define the native stream APIs. Browser media tests are manual.
 
 ## Manual demo
 
@@ -273,8 +289,8 @@ In Safari/Chromium/Firefox, try each device alone and both together, denial and
 remembered choices, Stop, revoking either permission, and navigation while live.
 Check that the browser's capture indicator clears after Stop/revocation (assuming
 no other app is using that device). Also try recording, changing video width,
-concurrent pages, and a nested transclusion. Unit tests use fake devices/peers to
-check lifecycle and signaling; they do not establish real-browser media quality.
+concurrent pages, and a nested transclusion. Unit tests use fake devices/transports
+to check permissions and lifecycle; they do not establish real-browser media quality.
 
 
 ## File System adapter
